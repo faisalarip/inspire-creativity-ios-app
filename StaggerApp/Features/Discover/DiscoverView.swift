@@ -8,6 +8,7 @@ import SwiftUI
 struct DiscoverView: View {
 
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var container: AppContainer
     @StateObject private var viewModel: DiscoverViewModel
 
     init(viewModel: DiscoverViewModel) {
@@ -67,7 +68,7 @@ struct DiscoverView: View {
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 14) {
-                        ForEach(UsageMockup.all) { m in
+                        ForEach(container.usageMockups) { m in
                             UsageMockupCard(mockup: m) {
                                 router.push(.detail(animationId: m.animationId))
                             }
@@ -108,16 +109,31 @@ struct DiscoverView: View {
 // MARK: Usage mockups — "Aurora in the wild · Real iOS app usage"
 // MARK: ─────────────────────────────────────────────────────────────
 
-struct UsageMockup: Identifiable {
-    enum Layout { case aiChat, onboarding, paywall, music, success, reading, fitness }
+struct UsageMockup: Identifiable, Hashable {
+    enum Layout: String {
+        case aiChat, onboarding, paywall, music, success, reading, fitness, generic
+    }
     let id: String
     let title: String       // "AI Assistant"
     let appName: String     // "Intelligence"
     let animationId: String // links to ANIMATIONS catalog
     let why: String
     let layout: Layout
+    let swiftCode: String?  // SwiftUI snippet shown in the code rail (nil for fallback rows)
 
-    static let all: [UsageMockup] = [
+    init(id: String, title: String, appName: String,
+         animationId: String, why: String, layout: Layout,
+         swiftCode: String? = nil) {
+        self.id = id; self.title = title; self.appName = appName
+        self.animationId = animationId; self.why = why
+        self.layout = layout; self.swiftCode = swiftCode
+    }
+
+    /// Hardcoded fallback list — used at app boot before the Supabase fetch
+    /// returns, or when Supabase isn't configured. The seven layouts here are
+    /// the ones with custom overlays in `UsageMockupCard`. Server-added rows
+    /// with unknown layouts render the generic overlay.
+    static let fallback: [UsageMockup] = [
         .init(id: "mock-ai-chat",    title: "AI Assistant",   appName: "Intelligence", animationId: "aurora-mesh",     why: "Mesh moves while the model reasons — signals 'thinking' without a stale spinner.", layout: .aiChat),
         .init(id: "mock-onboarding", title: "App Onboarding", appName: "NorthLight",   animationId: "aurora-borealis", why: "Northern lights as literal product — sets emotional tone in 1 second.",          layout: .onboarding),
         .init(id: "mock-paywall",    title: "Pro Paywall",    appName: "Folio",        animationId: "liquid-chrome",   why: "Iridescent metal reads as 'premium'.",                                           layout: .paywall),
@@ -126,6 +142,21 @@ struct UsageMockup: Identifiable {
         .init(id: "mock-reading",    title: "Book Detail",    appName: "Paperbound",   animationId: "au-pearl",        why: "Pearl as paper texture — establishes editorial, tactile mood.",                  layout: .reading),
         .init(id: "mock-fitness",    title: "HIIT Timer",     appName: "Forge",        animationId: "lava-flow",       why: "Lava drives intensity — visual heat pushes the workout.",                        layout: .fitness)
     ]
+
+    /// Layout inference for server-added rows. The first 7 hardcoded IDs map
+    /// to their custom layouts; anything else falls through to `.generic`.
+    static func layout(forId id: String) -> Layout {
+        switch id {
+        case "mock-ai-chat":    return .aiChat
+        case "mock-onboarding": return .onboarding
+        case "mock-paywall":    return .paywall
+        case "mock-music":      return .music
+        case "mock-success":    return .success
+        case "mock-reading":    return .reading
+        case "mock-fitness":    return .fitness
+        default:                return .generic
+        }
+    }
 }
 
 struct UsageMockupCard: View {
@@ -174,7 +205,30 @@ struct UsageMockupCard: View {
         case .success:      successOverlay
         case .reading:      readingOverlay
         case .fitness:      fitnessOverlay
+        case .generic:      genericOverlay
         }
+    }
+
+    /// Used for server-added mockups that don't match one of the seven
+    /// hardcoded layouts. Keeps the visual neutral so the aurora carries
+    /// the page; the title + app name + a single subtle CTA pill suffice.
+    private var genericOverlay: some View {
+        VStack(spacing: 6) {
+            statusBar
+            Spacer()
+            VStack(alignment: .leading, spacing: 4) {
+                Text(mockup.appName)
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(.white)
+                Text(mockup.title)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer()
+            primaryButton(text: "Open")
+        }
+        .padding(12)
     }
 
     // ── Faux UI overlays (kept lightweight — vibe, not full mockups) ──
@@ -381,13 +435,14 @@ private struct MockBubble: View {
 
 struct SamplesView: View {
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var container: AppContainer
     @State private var liked: Set<String> = []
 
     var body: some View {
         GeometryReader { proxy in
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(spacing: 0) {
-                    ForEach(UsageMockup.all) { m in
+                    ForEach(container.usageMockups) { m in
                         SamplePage(
                             mockup: m,
                             isLiked: liked.contains(m.id),

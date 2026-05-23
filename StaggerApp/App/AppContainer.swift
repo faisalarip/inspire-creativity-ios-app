@@ -17,6 +17,12 @@ final class AppContainer: ObservableObject {
     let favoritesRepository: FavoritesRepositoryProtocol
     let purchaseRepository: PurchaseRepositoryProtocol
 
+    /// Mockups shown in the Discover "Aurora in the wild" row and the
+    /// TikTok-style Samples tab. Starts as the bundled 7-item fallback and
+    /// is replaced by the full server catalog once `refreshUsageMockups()`
+    /// returns. SwiftUI views observe this @Published via @EnvironmentObject.
+    @Published private(set) var usageMockups: [UsageMockup] = UsageMockup.fallback
+
     init(
         animationRepository: AnimationRepositoryProtocol = SupabaseConfig.isConfigured
             ? RemoteAnimationRepository()
@@ -27,6 +33,47 @@ final class AppContainer: ObservableObject {
         self.animationRepository = animationRepository
         self.favoritesRepository = favoritesRepository
         self.purchaseRepository = purchaseRepository
+
+        // Kick off the usage-mockups fetch alongside the animations fetch.
+        Task { [weak self] in
+            await self?.refreshUsageMockups()
+        }
+    }
+
+    /// Fetches `/rest/v1/usage_mockups` from Supabase and replaces the
+    /// in-memory list on success. No-op when Supabase isn't configured.
+    @discardableResult
+    func refreshUsageMockups() async -> Bool {
+        guard SupabaseConfig.isConfigured else { return false }
+        let endpoint = "\(SupabaseConfig.url)/rest/v1/usage_mockups?select=*&order=position.asc"
+        guard let url = URL(string: endpoint) else { return false }
+
+        var request = URLRequest(url: url)
+        request.setValue(SupabaseConfig.anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(SupabaseConfig.anonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 15
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode) else {
+                #if DEBUG
+                print("[Supabase] usage_mockups non-2xx, keeping fallback")
+                #endif
+                return false
+            }
+            let dtos = try JSONDecoder().decode([UsageMockupDTO].self, from: data)
+            let mockups = dtos.map { $0.toUsageMockup() }
+            guard !mockups.isEmpty else { return false }
+            self.usageMockups = mockups
+            return true
+        } catch {
+            #if DEBUG
+            print("[Supabase] usage_mockups fetch failed: \(error.localizedDescription)")
+            #endif
+            return false
+        }
     }
 
     // MARK: - View-model factories
@@ -263,5 +310,29 @@ final class RemoteAnimationRepository: AnimationRepositoryProtocol {
     func newlyAdded() -> [AnimationItem] {
         ["parallax-card", "glitch-text", "spring-chain", "liquid-tabs"]
             .compactMap(find(id:))
+    }
+}
+
+/// JSON row coming out of Supabase REST (`/rest/v1/usage_mockups`).
+private struct UsageMockupDTO: Decodable {
+    let id: String
+    let title: String
+    let app_name: String
+    let aurora_id: String
+    let context: String?
+    let why: String
+    let swift_code: String?
+    let position: Int?
+
+    func toUsageMockup() -> UsageMockup {
+        UsageMockup(
+            id: id,
+            title: title,
+            appName: app_name,
+            animationId: aurora_id,
+            why: why,
+            layout: UsageMockup.layout(forId: id),
+            swiftCode: swift_code
+        )
     }
 }

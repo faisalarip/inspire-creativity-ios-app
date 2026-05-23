@@ -18,22 +18,20 @@ struct DiscoverView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                NavHeader(title: "Discover", isLarge: true, trailing: {
-                    IconButton("bell") {}
-                })
-                .padding(.bottom, 12)
+                // Compact title — no large-title block, no bell action.
+                Text("Discover")
+                    .font(.system(size: 28, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, Theme.Spacing.xxl)
+                    .padding(.top, 8)
+                    .padding(.bottom, 8)
 
                 Text("\(viewModel.totalCount) hand-crafted SwiftUI animations. Tap any one to preview, tweak, and copy.")
                     .font(.system(size: 15))
                     .foregroundStyle(.white.opacity(0.55))
                     .padding(.horizontal, Theme.Spacing.xxl)
-                    .padding(.bottom, Theme.Spacing.xxl)
+                    .padding(.bottom, Theme.Spacing.xl)
                     .lineLimit(2)
-
-                HeroCard(item: viewModel.featured) {
-                    router.push(.detail(animationId: viewModel.featured.id))
-                }
-                .padding(.horizontal, Theme.Spacing.xl)
 
                 SectionHeader("Trending this week", trailing: "See all") {
                     router.selectedTab = .browse

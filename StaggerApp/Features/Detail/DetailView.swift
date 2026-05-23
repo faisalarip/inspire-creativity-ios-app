@@ -32,8 +32,12 @@ struct DetailView: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let h = proxy.size.height
+        // Outer reader captures the true top safe-area inset before the inner
+        // ScrollView ignores it. We use that inset to pad the floating nav so
+        // the back button / heart never collide with the iOS status bar.
+        GeometryReader { outer in
+            let topInset = outer.safeAreaInsets.top
+            let h = outer.size.height + topInset
             let sheetHeight = max(56, sheet.height(in: h) + dragOffset)
             let previewHeight = max(180, h * 0.42)
 
@@ -60,8 +64,9 @@ struct DetailView: View {
                             .padding(.bottom, sheetHeight + 20)
                     }
                 }
+                .ignoresSafeArea(edges: .top)
 
-                // Top floating nav controls
+                // Top floating nav controls — pinned to the real top safe area
                 VStack {
                     HStack {
                         IconButton("chevron.left") { router.pop() }
@@ -75,7 +80,7 @@ struct DetailView: View {
                         }
                     }
                     .padding(.horizontal, 12)
-                    .padding(.top, 8)
+                    .padding(.top, topInset + 4)
                     Spacer()
                 }
 
@@ -91,7 +96,6 @@ struct DetailView: View {
                 )
             }
         }
-        .ignoresSafeArea(edges: .top)
         .toolbar(.hidden, for: .navigationBar)
     }
 

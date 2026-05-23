@@ -11,7 +11,7 @@ import Foundation
 /// Static catalog used to seed `InMemoryAnimationRepository`.
 enum AnimationCatalogSeed {
 
-    static let items: [AnimationItem] = [
+    static let handcrafted: [AnimationItem] = [
         // MARK: - Core (previews.jsx)
         .init(
             id: "spring-button", name: "Spring Button",
@@ -290,4 +290,47 @@ enum AnimationCatalogSeed {
             swiftCode: Code.liquidRipple
         )
     ]
+
+    // Aurora background entries derived from the descriptor table.
+    // Names, palettes, themes, and pricing come from the handed-off design.
+    static let auroraDerived: [AnimationItem] = AuroraDescriptors.all.map { d in
+        let difficulty: Difficulty = {
+            switch d.engine {
+            case .mesh, .bloom: return .intermediate
+            case .spin, .streaks: return .intermediate
+            case .goo: return .advanced
+            }
+        }()
+        let authorRotation = [
+            ("Yuki Tanaka", "@yuki.motion"),
+            ("Maya Ortega", "@mortega.dev"),
+            ("Kenji Saito", "@kenji.codes"),
+            ("Aria Chen", "@aria.design"),
+            ("Lena Hofstad", "@lena.swift"),
+            ("Devon Park", "@devon.builds")
+        ]
+        let pick = abs(d.id.hashValue) % authorRotation.count
+        let (author, handle) = authorRotation[pick]
+        let baseDownloads = 1_800 + (abs(d.id.hashValue) % 18_000)
+        let rating = 4.5 + Double(abs(d.id.hashValue) % 5) * 0.1
+        return AnimationItem(
+            id: d.id,
+            name: d.name,
+            category: .backgrounds,
+            difficulty: difficulty,
+            iosVersion: "18+",
+            isPro: d.isPro,
+            isFeatured: false,
+            tintHex: d.palette.first ?? "#0a0a0c",
+            author: author,
+            handle: handle,
+            downloads: baseDownloads,
+            rating: rating,
+            price: d.price,
+            description: "\(d.theme) · \(d.use). Animated mesh background tuned with the \(d.palette.count)-color palette.",
+            swiftCode: Code.auroraMesh
+        )
+    }
+
+    static let items: [AnimationItem] = handcrafted + auroraDerived
 }

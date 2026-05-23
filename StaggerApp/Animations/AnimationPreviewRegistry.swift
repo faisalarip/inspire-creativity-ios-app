@@ -61,6 +61,8 @@ enum AnimationPreviewRegistry {
     static func view(for id: String) -> some View {
         if let make = builders[id] {
             make()
+        } else if let descriptor = AuroraDescriptors.byId[id] {
+            ParametricAuroraPreview(descriptor: descriptor)
         } else {
             PlaceholderPreview(id: id)
         }

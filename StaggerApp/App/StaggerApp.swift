@@ -15,6 +15,7 @@ struct StaggerApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(container)
+                .environmentObject(container.authStore)
                 .tint(Theme.Palette.accent)
                 .preferredColorScheme(.dark)
         }

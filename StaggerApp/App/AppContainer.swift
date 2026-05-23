@@ -16,6 +16,7 @@ final class AppContainer: ObservableObject {
     let animationRepository: AnimationRepositoryProtocol
     let favoritesRepository: FavoritesRepositoryProtocol
     let purchaseRepository: PurchaseRepositoryProtocol
+    let authStore: AuthStore
 
     /// Mockups shown in the Discover "Aurora in the wild" row and the
     /// TikTok-style Samples tab. Starts as the bundled 7-item fallback and
@@ -33,6 +34,7 @@ final class AppContainer: ObservableObject {
         self.animationRepository = animationRepository
         self.favoritesRepository = favoritesRepository
         self.purchaseRepository = purchaseRepository
+        self.authStore = AuthStore()
 
         // Kick off the usage-mockups fetch alongside the animations fetch.
         Task { [weak self] in
@@ -340,5 +342,440 @@ private struct UsageMockupDTO: Decodable {
             layout: UsageMockup.layout(forId: id),
             swiftCode: swift_code
         )
+    }
+}
+
+// MARK: ─────────────────────────────────────────────────────────────
+// MARK: Supabase Auth — domain, service, store
+// MARK: ─────────────────────────────────────────────────────────────
+
+/// Authenticated user. Mirrors the `user` object Supabase returns from
+/// `/auth/v1/*`. Snake-case JSON keys are mapped via the decoder's
+/// `convertFromSnakeCase` strategy.
+struct AuthUser: Codable, Equatable {
+    let id: String
+    let email: String?
+    let emailConfirmedAt: Date?
+    let createdAt: Date?
+}
+
+/// One signed-in session. Persisted to `UserDefaults` so the app boots
+/// straight into the signed-in state after relaunch.
+struct AuthSession: Codable, Equatable {
+    let accessToken: String
+    let refreshToken: String
+    let expiresAt: Date
+    let user: AuthUser
+}
+
+/// Result of `AuthService.signUp`. Either the project has email-confirm off
+/// (we get a session immediately) or it's on (Supabase returns a user with
+/// `confirmation_sent_at` but no session — we route the UI to "check your
+/// email").
+enum SignUpResult {
+    case session(AuthSession)
+    case confirmationRequired
+}
+
+/// Friendly, presentation-ready auth errors. The `errorDescription` is what
+/// the UI surfaces in the error banner.
+enum AuthError: LocalizedError, Equatable {
+    case invalidCredentials
+    case emailNotConfirmed
+    case emailAlreadyRegistered
+    case weakPassword(String)
+    case network(String)
+    case unknown(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidCredentials:
+            return "Invalid email or password. Please try again."
+        case .emailNotConfirmed:
+            return "Please verify your email first. Check your inbox for the link."
+        case .emailAlreadyRegistered:
+            return "An account with this email already exists. Try signing in."
+        case .weakPassword(let detail):
+            return detail
+        case .network(let detail):
+            return detail
+        case .unknown(let detail):
+            return detail
+        }
+    }
+}
+
+/// Shape of Supabase's `gotrue` error responses. The relevant text lives in
+/// `error_description` (token endpoint) or `msg` (signup endpoint).
+private struct SupabaseAuthErrorBody: Decodable {
+    let error: String?
+    let errorCode: String?
+    let errorDescription: String?
+    let msg: String?
+    let code: Int?
+}
+
+/// `confirmation_sent_at`-bearing user payload returned by `/auth/v1/signup`
+/// when email-confirm is on. Decoded with `convertFromSnakeCase` so this is
+/// just `confirmationSentAt`.
+private struct SignUpUserEnvelope: Decodable {
+    let id: String?
+    let email: String?
+    let confirmationSentAt: Date?
+    let emailConfirmedAt: Date?
+    let createdAt: Date?
+}
+
+/// Token-response envelope returned by `/auth/v1/token` and by `/auth/v1/signup`
+/// when email-confirm is off.
+private struct TokenEnvelope: Decodable {
+    let accessToken: String?
+    let refreshToken: String?
+    let expiresIn: Double?
+    let tokenType: String?
+    let user: AuthUser?
+}
+
+/// Stateless wrapper around Supabase's `gotrue` HTTP API. All methods are
+/// `async throws` and use `URLSession.shared` with the same header pattern as
+/// `RemoteAnimationRepository`.
+enum AuthService {
+
+    private static var baseURL: String { SupabaseConfig.url }
+    private static var anonKey: String { SupabaseConfig.anonKey }
+
+    /// Shared decoder. Supabase returns ISO-8601 timestamps with fractional
+    /// seconds (e.g. `2024-01-15T10:30:00.123456Z`), so we use a custom
+    /// strategy that accepts both fractional and second-precision forms.
+    private static let decoder: JSONDecoder = {
+        let d = JSONDecoder()
+        d.keyDecodingStrategy = .convertFromSnakeCase
+        d.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let string = try container.decode(String.self)
+            let isoFractional = ISO8601DateFormatter()
+            isoFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = isoFractional.date(from: string) { return date }
+            let iso = ISO8601DateFormatter()
+            iso.formatOptions = [.withInternetDateTime]
+            if let date = iso.date(from: string) { return date }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unparseable date: \(string)"
+            )
+        }
+        return d
+    }()
+
+    /// Creates a `URLRequest` aimed at `/auth/v1/<path>` with the mandatory
+    /// `apikey` + `Content-Type: application/json` headers attached.
+    private static func makeRequest(
+        path: String,
+        method: String,
+        body: [String: Any]? = nil,
+        bearer: String? = nil
+    ) throws -> URLRequest {
+        guard let url = URL(string: "\(baseURL)/auth/v1\(path)") else {
+            throw AuthError.unknown("Bad auth URL")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let bearer {
+            request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+        }
+        if let body {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body, options: [])
+        }
+        request.timeoutInterval = 20
+        return request
+    }
+
+    /// Sends `request`, returns `(data, http)` on a 2xx and throws a mapped
+    /// `AuthError` otherwise. Centralizes all the gotrue error-payload
+    /// mapping so call sites read clean.
+    private static func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw AuthError.network(error.localizedDescription)
+        }
+        guard let http = response as? HTTPURLResponse else {
+            throw AuthError.unknown("Bad response")
+        }
+        if (200..<300).contains(http.statusCode) {
+            return (data, http)
+        }
+        // Try to decode gotrue's error body and map to a typed error.
+        let body = try? decoder.decode(SupabaseAuthErrorBody.self, from: data)
+        let message = body?.errorDescription
+            ?? body?.msg
+            ?? body?.error
+            ?? "Request failed (\(http.statusCode))"
+        let lower = message.lowercased()
+        if lower.contains("not confirmed") || lower.contains("email not confirmed") {
+            throw AuthError.emailNotConfirmed
+        }
+        if lower.contains("invalid login") || lower.contains("invalid credentials") {
+            throw AuthError.invalidCredentials
+        }
+        if lower.contains("already registered") || lower.contains("user already") {
+            throw AuthError.emailAlreadyRegistered
+        }
+        if lower.contains("password") && (lower.contains("short") || lower.contains("weak") || lower.contains("6 characters")) {
+            throw AuthError.weakPassword(message)
+        }
+        if http.statusCode == 401 {
+            throw AuthError.invalidCredentials
+        }
+        throw AuthError.unknown(message)
+    }
+
+    /// Creates an account. If email-confirm is **off**, returns `.session(_)`
+    /// with a usable session. If email-confirm is **on**, Supabase returns
+    /// 200 with `confirmation_sent_at` but no token — we surface that as
+    /// `.confirmationRequired` so the UI can route to "check your email".
+    static func signUp(email: String, password: String) async throws -> SignUpResult {
+        let request = try makeRequest(
+            path: "/signup",
+            method: "POST",
+            body: ["email": email, "password": password]
+        )
+        let (data, _) = try await send(request)
+
+        // First try the token envelope (email-confirm off case).
+        if let token = try? decoder.decode(TokenEnvelope.self, from: data),
+           let access = token.accessToken,
+           let refresh = token.refreshToken,
+           let user = token.user {
+            let expiresAt = Date().addingTimeInterval(token.expiresIn ?? 3600)
+            return .session(AuthSession(
+                accessToken: access,
+                refreshToken: refresh,
+                expiresAt: expiresAt,
+                user: user
+            ))
+        }
+
+        // Otherwise it's the "confirmation required" shape.
+        if let envelope = try? decoder.decode(SignUpUserEnvelope.self, from: data),
+           envelope.confirmationSentAt != nil || envelope.id != nil {
+            return .confirmationRequired
+        }
+
+        // If we can't decode either shape but the HTTP code was 2xx, assume
+        // confirmation flow is in play (safest user-facing default).
+        return .confirmationRequired
+    }
+
+    /// Signs an existing user in. Throws `.emailNotConfirmed` when Supabase
+    /// returns the corresponding 400, `.invalidCredentials` otherwise.
+    static func signIn(email: String, password: String) async throws -> AuthSession {
+        let request = try makeRequest(
+            path: "/token?grant_type=password",
+            method: "POST",
+            body: ["email": email, "password": password]
+        )
+        let (data, _) = try await send(request)
+        let token = try decoder.decode(TokenEnvelope.self, from: data)
+        guard let access = token.accessToken,
+              let refresh = token.refreshToken,
+              let user = token.user else {
+            throw AuthError.unknown("Malformed token response")
+        }
+        let expiresAt = Date().addingTimeInterval(token.expiresIn ?? 3600)
+        return AuthSession(
+            accessToken: access,
+            refreshToken: refresh,
+            expiresAt: expiresAt,
+            user: user
+        )
+    }
+
+    /// Revokes the current session on the server. Best-effort — if the call
+    /// fails, callers still clear the local session.
+    static func signOut(session: AuthSession) async throws {
+        let request = try makeRequest(
+            path: "/logout",
+            method: "POST",
+            bearer: session.accessToken
+        )
+        _ = try await send(request)
+    }
+
+    /// Asks Supabase to resend the signup confirmation email.
+    static func resendConfirmation(email: String) async throws {
+        let request = try makeRequest(
+            path: "/resend",
+            method: "POST",
+            body: ["type": "signup", "email": email]
+        )
+        _ = try await send(request)
+    }
+
+    /// Validates a session by fetching the current user. We use this on
+    /// launch to detect tokens that have been revoked or expired.
+    static func currentUser(accessToken: String) async throws -> AuthUser {
+        let request = try makeRequest(
+            path: "/user",
+            method: "GET",
+            bearer: accessToken
+        )
+        let (data, _) = try await send(request)
+        return try decoder.decode(AuthUser.self, from: data)
+    }
+}
+
+/// Observable auth state. Single source of truth for "is the user signed in"
+/// and "what's their pending email-verification flow." Persists the session
+/// to `UserDefaults` so the app boots into the signed-in state.
+@MainActor
+final class AuthStore: ObservableObject {
+
+    /// Currently signed-in session, if any. `nil` means "show the auth gate."
+    @Published private(set) var session: AuthSession?
+    /// True while a signUp / signIn / signOut / resend call is in flight.
+    @Published var isLoading: Bool = false
+    /// Most recent failure. UI binds this to the error banner.
+    @Published var lastError: AuthError?
+    /// When signup returned `.confirmationRequired` we stash the email here
+    /// so the verify-email screen can show it and the resend button works.
+    @Published private(set) var pendingVerificationEmail: String?
+
+    private static let defaultsKey = "enigma.auth.session"
+    private let defaults: UserDefaults
+
+    var isAuthenticated: Bool { session != nil }
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let data = defaults.data(forKey: Self.defaultsKey) {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            if let restored = try? decoder.decode(AuthSession.self, from: data) {
+                self.session = restored
+                // Background-validate: if the access token has been revoked
+                // we want to drop the persisted session so we don't show a
+                // stale signed-in state.
+                Task { [weak self] in
+                    await self?.validateRestoredSession()
+                }
+            }
+        }
+    }
+
+    /// Validates the restored session against `/auth/v1/user`. On failure we
+    /// clear local state so the gate shows up.
+    private func validateRestoredSession() async {
+        guard let session else { return }
+        do {
+            _ = try await AuthService.currentUser(accessToken: session.accessToken)
+        } catch AuthError.invalidCredentials {
+            clearSession()
+        } catch {
+            // Network errors leave the cached session intact — the user can
+            // still browse what they had until they explicitly retry.
+        }
+    }
+
+    /// Signs the user up. On `.session(_)` we persist and clear the gate; on
+    /// `.confirmationRequired` we stash the email for the verify screen.
+    func signUp(email: String, password: String) async {
+        isLoading = true
+        lastError = nil
+        defer { isLoading = false }
+        do {
+            let result = try await AuthService.signUp(email: email, password: password)
+            switch result {
+            case .session(let session):
+                persist(session)
+                pendingVerificationEmail = nil
+            case .confirmationRequired:
+                pendingVerificationEmail = email
+            }
+        } catch let error as AuthError {
+            lastError = error
+        } catch {
+            lastError = .unknown(error.localizedDescription)
+        }
+    }
+
+    /// Signs the user in and persists the resulting session.
+    func signIn(email: String, password: String) async {
+        isLoading = true
+        lastError = nil
+        defer { isLoading = false }
+        do {
+            let session = try await AuthService.signIn(email: email, password: password)
+            persist(session)
+            pendingVerificationEmail = nil
+        } catch let error as AuthError {
+            lastError = error
+        } catch {
+            lastError = .unknown(error.localizedDescription)
+        }
+    }
+
+    /// Signs the user out. We always clear the local session — even if the
+    /// network call fails — so the user is never stuck in a half-signed-out
+    /// state.
+    func signOut() async {
+        isLoading = true
+        lastError = nil
+        defer { isLoading = false }
+        if let session {
+            do {
+                try await AuthService.signOut(session: session)
+            } catch {
+                // Intentional: continue clearing local state.
+            }
+        }
+        clearSession()
+    }
+
+    /// Re-sends the verification email for the pending email.
+    func resendVerification() async {
+        guard let email = pendingVerificationEmail else { return }
+        isLoading = true
+        lastError = nil
+        defer { isLoading = false }
+        do {
+            try await AuthService.resendConfirmation(email: email)
+        } catch let error as AuthError {
+            lastError = error
+        } catch {
+            lastError = .unknown(error.localizedDescription)
+        }
+    }
+
+    /// Clears the in-flight verification flow (used by the "back to sign in"
+    /// button on the verify screen).
+    func dismissPendingVerification() {
+        pendingVerificationEmail = nil
+    }
+
+    /// Clears the in-memory error (used when the user starts editing again).
+    func clearError() {
+        lastError = nil
+    }
+
+    // MARK: - Persistence
+
+    private func persist(_ session: AuthSession) {
+        self.session = session
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        if let data = try? encoder.encode(session) {
+            defaults.set(data, forKey: Self.defaultsKey)
+        }
+    }
+
+    private func clearSession() {
+        session = nil
+        defaults.removeObject(forKey: Self.defaultsKey)
     }
 }

@@ -8,6 +8,7 @@ import SwiftUI
 struct LibraryView: View {
 
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var authStore: AuthStore
     @StateObject private var viewModel: LibraryViewModel
 
     init(viewModel: LibraryViewModel) {
@@ -23,11 +24,67 @@ struct LibraryView: View {
                 userCard
                 tabBar
                 contentGrid
+                signOutRow
                 Spacer().frame(height: 120)
             }
         }
         .background(Theme.Palette.background)
         .ignoresSafeArea(edges: .bottom)
+    }
+
+    /// Bottom-of-Library affordance: shows the signed-in email and signs the
+    /// user out on tap. Mirrors the "Go Pro" CTA's pill-on-card look from
+    /// `userCard` so it slots into the existing language.
+    private var signOutRow: some View {
+        Button {
+            Task { await authStore.signOut() }
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.05))
+                        .frame(width: 36, height: 36)
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Sign out")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                    if let email = authStore.session?.user.email {
+                        Text(email)
+                            .font(Theme.Typo.mono(11))
+                            .foregroundStyle(.white.opacity(0.55))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                Spacer()
+                if authStore.isLoading {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(.white.opacity(0.6))
+                } else {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.35))
+                }
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.white.opacity(0.03))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(Theme.Palette.hairline, lineWidth: 0.5)
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(authStore.isLoading)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.top, Theme.Spacing.xxl)
     }
 
     private var userCard: some View {

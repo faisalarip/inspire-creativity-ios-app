@@ -475,7 +475,7 @@ struct SamplesView: View {
             // header (~80pt). Cards size dynamically to fit the remaining
             // vertical space, matching the 390×780 viewport from the design.
             let headerHeight: CGFloat = 80
-            let bottomReserved: CGFloat = 140
+            let bottomReserved: CGFloat = 180
             let available = proxy.size.height - headerHeight - bottomReserved
             let cardHeight = max(420, min(available, 640))
             let cardWidth  = min(340, proxy.size.width - 56, cardHeight / 1.92)

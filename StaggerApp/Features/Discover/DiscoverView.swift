@@ -430,7 +430,7 @@ private struct MockBubble: View {
 }
 
 // MARK: ─────────────────────────────────────────────────────────────
-// MARK: SamplesView — TikTok-style full-screen vertical pager
+// MARK: SamplesView — horizontal carousel of iPhone-frame mockup cards
 // MARK: ─────────────────────────────────────────────────────────────
 
 struct SamplesView: View {
@@ -440,26 +440,50 @@ struct SamplesView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: 0) {
-                    ForEach(container.usageMockups) { m in
-                        SamplePage(
-                            mockup: m,
-                            isLiked: liked.contains(m.id),
-                            onToggleLike: { toggle(m.id) },
-                            onOpenAnimation: {
-                                router.push(.detail(animationId: m.animationId))
-                            }
-                        )
-                        .frame(width: proxy.size.width,
-                               height: proxy.size.height)
+            let cardWidth  = min(340, proxy.size.width - 56)
+            let cardHeight = cardWidth * 1.72   // iPhone-ish aspect
+
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                    .padding(.horizontal, 24)
+                    .padding(.top, max(proxy.safeAreaInsets.top, 16))
+                    .padding(.bottom, 18)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 18) {
+                        ForEach(container.usageMockups) { m in
+                            SampleCarouselCard(
+                                mockup: m,
+                                isLiked: liked.contains(m.id),
+                                onToggleLike: { toggle(m.id) },
+                                onOpenAnimation: {
+                                    router.push(.detail(animationId: m.animationId))
+                                }
+                            )
+                            .frame(width: cardWidth, height: cardHeight)
+                        }
                     }
+                    .padding(.horizontal, (proxy.size.width - cardWidth) / 2)
+                    .scrollTargetLayout()
                 }
-                .scrollTargetLayout()
+                .scrollTargetBehavior(.viewAligned)
+                .frame(maxHeight: cardHeight + 24)
+
+                Spacer()
             }
-            .scrollTargetBehavior(.paging)
-            .background(Color.black)
-            .ignoresSafeArea()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(Theme.Palette.background.ignoresSafeArea())
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Samples")
+                .font(.system(size: 28, weight: .heavy))
+                .foregroundStyle(.white)
+            Text("\(container.usageMockups.count) auroras in real iOS app contexts. Swipe.")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.55))
         }
     }
 
@@ -468,116 +492,161 @@ struct SamplesView: View {
     }
 }
 
-private struct SamplePage: View {
+/// One slide of the horizontal carousel. Top half is an iPhone-screen-shaped
+/// aurora hero with status bar + circular nav buttons; the bottom half is an
+/// editorial content card with the mockup's metadata + a CTA.
+private struct SampleCarouselCard: View {
     let mockup: UsageMockup
     let isLiked: Bool
     let onToggleLike: () -> Void
     let onOpenAnimation: () -> Void
 
     var body: some View {
-        ZStack {
-            // 1. Aurora animation as full-bleed background
+        VStack(spacing: 0) {
+            phoneScreen
+                .frame(maxHeight: .infinity)
+            content
+                .frame(maxHeight: .infinity, alignment: .top)
+        }
+        .background(contentBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 36, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 36, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.05), lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(0.35), radius: 30, y: 18)
+    }
+
+    // ── Top "phone screen" hero ────────────────────────────────
+
+    private var phoneScreen: some View {
+        ZStack(alignment: .top) {
+            Color.black
             AnimationPreviewRegistry.view(for: mockup.animationId)
-
-            // 2. Top + bottom scrim for legibility
-            LinearGradient(
-                colors: [
-                    Color.black.opacity(0.35),
-                    Color.black.opacity(0),
-                    Color.black.opacity(0),
-                    Color.black.opacity(0.55)
-                ],
-                startPoint: .top, endPoint: .bottom
-            )
-            .ignoresSafeArea()
-
-            // 3. Faux iOS UI overlay (scaled up from the card variant)
-            ScaledOverlay(mockup: mockup)
-                .allowsHitTesting(false)
-
-            // 4. Right-rail TikTok controls
-            VStack {
+                .clipped()
+            statusBar
+                .padding(.horizontal, 18)
+                .padding(.top, 14)
+            HStack {
+                navCircle(system: "chevron.left", action: {})
                 Spacer()
-                rightRail
+                navCircle(
+                    system: isLiked ? "heart.fill" : "heart",
+                    tint: isLiked ? Theme.Palette.accent : .white,
+                    action: onToggleLike
+                )
             }
-            .padding(.trailing, 14)
-            .padding(.bottom, 130)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-
-            // 5. Caption block bottom-left
-            VStack(alignment: .leading, spacing: 6) {
-                Spacer()
-                Text(mockup.appName)
-                    .font(.system(size: 18, weight: .heavy))
-                    .foregroundStyle(.white)
-                Text(mockup.title)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.85))
-                Text(mockup.why)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.7))
-                    .lineLimit(3)
-            }
-            .padding(.leading, 18)
-            .padding(.trailing, 84)
-            .padding(.bottom, 130)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-        }
-        .contentShape(Rectangle())
-    }
-
-    private var rightRail: some View {
-        VStack(spacing: 18) {
-            railButton(system: isLiked ? "heart.fill" : "heart",
-                       tint: isLiked ? Theme.Palette.accent : .white,
-                       caption: isLiked ? "Liked" : "Like",
-                       action: onToggleLike)
-            railButton(system: "chevron.left.forwardslash.chevron.right",
-                       tint: .white,
-                       caption: "Code",
-                       action: onOpenAnimation)
-            railButton(system: "square.and.arrow.up",
-                       tint: .white,
-                       caption: "Share",
-                       action: {})
+            .padding(.horizontal, 14)
+            .padding(.top, 42)
         }
     }
 
-    private func railButton(system: String, tint: Color, caption: String, action: @escaping () -> Void) -> some View {
+    private var statusBar: some View {
+        HStack {
+            Text("9:41")
+                .font(.system(size: 13, weight: .semibold))
+            Spacer()
+            HStack(spacing: 5) {
+                Image(systemName: "wifi").font(.system(size: 11, weight: .semibold))
+                Image(systemName: "battery.100").font(.system(size: 13))
+            }
+        }
+        .foregroundStyle(.white)
+    }
+
+    private func navCircle(system: String, tint: Color = .white,
+                           action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 4) {
-                ZStack {
-                    Circle().fill(Color.black.opacity(0.35))
-                        .frame(width: 44, height: 44)
+            Circle()
+                .fill(Color.black.opacity(0.55))
+                .frame(width: 34, height: 34)
+                .overlay(
                     Image(systemName: system)
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(tint)
-                }
-                Text(caption)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
-            }
+                )
         }
         .buttonStyle(.plain)
     }
-}
 
-/// Scales the existing card-sized phone mockup up to a centered "phone frame"
-/// inside the TikTok-style page. The outer aurora background is still visible
-/// around it, so the page reads as "aurora at large + the app it powers in a
-/// phone frame."
-private struct ScaledOverlay: View {
-    let mockup: UsageMockup
-    var body: some View {
-        GeometryReader { geo in
-            let scale = min(geo.size.width  / 168 * 0.78,
-                            geo.size.height / 320 * 0.66)
-            UsageMockupCard(mockup: mockup, onTap: {})
-                .disabled(true)
-                .frame(width: 168, height: 320)
-                .scaleEffect(scale)
-                .shadow(color: .black.opacity(0.45), radius: 30, y: 20)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+    // ── Bottom editorial content card ──────────────────────────
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(metaLine)
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.5)
+                .foregroundStyle(contentForeground.opacity(0.55))
+
+            Text(mockup.title)
+                .font(.system(size: 22, weight: .heavy, design: .serif))
+                .foregroundStyle(contentForeground)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(2)
+
+            chips
+
+            Text(mockup.why)
+                .font(.system(size: 13))
+                .foregroundStyle(contentForeground.opacity(0.65))
+                .lineLimit(4)
+                .padding(.top, 2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 6)
+
+            Button(action: onOpenAnimation) {
+                HStack {
+                    Text("Open animation")
+                        .font(.system(size: 14, weight: .bold))
+                    Spacer()
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(Color.black, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
+        .padding(.bottom, 18)
+    }
+
+    private var chips: some View {
+        HStack(spacing: 6) {
+            chip(mockup.appName)
+            chip(mockup.layout.rawValue.capitalized)
+            chip("Aurora")
         }
     }
+
+    private func chip(_ s: String) -> some View {
+        Text(s)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(contentForeground.opacity(0.7))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(contentForeground.opacity(0.08), in: Capsule())
+    }
+
+    private var metaLine: String {
+        // Static rating per id keeps each card stable across renders.
+        let hash = abs(mockup.id.hashValue)
+        let rating = 4.6 + Double(hash % 4) * 0.1
+        return "\(mockup.appName.uppercased()) · ★ \(String(format: "%.1f", rating))"
+    }
+
+    private var contentBackground: Color {
+        // Warm cream — matches the screenshot reference.
+        Color(red: 0.97, green: 0.93, blue: 0.83)
+    }
+
+    private var contentForeground: Color {
+        Color(red: 0.13, green: 0.08, blue: 0.02)
+    }
 }
+

@@ -254,7 +254,13 @@ final class RemoteAnimationRepository: AnimationRepositoryProtocol {
             }
 
             await MainActor.run {
-                self.cache = items
+                // Merge with the bundled seed catalog so the app keeps showing the
+                // 100+ handcrafted entries (which need compile-time preview views)
+                // alongside whatever the server adds. Remote rows win on id collisions.
+                var merged: [String: AnimationItem] = [:]
+                for s in AnimationCatalogSeed.items { merged[s.id] = s }
+                for r in items                       { merged[r.id] = r }
+                self.cache = Array(merged.values)
                 NotificationCenter.default.post(name: .animationsUpdated, object: nil)
             }
             return true

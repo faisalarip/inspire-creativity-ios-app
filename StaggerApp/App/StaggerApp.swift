@@ -16,6 +16,7 @@ struct StaggerApp: App {
             RootView()
                 .environmentObject(container)
                 .tint(Theme.Palette.accent)
+                .preferredColorScheme(.dark)
         }
     }
 }

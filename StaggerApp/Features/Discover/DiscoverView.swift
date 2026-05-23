@@ -569,7 +569,11 @@ private struct SampleCarouselCard: View {
             RoundedRectangle(cornerRadius: 36, style: .continuous)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
         )
-        .shadow(color: .black.opacity(0.45), radius: 30, y: 20)
+        // Layered shadow: soft white ambient halo (visible against the dark
+        // bg) + a deeper black drop shadow that grounds the card.
+        .shadow(color: .white.opacity(0.08), radius: 26, y: 0)
+        .shadow(color: .black.opacity(0.75), radius: 22, y: 18)
+        .shadow(color: .black.opacity(0.45), radius: 40, y: 32)
     }
 
     private var caption: some View {

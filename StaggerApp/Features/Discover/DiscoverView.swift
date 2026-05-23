@@ -440,14 +440,20 @@ struct SamplesView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let cardWidth  = min(340, proxy.size.width - 56)
-            let cardHeight = cardWidth * 1.72   // iPhone-ish aspect
+            // Reserve space for the floating tab bar (~110pt incl. bottom safe
+            // area + visual buffer) and the header (~80pt). Cards size
+            // dynamically to fit the remaining vertical space.
+            let headerHeight: CGFloat = 80
+            let bottomReserved: CGFloat = 110
+            let available = proxy.size.height - headerHeight - bottomReserved
+            let cardHeight = max(420, min(available, 640))
+            let cardWidth  = min(340, proxy.size.width - 56, cardHeight / 1.65)
 
             VStack(alignment: .leading, spacing: 0) {
                 header
                     .padding(.horizontal, 24)
-                    .padding(.top, max(proxy.safeAreaInsets.top, 16))
-                    .padding(.bottom, 18)
+                    .padding(.top, 8)
+                    .padding(.bottom, 14)
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 18) {
@@ -467,12 +473,12 @@ struct SamplesView: View {
                     .scrollTargetLayout()
                 }
                 .scrollTargetBehavior(.viewAligned)
-                .frame(maxHeight: cardHeight + 24)
+                .frame(height: cardHeight + 28)
 
-                Spacer()
+                Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background(Theme.Palette.background.ignoresSafeArea())
+            .background(Theme.Palette.background)
         }
     }
 

@@ -30,10 +30,26 @@ struct CodeSheet: View {
                         .padding(.horizontal, 12)
                         .padding(.top, 6)
                         .padding(.bottom, 32)
+                        .blur(radius: locked ? 8 : 0)
+                        .allowsHitTesting(!locked)
                 }
-                .overlay(alignment: .bottom) {
+                .overlay {
                     if locked {
-                        lockedOverlay
+                        ZStack {
+                            // Dim the blurred code further so the unlock CTA is the focus.
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.05, green: 0.07, blue: 0.09).opacity(0.4),
+                                    Color(red: 0.05, green: 0.07, blue: 0.09).opacity(0.85)
+                                ],
+                                startPoint: .top, endPoint: .bottom
+                            )
+                            VStack {
+                                Spacer()
+                                lockedOverlay
+                            }
+                        }
+                        .allowsHitTesting(true)
                     }
                 }
             } else {

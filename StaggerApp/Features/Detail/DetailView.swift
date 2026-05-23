@@ -32,69 +32,67 @@ struct DetailView: View {
     }
 
     var body: some View {
-        // Outer reader captures the true top safe-area inset before the inner
-        // ScrollView ignores it. We use that inset to pad the floating nav so
-        // the back button / heart never collide with the iOS status bar.
-        GeometryReader { outer in
-            let topInset = outer.safeAreaInsets.top
-            let h = outer.size.height + topInset
-            let sheetHeight = max(56, sheet.height(in: h) + dragOffset)
-            let previewHeight = max(180, h * 0.42)
+        // The ZStack itself respects safe area — so the floating nav lands
+        // just below the status bar with no manual inset math. Only the
+        // background fill and the ScrollView extend behind the status bar,
+        // each opting in to ignore safe area on their own layer.
+        ZStack(alignment: .top) {
+            Theme.Palette.background.ignoresSafeArea()
 
-            ZStack(alignment: .bottom) {
-                Theme.Palette.background.ignoresSafeArea()
+            GeometryReader { proxy in
+                let h = proxy.size.height + proxy.safeAreaInsets.top + proxy.safeAreaInsets.bottom
+                let sheetHeight = max(56, sheet.height(in: h) + dragOffset)
+                let previewHeight = max(180, h * 0.42)
 
-                ScrollView {
-                    VStack(spacing: 0) {
-                        ZStack {
-                            Color(hex: viewModel.item.tintHex)
-                            AnimationPreviewRegistry.view(for: viewModel.item.id)
-                                .id(replayId)
+                ZStack(alignment: .bottom) {
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ZStack {
+                                Color(hex: viewModel.item.tintHex)
+                                AnimationPreviewRegistry.view(for: viewModel.item.id)
+                                    .id(replayId)
 
-                            VStack {
-                                Spacer()
-                                replayPill
-                                    .padding(.bottom, 12)
+                                VStack {
+                                    Spacer()
+                                    replayPill
+                                        .padding(.bottom, 12)
+                                }
                             }
-                        }
-                        .frame(height: previewHeight)
-                        .onTapGesture { replayId = UUID() }
+                            .frame(height: previewHeight)
+                            .onTapGesture { replayId = UUID() }
 
-                        meta
-                            .padding(.bottom, sheetHeight + 20)
-                    }
-                }
-                .ignoresSafeArea(edges: .top)
-
-                // Top floating nav controls — pinned to the real top safe area
-                VStack {
-                    HStack {
-                        IconButton("chevron.left") { router.pop() }
-                        Spacer()
-                        HStack(spacing: 8) {
-                            IconButton("square.and.arrow.up") {}
-                            IconButton(viewModel.isFavorited ? "heart.fill" : "heart",
-                                       tint: viewModel.isFavorited ? Theme.Palette.accent : .white) {
-                                viewModel.toggleFavorite()
-                            }
+                            meta
+                                .padding(.bottom, sheetHeight + 20)
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.top, topInset + 4)
-                    Spacer()
-                }
+                    .ignoresSafeArea(edges: .top)
 
-                // Bottom code sheet
-                CodeSheet(
-                    state: $sheet,
-                    dragOffset: $dragOffset,
-                    height: sheetHeight,
-                    fileName: filename + ".swift",
-                    source: viewModel.item.swiftCode,
-                    locked: !viewModel.isOwned,
-                    onUnlock: { router.push(.paywall) }
-                )
+                    CodeSheet(
+                        state: $sheet,
+                        dragOffset: $dragOffset,
+                        height: sheetHeight,
+                        fileName: filename + ".swift",
+                        source: viewModel.item.swiftCode,
+                        locked: !viewModel.isOwned,
+                        onUnlock: { router.push(.paywall) }
+                    )
+                }
             }
+
+            // Floating nav row — sits in the safe area by default.
+            HStack {
+                IconButton("chevron.left") { router.pop() }
+                Spacer()
+                HStack(spacing: 8) {
+                    IconButton("square.and.arrow.up") {}
+                    IconButton(viewModel.isFavorited ? "heart.fill" : "heart",
+                               tint: viewModel.isFavorited ? Theme.Palette.accent : .white) {
+                        viewModel.toggleFavorite()
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 4)
         }
         .toolbar(.hidden, for: .navigationBar)
     }

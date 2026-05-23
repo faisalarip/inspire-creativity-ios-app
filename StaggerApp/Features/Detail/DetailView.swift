@@ -227,7 +227,7 @@ struct DetailView: View {
                     HStack(spacing: 4) {
                         Text("Or unlock everything with")
                             .foregroundStyle(.white)
-                        Text("Stagger Pro")
+                        Text("Enigma Pro")
                             .foregroundStyle(Theme.Palette.accent)
                         Image(systemName: "chevron.right")
                             .font(.system(size: 10))

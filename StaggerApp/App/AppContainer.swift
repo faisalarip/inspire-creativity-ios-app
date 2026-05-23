@@ -78,8 +78,8 @@ final class AppContainer: ObservableObject {
 ///   3. Copy "Project URL" into `url`
 ///   4. Copy the "anon" / "public" key into `anonKey`
 enum SupabaseConfig {
-    static let url     = ""   // e.g. "https://abcd1234.supabase.co"
-    static let anonKey = ""   // public anon key
+    static let url     = "https://kuqkeuasncqnbvnipetu.supabase.co"
+    static let anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt1cWtldWFzbmNxbmJ2bmlwZXR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1MzkzOTQsImV4cCI6MjA5NTExNTM5NH0.GiHkjqnEbXps1pUtIS4o3H3AMYPiOrUSAukS7fEHkpc"
 
     static var isConfigured: Bool {
         !url.isEmpty && !anonKey.isEmpty

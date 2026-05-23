@@ -483,7 +483,7 @@ struct SamplesView: View {
             VStack(alignment: .leading, spacing: 0) {
                 header
                     .padding(.horizontal, 24)
-                    .padding(.top, 8)
+                    .padding(.top, 0)
                     .padding(.bottom, 14)
 
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -513,6 +513,9 @@ struct SamplesView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .background(Theme.Palette.background)
         }
+        // Hide the (otherwise-empty) navigation bar so the ~44pt reservation
+        // doesn't push the header way below the status bar.
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private var header: some View {

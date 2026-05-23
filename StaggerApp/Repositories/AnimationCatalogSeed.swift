@@ -292,7 +292,8 @@ enum AnimationCatalogSeed {
     ]
 
     // Aurora background entries derived from the descriptor table.
-    // Names, palettes, themes, and pricing come from the handed-off design.
+    // Pro proportion is reduced (only entries with a price ≥ $10 in the
+    // descriptor stay Pro); all Pro entries are normalized to a flat $10.
     static let auroraDerived: [AnimationItem] = AuroraDescriptors.all.map { d in
         let difficulty: Difficulty = {
             switch d.engine {
@@ -313,24 +314,38 @@ enum AnimationCatalogSeed {
         let (author, handle) = authorRotation[pick]
         let baseDownloads = 1_800 + (abs(d.id.hashValue) % 18_000)
         let rating = 4.5 + Double(abs(d.id.hashValue) % 5) * 0.1
+        let keepPro = d.isPro && (d.price ?? 0) >= 10
         return AnimationItem(
             id: d.id,
             name: d.name,
             category: .backgrounds,
             difficulty: difficulty,
             iosVersion: "18+",
-            isPro: d.isPro,
+            isPro: keepPro,
             isFeatured: false,
             tintHex: d.palette.first ?? "#0a0a0c",
             author: author,
             handle: handle,
             downloads: baseDownloads,
             rating: rating,
-            price: d.price,
+            price: keepPro ? 10 : nil,
             description: "\(d.theme) · \(d.use). Animated mesh background tuned with the \(d.palette.count)-color palette.",
             swiftCode: Code.auroraMesh
         )
     }
 
-    static let items: [AnimationItem] = handcrafted + auroraDerived
+    /// All catalog items, with Pro pricing normalized to a flat $10 across both
+    /// handcrafted and aurora-derived entries.
+    static let items: [AnimationItem] = (handcrafted + auroraDerived).map { item in
+        guard item.isPro else { return item }
+        return AnimationItem(
+            id: item.id, name: item.name, category: item.category,
+            difficulty: item.difficulty, iosVersion: item.iosVersion,
+            isPro: true, isFeatured: item.isFeatured, tintHex: item.tintHex,
+            author: item.author, handle: item.handle,
+            downloads: item.downloads, rating: item.rating,
+            price: 10,
+            description: item.description, swiftCode: item.swiftCode
+        )
+    }
 }

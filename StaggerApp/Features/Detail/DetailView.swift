@@ -125,33 +125,6 @@ struct DetailView: View {
                 Spacer()
             }
 
-            HStack(spacing: 10) {
-                Avatar(viewModel.item.author, size: 32)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(viewModel.item.author)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                    Text(viewModel.item.handle)
-                        .font(Theme.Typo.mono(12))
-                        .foregroundStyle(.white.opacity(0.5))
-                }
-                Spacer()
-                Button("Follow") {}
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12).padding(.vertical, 5)
-                    .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
-            }
-
-            HStack(spacing: 6) {
-                Badge("iOS \(viewModel.item.iosVersion)",
-                      icon: "iphone",
-                      foreground: Theme.Palette.iosBlue,
-                      background: Theme.Palette.iosBlue.opacity(0.18))
-                DifficultyBadge(level: viewModel.item.difficulty)
-                Badge(viewModel.item.category.displayName)
-            }
-
             statsBar
 
             Text(viewModel.item.description)

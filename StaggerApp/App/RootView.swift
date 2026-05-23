@@ -20,7 +20,7 @@ struct RootView: View {
             ZStack {
                 tabContent(.discover).opacity(router.selectedTab == .discover ? 1 : 0)
                 tabContent(.browse).opacity(router.selectedTab == .browse ? 1 : 0)
-                tabContent(.search).opacity(router.selectedTab == .search ? 1 : 0)
+                tabContent(.samples).opacity(router.selectedTab == .samples ? 1 : 0)
                 tabContent(.library).opacity(router.selectedTab == .library ? 1 : 0)
             }
             .animation(.easeOut(duration: 0.15), value: router.selectedTab)
@@ -57,7 +57,7 @@ struct RootView: View {
         switch tab {
         case .discover: DiscoverView(viewModel: container.makeDiscoverViewModel())
         case .browse:   BrowseView(viewModel: container.makeBrowseViewModel())
-        case .search:   SearchView(viewModel: container.makeSearchViewModel())
+        case .samples:  SamplesView()
         case .library:  LibraryView(viewModel: container.makeLibraryViewModel())
         }
     }

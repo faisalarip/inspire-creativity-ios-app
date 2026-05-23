@@ -16,6 +16,7 @@ final class BrowseViewModel: ObservableObject {
 
     @Published var selectedCategory: Category? = nil
     @Published var sortOrder: SortOrder = .popular
+    @Published var searchText: String = ""
 
     @Published private(set) var visibleItems: [AnimationItem] = []
     @Published private(set) var categories: [(category: Category, count: Int)] = []
@@ -32,15 +33,24 @@ final class BrowseViewModel: ObservableObject {
     }
 
     private func bind() {
-        Publishers.CombineLatest($selectedCategory, $sortOrder)
-            .sink { [weak self] cat, sort in
-                self?.refresh(category: cat, sort: sort)
+        Publishers.CombineLatest3($selectedCategory, $sortOrder, $searchText)
+            .debounce(for: .milliseconds(120), scheduler: DispatchQueue.main)
+            .sink { [weak self] cat, sort, query in
+                self?.refresh(category: cat, sort: sort, query: query)
             }
             .store(in: &cancellables)
     }
 
-    private func refresh(category: Category?, sort: SortOrder) {
-        let items = repository.items(in: category)
+    private func refresh(category: Category?, sort: SortOrder, query: String) {
+        var items = repository.items(in: category)
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if !q.isEmpty {
+            items = items.filter {
+                $0.name.lowercased().contains(q) ||
+                $0.category.rawValue.lowercased().contains(q) ||
+                $0.author.lowercased().contains(q)
+            }
+        }
         switch sort {
         case .popular:
             visibleItems = items.sorted { $0.downloads > $1.downloads }

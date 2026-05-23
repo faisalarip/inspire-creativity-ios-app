@@ -56,12 +56,19 @@ enum AnimationPreviewRegistry {
         "liquid-ripple":  { AnyView(LiquidRipplePreview()) }
     ]
 
+    /// Runtime aurora descriptors added after launch — e.g. rows loaded from
+    /// Supabase that include a `palette` field. Populated on the main actor
+    /// by `RemoteAnimationRepository`; read only on the main actor.
+    static var runtimeDescriptors: [String: AuroraDescriptor] = [:]
+
     /// Returns the preview view for a given id, or a fallback placeholder.
     @ViewBuilder
     static func view(for id: String) -> some View {
         if let make = builders[id] {
             make()
         } else if let descriptor = AuroraDescriptors.byId[id] {
+            ParametricAuroraPreview(descriptor: descriptor)
+        } else if let descriptor = runtimeDescriptors[id] {
             ParametricAuroraPreview(descriptor: descriptor)
         } else {
             PlaceholderPreview(id: id)

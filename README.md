@@ -96,6 +96,56 @@ The Aurora previews use `MeshGradient` on iOS 18+ and fall back to `LinearGradie
 - **Tests** — no unit/UI tests included in this scope. The protocol-based DI is ready for them; add an `XCTest` target and wire fakes against `AnimationRepositoryProtocol`, `FavoritesRepositoryProtocol`, `PurchaseRepositoryProtocol`.
 - **Accessibility** — basic labels and Dynamic Type are wired on the major atoms; full VoiceOver flow has not been exhaustively QA'd.
 
+## Supabase integration (optional)
+
+The app boots from a bundled seed catalog. To extend the catalog through a
+server — adding new animations without rebuilding the app — wire it to your
+Supabase project.
+
+### 1. Create the table
+
+Open Supabase Dashboard → **SQL Editor** → paste the contents of
+[`supabase_schema.sql`](supabase_schema.sql) → **Run**. This creates the
+`animations` table, a public read policy, indexes, and inserts two example
+rows.
+
+### 2. Configure the app
+
+Open `StaggerApp/App/AppContainer.swift` and fill in `SupabaseConfig`:
+
+```swift
+enum SupabaseConfig {
+    static let url     = "https://YOUR-PROJECT.supabase.co"
+    static let anonKey = "YOUR-ANON-PUBLIC-KEY"
+}
+```
+
+Both come from your Supabase project's **Settings → API** page. The anon
+key is safe to ship in the app — its access is gated entirely by the RLS
+policies you configure server-side.
+
+### 3. Run
+
+On next launch the app:
+
+1. Boots instantly from the bundled seed catalog.
+2. Fires an async `GET /rest/v1/animations?select=*` in the background.
+3. Replaces the in-memory cache with the remote rows on success.
+4. Posts `.animationsUpdated` — Discover and Browse rebind to the new data.
+
+If the fetch fails or `SupabaseConfig` is empty, the app silently keeps the
+seed catalog. No errors are surfaced to the user.
+
+### 4. Add new animations
+
+Insert rows via the Supabase Dashboard, SQL editor, JS/Swift SDKs, or
+`psql`. To get a real animated preview without rebuilding the app, supply
+`palette` (array of hex colors) and optionally `engine` (one of `mesh`,
+`spin`, `bloom`, `streaks`, `goo`). The iOS preview registry checks
+`runtimeDescriptors` for any unknown id at render time, so server-added
+rows with a `palette` get a live `ParametricAuroraPreview` without an app
+rebuild.
+
 ## Min iOS
 
 - **Deployment target:** iOS 17.0

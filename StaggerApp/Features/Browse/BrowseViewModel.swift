@@ -39,6 +39,20 @@ final class BrowseViewModel: ObservableObject {
                 self?.refresh(category: cat, sort: sort, query: query)
             }
             .store(in: &cancellables)
+
+        // Re-read the catalog (and re-emit derived state) when the remote
+        // Supabase fetch lands.
+        NotificationCenter.default.publisher(for: .animationsUpdated)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                self.categories = self.repository.categories()
+                self.totalCount = self.repository.all().count
+                self.refresh(category: self.selectedCategory,
+                             sort: self.sortOrder,
+                             query: self.searchText)
+            }
+            .store(in: &cancellables)
     }
 
     private func refresh(category: Category?, sort: SortOrder, query: String) {

@@ -1,6 +1,6 @@
 //
 //  CodeSheet.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Drag-up code viewer with 3 snap states (peek / half / full).
 //

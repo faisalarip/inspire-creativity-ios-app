@@ -1,6 +1,6 @@
 //
 //  DetailViewModel.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import Foundation

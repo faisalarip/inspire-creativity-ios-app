@@ -1,6 +1,6 @@
 //
 //  AnimationCard.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Shared catalog card. Two sizes (`.small`, `.medium`) match the prototype.
 //

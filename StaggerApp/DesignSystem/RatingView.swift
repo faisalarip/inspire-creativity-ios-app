@@ -1,6 +1,6 @@
 //
 //  RatingView.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import SwiftUI

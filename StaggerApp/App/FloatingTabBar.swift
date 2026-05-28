@@ -1,6 +1,6 @@
 //
 //  FloatingTabBar.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Floating liquid-glass pill tab bar — detached from the screen edge with
 //  heavy frosted blur, a meniscus highlight up top, a soft shadow beneath,

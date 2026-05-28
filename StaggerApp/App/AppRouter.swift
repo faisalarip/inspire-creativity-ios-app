@@ -1,6 +1,6 @@
 //
 //  AppRouter.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Per-tab navigation paths plus modal-style sheet presentations (Detail,
 //  Paywall). The tab bar is hidden when a modal route is active to mirror

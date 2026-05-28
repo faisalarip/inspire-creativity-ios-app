@@ -1,6 +1,6 @@
 //
 //  AppContainer.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Lightweight dependency container + view-model factories. Composition
 //  root — all concrete deps are instantiated once here and exposed as
@@ -138,7 +138,7 @@ enum SupabaseConfig {
 extension Notification.Name {
     /// Posted on the main queue when the remote catalog has been fetched
     /// and the in-memory cache replaced. View models listen and refresh.
-    static let animationsUpdated = Notification.Name("StaggerApp.animationsUpdated")
+    static let animationsUpdated = Notification.Name("InspireCreativityApp.animationsUpdated")
 }
 
 /// JSON row coming out of Supabase REST (`/rest/v1/animations`).

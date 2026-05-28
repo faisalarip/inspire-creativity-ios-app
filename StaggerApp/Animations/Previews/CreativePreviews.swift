@@ -1,6 +1,6 @@
 //
 //  CreativePreviews.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Creative-tier previews: hologram cards, parallax, glitch text, morphing FAB.
 //

@@ -1,6 +1,6 @@
 //
 //  PaywallView.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import SwiftUI
@@ -90,7 +90,7 @@ struct PaywallView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 5) {
                 Image(systemName: "star.fill").font(.system(size: 10))
-                Text("ENIGMA PRO")
+                Text("INSPIRECREATIVITY PRO")
                     .font(.system(size: 11, weight: .heavy))
                     .tracking(0.5)
             }

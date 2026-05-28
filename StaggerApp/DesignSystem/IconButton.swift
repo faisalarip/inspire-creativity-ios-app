@@ -1,6 +1,6 @@
 //
 //  IconButton.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import SwiftUI

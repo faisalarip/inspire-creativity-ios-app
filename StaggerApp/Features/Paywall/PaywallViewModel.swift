@@ -1,6 +1,6 @@
 //
 //  PaywallViewModel.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import Foundation

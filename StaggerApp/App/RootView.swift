@@ -1,6 +1,6 @@
 //
 //  RootView.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Top-level shell. Custom floating tab bar (matches prototype's
 //  blurred dark style) layered above the per-tab NavigationStacks.
@@ -153,7 +153,7 @@ private struct SignInView: View {
                     Text("Welcome back")
                         .font(.system(size: 28, weight: .heavy))
                         .foregroundStyle(.white)
-                    Text("Sign in to your Enigma account.")
+                    Text("Sign in to your InspireCreativity account.")
                         .font(Theme.Typo.caption)
                         .foregroundStyle(.white.opacity(0.55))
                 }

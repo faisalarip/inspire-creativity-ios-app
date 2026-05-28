@@ -1,6 +1,6 @@
 //
 //  LibraryViewModel.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import Foundation

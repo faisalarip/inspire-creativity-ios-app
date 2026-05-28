@@ -1,6 +1,6 @@
 //
 //  Badges.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import SwiftUI

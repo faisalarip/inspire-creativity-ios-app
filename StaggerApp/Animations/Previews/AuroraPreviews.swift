@@ -1,6 +1,6 @@
 //
 //  AuroraPreviews.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Aurora pack previews — animated mesh gradients with iOS 17 fallbacks.
 //

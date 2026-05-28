@@ -1,6 +1,6 @@
 //
 //  HexColor.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import SwiftUI

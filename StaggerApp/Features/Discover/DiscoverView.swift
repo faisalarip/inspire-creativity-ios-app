@@ -1,6 +1,6 @@
 //
 //  DiscoverView.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import SwiftUI
@@ -499,7 +499,7 @@ struct SamplesView: View {
                                     router.push(.detail(animationId: m.animationId))
                                 }
                             )
-                            .frame(width: cardWidth)
+                            .frame(maxWidth: cardWidth)
                         }
                     }
                     .padding(.horizontal, (proxy.size.width - cardWidth) / 2)
@@ -566,7 +566,7 @@ private struct SampleCarouselCard: View {
                 cardHeight: cardHeight
             )
         }
-        .frame(width: cardWidth, height: cardHeight)
+        .frame(maxWidth: cardWidth, maxHeight: cardHeight)
         .clipShape(RoundedRectangle(cornerRadius: 36, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 36, style: .continuous)

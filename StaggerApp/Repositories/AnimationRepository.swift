@@ -1,6 +1,6 @@
 //
 //  AnimationRepository.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Repository protocol + in-memory seeded implementation.
 //  Domain code only depends on the protocol; the concrete impl is injected

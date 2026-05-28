@@ -1,6 +1,6 @@
 //
 //  CategoryGrid.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  2-column tile grid showing a representative animation preview per category.
 //

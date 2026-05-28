@@ -1,6 +1,6 @@
 //
 //  AdvancedPreviews.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Advanced/physics previews: spring chain, throwable card, metal-like ripple.
 //

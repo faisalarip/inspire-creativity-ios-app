@@ -1,6 +1,6 @@
 //
 //  HeroCard.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Featured animation card on the Discover screen.
 //

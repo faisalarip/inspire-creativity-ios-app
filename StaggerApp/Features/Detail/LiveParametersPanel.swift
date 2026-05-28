@@ -1,6 +1,6 @@
 //
 //  LiveParametersPanel.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Slider panel for live-tweaking spring/scale params. Visual only.
 //

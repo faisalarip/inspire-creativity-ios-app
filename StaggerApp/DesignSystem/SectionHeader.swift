@@ -1,6 +1,6 @@
 //
 //  SectionHeader.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import SwiftUI

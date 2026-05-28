@@ -1,6 +1,6 @@
 //
 //  NavHeader.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Large-title navigation header. Slim variant uses a centered title +
 //  back button; large variant places a 32pt title under the bar.

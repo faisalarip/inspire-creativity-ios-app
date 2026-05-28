@@ -1,6 +1,6 @@
 //
 //  CorePreviews.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Hand-coded SwiftUI animations approximating the prototype's `previews.jsx`.
 //  Every view is self-contained: starts animating in `.onAppear`, loops forever.

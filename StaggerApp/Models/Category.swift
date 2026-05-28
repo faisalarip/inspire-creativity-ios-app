@@ -1,6 +1,6 @@
 //
 //  Category.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import Foundation

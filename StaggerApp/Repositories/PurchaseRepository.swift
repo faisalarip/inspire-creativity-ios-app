@@ -1,6 +1,6 @@
 //
 //  PurchaseRepository.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Tracks ownership state. For now, "owned" = (free OR pro-subscribed OR
 //  individually purchased). A real implementation would talk to StoreKit.

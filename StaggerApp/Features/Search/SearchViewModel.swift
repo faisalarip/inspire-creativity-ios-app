@@ -1,6 +1,6 @@
 //
 //  SearchViewModel.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Debounced search with idle/loading/empty/loaded states. ViewState is
 //  generic so the view can render uniformly across data shapes.

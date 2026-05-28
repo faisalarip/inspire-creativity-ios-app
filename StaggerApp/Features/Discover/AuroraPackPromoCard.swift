@@ -1,6 +1,6 @@
 //
 //  AuroraPackPromoCard.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Promotional card on the Discover screen advertising the 7-piece pack.
 //

@@ -1,6 +1,6 @@
 //
 //  Chip.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import SwiftUI

@@ -1,6 +1,6 @@
 //
 //  Difficulty.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import Foundation

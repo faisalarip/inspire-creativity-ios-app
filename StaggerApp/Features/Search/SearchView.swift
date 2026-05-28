@@ -1,6 +1,6 @@
 //
 //  SearchView.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import SwiftUI

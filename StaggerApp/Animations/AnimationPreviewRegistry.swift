@@ -1,6 +1,6 @@
 //
 //  AnimationPreviewRegistry.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Maps animation IDs to their preview SwiftUI views. Using a closure-typed
 //  registry instead of `some View` lets the data layer reference previews

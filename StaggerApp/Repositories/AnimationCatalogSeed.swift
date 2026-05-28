@@ -1,6 +1,6 @@
 //
 //  AnimationCatalogSeed.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Seeded animation catalog. Mirrors `ANIMATIONS` + `SWIFT_CODE` from the
 //  prototype. ~30 entries spanning all categories.

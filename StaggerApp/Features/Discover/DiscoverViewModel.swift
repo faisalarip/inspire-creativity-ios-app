@@ -1,6 +1,6 @@
 //
 //  DiscoverViewModel.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import Foundation

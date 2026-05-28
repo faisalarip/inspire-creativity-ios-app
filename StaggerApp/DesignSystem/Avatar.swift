@@ -1,6 +1,6 @@
 //
 //  Avatar.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import SwiftUI

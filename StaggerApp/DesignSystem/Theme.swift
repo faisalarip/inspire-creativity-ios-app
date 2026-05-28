@@ -1,6 +1,6 @@
 //
 //  Theme.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Centralized design tokens — colors, spacing, radii, typography.
 //  Matches the prototype's dark palette and #FF6B4A accent.

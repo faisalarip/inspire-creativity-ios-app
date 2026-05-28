@@ -1,6 +1,6 @@
 //
 //  BrowseView.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import SwiftUI

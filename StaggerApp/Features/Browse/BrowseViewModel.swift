@@ -1,6 +1,6 @@
 //
 //  BrowseViewModel.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import Foundation

@@ -1,6 +1,6 @@
 //
-//  StaggerApp.swift
-//  StaggerApp
+//  InspireCreativityApp.swift
+//  InspireCreativityApp
 //
 //  App entry point. Wires the composition root and presents `RootView`.
 //
@@ -8,7 +8,7 @@
 import SwiftUI
 
 @main
-struct StaggerApp: App {
+struct InspireCreativityApp: App {
     @StateObject private var container = AppContainer()
 
     var body: some Scene {

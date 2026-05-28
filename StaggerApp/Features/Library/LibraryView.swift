@@ -1,6 +1,6 @@
 //
 //  LibraryView.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 
 import SwiftUI

@@ -1,6 +1,6 @@
 //
 //  CodeSamples.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Swift source snippets shown in the Detail screen's bottom sheet.
 //  These are the actual "product" the catalog sells. Copy-paste runnable.

@@ -1,6 +1,6 @@
 //
 //  AnimationItem.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Domain entity describing a single animation in the catalog.
 //  Pure value type — no UI imports, lives in the domain layer.

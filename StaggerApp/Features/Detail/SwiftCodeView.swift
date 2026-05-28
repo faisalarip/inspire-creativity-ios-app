@@ -1,6 +1,6 @@
 //
 //  SwiftCodeView.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Lightweight syntax-highlighted code viewer. Not a full lexer — just
 //  matches keywords, strings, and comments to look like Xcode dark mode.

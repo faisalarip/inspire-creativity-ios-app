@@ -1,6 +1,6 @@
 //
 //  FavoritesRepository.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Lightweight UserDefaults-backed favorites store. Suitable for non-secure,
 //  small-volume data. For the production app, swap with SwiftData behind the

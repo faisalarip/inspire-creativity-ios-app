@@ -1,6 +1,6 @@
 //
 //  FlowLayout.swift
-//  StaggerApp
+//  InspireCreativityApp
 //
 //  Wrap-around horizontal layout for chips/tags.
 //  iOS 16+ uses the native `Layout` protocol.

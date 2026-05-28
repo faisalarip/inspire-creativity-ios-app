@@ -14,7 +14,6 @@ struct DetailView: View {
 
     @State private var sheet: SheetState = .peek
     @State private var dragOffset: CGFloat = 0
-    @State private var replayId = UUID()
 
     init(viewModel: DetailViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -50,16 +49,8 @@ struct DetailView: View {
                             ZStack {
                                 Color(hex: viewModel.item.tintHex)
                                 AnimationPreviewRegistry.view(for: viewModel.item.id)
-                                    .id(replayId)
-
-                                VStack {
-                                    Spacer()
-                                    replayPill
-                                        .padding(.bottom, 12)
-                                }
                             }
                             .frame(height: previewHeight)
-                            .onTapGesture { replayId = UUID() }
 
                             meta
                                 .padding(.bottom, sheetHeight + 20)
@@ -103,18 +94,6 @@ struct DetailView: View {
                                                   options: .regularExpression)
     }
 
-    private var replayPill: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "arrow.clockwise")
-                .font(.system(size: 10, weight: .semibold))
-            Text("Tap to replay")
-                .font(.system(size: 11, weight: .semibold))
-        }
-        .foregroundStyle(.white.opacity(0.85))
-        .padding(.horizontal, 12).padding(.vertical, 5)
-        .background(.ultraThinMaterial, in: Capsule())
-    }
-
     private var meta: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 10) {
@@ -131,13 +110,6 @@ struct DetailView: View {
                 .font(.system(size: 14))
                 .foregroundStyle(.white.opacity(0.7))
                 .lineSpacing(3)
-
-            LiveParametersPanel(
-                response: $viewModel.paramResponse,
-                damping: $viewModel.paramDamping,
-                scale: $viewModel.paramScale,
-                onReset: { viewModel.resetParams() }
-            )
 
             ctaButton
         }

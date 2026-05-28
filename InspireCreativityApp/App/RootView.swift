@@ -442,18 +442,17 @@ private struct VerifyEmailView: View {
 
 // MARK: - Auth UI primitives
 
-/// Square brand mark used at the top of every auth screen.
+/// Square brand mark used at the top of every auth screen. Renders the
+/// bundled `AppLogo` image (sourced from the AppIcon at build time).
 private struct AuthLogo: View {
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Theme.Palette.accent)
-            Text("E")
-                .font(.system(size: 32, weight: .heavy))
-                .foregroundStyle(.white)
-        }
-        .frame(width: 64, height: 64)
-        .shadow(color: Theme.Palette.accent.opacity(0.4), radius: 18, x: 0, y: 8)
+        Image("AppLogo")
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 64, height: 64)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: Theme.Palette.accent.opacity(0.4), radius: 18, x: 0, y: 8)
     }
 }
 

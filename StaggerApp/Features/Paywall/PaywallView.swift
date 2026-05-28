@@ -26,11 +26,15 @@ struct PaywallView: View {
             }
         }
         .background(Theme.Palette.background.ignoresSafeArea())
-        .ignoresSafeArea(edges: .top)
     }
 
     private var heroBand: some View {
-        ZStack {
+        // The hero stack itself respects safe area, so the close + Restore
+        // row lands below the status bar and stays tappable. Only the
+        // visual background layers (gradient, grid, fade) opt into
+        // .ignoresSafeArea(edges: .top) so they still bleed under the
+        // status bar for the edge-to-edge look.
+        ZStack(alignment: .top) {
             LinearGradient(
                 colors: [
                     Color(red: 0.16, green: 0.08, blue: 0.06),
@@ -39,6 +43,7 @@ struct PaywallView: View {
                 startPoint: .top, endPoint: .bottom
             )
             .frame(height: 260)
+            .ignoresSafeArea(edges: .top)
 
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3),
                       spacing: 6) {
@@ -57,26 +62,26 @@ struct PaywallView: View {
             }
             .padding(8)
             .frame(height: 260)
+            .ignoresSafeArea(edges: .top)
 
             LinearGradient(
                 colors: [.clear, Theme.Palette.background],
                 startPoint: .center, endPoint: .bottom
             )
             .frame(height: 260)
+            .ignoresSafeArea(edges: .top)
 
-            // Top nav
-            VStack {
-                HStack {
-                    IconButton("xmark") { router.pop() }
-                    Spacer()
-                    Button("Restore") {}
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
-                }
-                .padding(.horizontal, 12)
-                .padding(.top, 16)
+            // Top nav — respects safe area so taps don't fall under the
+            // status bar's reserved hit region.
+            HStack {
+                IconButton("xmark") { router.pop() }
                 Spacer()
+                Button("Restore") {}
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.7))
             }
+            .padding(.horizontal, 12)
+            .padding(.top, 8)
         }
         .frame(height: 260)
     }

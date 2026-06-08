@@ -19,12 +19,12 @@ struct LibraryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 NavHeader(title: "Library", isLarge: true, trailing: {
-                    IconButton("ellipsis") {}
+                    IconButton("gearshape.fill") { router.push(.settings) }
                 })
                 userCard
                 tabBar
                 contentGrid
-                signOutRow
+                if authStore.isAuthenticated { signOutRow }
                 Spacer().frame(height: 120)
             }
         }

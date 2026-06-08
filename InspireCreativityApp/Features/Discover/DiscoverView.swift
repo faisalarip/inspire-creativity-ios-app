@@ -26,7 +26,7 @@ struct DiscoverView: View {
                     .padding(.top, 8)
                     .padding(.bottom, 8)
 
-                Text("\(viewModel.totalCount) hand-crafted SwiftUI animations. Tap any one to preview, tweak, and copy.")
+                Text("\(viewModel.totalCount) hand-crafted SwiftUI animations. Tap any one to preview and copy.")
                     .font(.system(size: 15))
                     .foregroundStyle(.white.opacity(0.55))
                     .padding(.horizontal, Theme.Spacing.xxl)
@@ -49,7 +49,7 @@ struct DiscoverView: View {
                 }
 
                 AuroraPackPromoCard {
-                    router.push(.detail(animationId: "aurora-mesh"))
+                    router.push(.paywall)
                 }
                 .padding(.horizontal, Theme.Spacing.xl)
                 .padding(.top, Theme.Spacing.xxxl)
@@ -57,7 +57,7 @@ struct DiscoverView: View {
                 SectionHeader("Aurora in the wild", trailing: "See all") {
                     router.selectedTab = .browse
                 }
-                Text("Each animation, shown inside a real app context.")
+                Text("Each animation, shown inside a sample app layout.")
                     .font(.system(size: 13))
                     .foregroundStyle(.white.opacity(0.5))
                     .padding(.horizontal, Theme.Spacing.xxl)
@@ -133,18 +133,44 @@ struct UsageMockup: Identifiable, Hashable {
         self.layout = layout; self.swiftCode = swiftCode
     }
 
-    /// Hardcoded fallback list — used at app boot before the Supabase fetch
-    /// returns, or when Supabase isn't configured. The seven layouts here are
-    /// the ones with custom overlays in `UsageMockupCard`. Server-added rows
-    /// with unknown layouts render the generic overlay.
+    /// Hardcoded fallback list — the full **30 "Aurora in the wild" iOS app
+    /// contexts** from the design. Used at app boot before the Supabase fetch
+    /// returns, or when Supabase isn't configured/reachable, so the Samples
+    /// tab always shows all 30 offline. Mirrors `supabase_seed_mockups.sql`;
+    /// each `layout` has a bespoke screen in `MockupViewRegistry`. (Two seed
+    /// `aurora_id`s — `aurora-bloom`/`aurora-marble` — have no bundled preview,
+    /// so success/reading use the resolvable `au-coreburst`/`au-pearl`.)
     static let fallback: [UsageMockup] = [
-        .init(id: "mock-ai-chat",    title: "AI Assistant",   appName: "Intelligence", animationId: "aurora-mesh",     why: "Mesh moves while the model reasons — signals 'thinking' without a stale spinner.", layout: .aiChat),
-        .init(id: "mock-onboarding", title: "App Onboarding", appName: "NorthLight",   animationId: "aurora-borealis", why: "Northern lights as literal product — sets emotional tone in 1 second.",          layout: .onboarding),
-        .init(id: "mock-paywall",    title: "Pro Paywall",    appName: "Folio",        animationId: "liquid-chrome",   why: "Iridescent metal reads as 'premium'.",                                           layout: .paywall),
-        .init(id: "mock-music",      title: "Now Playing",    appName: "Late Bloom",   animationId: "aurora-pulse",    why: "Background pulses with the bass — passive engagement while listening.",          layout: .music),
-        .init(id: "mock-success",    title: "Success Moment", appName: "Welcome",      animationId: "au-coreburst",    why: "Bloom radiates from center — celebrates completion as a payoff.",                layout: .success),
-        .init(id: "mock-reading",    title: "Book Detail",    appName: "Paperbound",   animationId: "au-pearl",        why: "Pearl as paper texture — establishes editorial, tactile mood.",                  layout: .reading),
-        .init(id: "mock-fitness",    title: "HIIT Timer",     appName: "Forge",        animationId: "lava-flow",       why: "Lava drives intensity — visual heat pushes the workout.",                        layout: .fitness)
+        .init(id: "mock-ai-chat",         title: "AI Assistant",           appName: "Intelligence",     animationId: "aurora-mesh",       why: "Aurora moves while AI reasons — signals \"thinking\" without a stale spinner.", layout: .aiChat),
+        .init(id: "mock-onboarding",      title: "Onboarding Splash",      appName: "NorthLight",       animationId: "aurora-borealis",   why: "Northern lights as literal product — instant emotional hook in 1 second.", layout: .onboarding),
+        .init(id: "mock-paywall",         title: "Pro Paywall",            appName: "Folio",            animationId: "liquid-chrome",     why: "Iridescent metal reads as \"premium\" — increases conversion.", layout: .paywall),
+        .init(id: "mock-music",           title: "Now Playing",            appName: "Late Bloom",       animationId: "aurora-pulse",      why: "Background pulses with bass — passive engagement during listening.", layout: .music),
+        .init(id: "mock-success",         title: "Success Moment",         appName: "Onboarding",       animationId: "au-coreburst",      why: "Bloom radiates from center — celebrates completion as a payoff.", layout: .success),
+        .init(id: "mock-reading",         title: "Book Detail",            appName: "Paperbound",       animationId: "au-pearl",          why: "Pearl as paper texture — establishes editorial, tactile mood.", layout: .reading),
+        .init(id: "mock-fitness",         title: "HIIT Timer",             appName: "Forge",            animationId: "lava-flow",         why: "Lava drives intensity — visual heat pushes the workout.", layout: .fitness),
+        .init(id: "mock-crypto-wallet",   title: "Crypto Wallet",          appName: "Wavelet",          animationId: "au-sunset",         why: "Warm aurora softens hard numbers — feels like wealth, not anxiety.", layout: .cryptoWallet),
+        .init(id: "mock-meditation",      title: "Meditation Session",     appName: "Stillness",        animationId: "au-calmdrift",      why: "Calm drift mirrors breath — viewers naturally synchronize.", layout: .meditation),
+        .init(id: "mock-sleep",           title: "Sleep Tracking",         appName: "Dreamweave",       animationId: "au-midnight",       why: "Aurora midnight feels nocturnal — the bg sells the context before any UI.", layout: .sleep),
+        .init(id: "mock-weather",         title: "Weather Forecast",       appName: "Skyline",          animationId: "au-storm",          why: "Storm Front bg signals conditions before reading any number.", layout: .weather),
+        .init(id: "mock-bank-success",    title: "Transfer Sent",          appName: "BluePay",          animationId: "au-solar",          why: "Solar burst behind the checkmark = pure satisfaction.", layout: .bankSuccess),
+        .init(id: "mock-photo-gallery",   title: "Photo Memories",         appName: "Bokeh",            animationId: "au-bokeh",          why: "Soft Bokeh dots echo lens blur — feels like film, not phone.", layout: .photoGallery),
+        .init(id: "mock-launch-splash",   title: "Launch Splash",          appName: "Orbit",            animationId: "au-galaxy",         why: "Galaxy spin gives 1.5s of magic instead of a dead loading dot.", layout: .launchSplash),
+        .init(id: "mock-audio-call",      title: "Live Audio Room",        appName: "Tuesday Studio",   animationId: "au-pulsar",         why: "Pulsar beats with the active speaker — engagement signal you can feel.", layout: .audioCall),
+        .init(id: "mock-voice-assistant", title: "Voice Assistant",        appName: "Aria",             animationId: "au-pearl",          why: "Pearl iridescence reads as \"intelligent listening\" not \"stuck\".", layout: .voiceAssistant),
+        .init(id: "mock-nft",             title: "NFT Detail",             appName: "Strata",           animationId: "au-holofoil",       why: "Holographic foil shimmer is the universal \"rare\" signal.", layout: .nft),
+        .init(id: "mock-astrology",       title: "Daily Horoscope",        appName: "Astralis",         animationId: "au-nebula",         why: "Nebula deepens the mystical, makes the words land harder.", layout: .astrology),
+        .init(id: "mock-dating",          title: "Profile Card",           appName: "Soirée",           animationId: "au-sparkleveil",    why: "Sparkle veil keeps it romantic without being saccharine.", layout: .dating),
+        .init(id: "mock-yoga",            title: "Yoga Pose Timer",        appName: "Asana",            animationId: "au-ethereal",       why: "Ethereal Mist is wash-of-calm — perfect under hold timers.", layout: .yoga),
+        .init(id: "mock-coin-detail",     title: "Coin Detail",            appName: "Wavelet",          animationId: "au-blackhole",      why: "Black Hole gravitas frames the chart — risk made tangible.", layout: .coinDetail),
+        .init(id: "mock-sub-unlocked",    title: "Premium Unlocked",       appName: "Wavelength",       animationId: "au-goldfoil",       why: "Gold foil = literal \"golden moment\" — celebrate the conversion.", layout: .subUnlocked),
+        .init(id: "mock-workout-summary", title: "Workout Summary",        appName: "Forge",            animationId: "au-firewall",       why: "Firewall = visceral effort, satisfying after a hard session.", layout: .workoutSummary),
+        .init(id: "mock-ticket",          title: "Event Ticket",           appName: "Curtain",          animationId: "au-stardust",       why: "Stardust makes a flat PDF ticket feel like the show already started.", layout: .ticket),
+        .init(id: "mock-year-review",     title: "Year in Review",         appName: "Forge",            animationId: "au-supernova",      why: "Supernova = climactic — pairs with the year-defining stat.", layout: .yearReview),
+        .init(id: "mock-empty-inbox",     title: "Inbox Zero",             appName: "Pebble Mail",      animationId: "au-calmdrift",      why: "Calm drift turns \"nothing to do\" into \"moment to breathe\".", layout: .emptyInbox),
+        .init(id: "mock-recipe",          title: "Recipe Card",            appName: "Hearth",           animationId: "au-honeydrip",      why: "Honey Drip evokes warmth + taste — appetite-stimulating.", layout: .recipe),
+        .init(id: "mock-travel",          title: "Travel Destination",     appName: "Compass",          animationId: "au-tropics",        why: "Tropical Haze previews the destination vibe before any photo.", layout: .travel),
+        .init(id: "mock-loyalty",         title: "Tier Upgrade",           appName: "Lumière",          animationId: "au-goldfoil",       why: "Bronze → Gold transition feels like an actual coronation.", layout: .loyalty),
+        .init(id: "mock-achievement",     title: "Achievement Unlocked",   appName: "Streak",           animationId: "au-coreburst",      why: "Core Burst behind a trophy = visceral reward firing in the brain.", layout: .achievement)
     ]
 
     /// Layout inference for server-added rows. The first 7 hardcoded IDs map
@@ -520,10 +546,10 @@ struct SamplesView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Samples")
+            Text("Aurora in the Wild")
                 .font(.system(size: 28, weight: .heavy))
                 .foregroundStyle(.white)
-            Text("\(container.usageMockups.count) auroras in real iOS app contexts. Swipe.")
+            Text("\(container.usageMockups.count) real iOS app contexts · Swipe to explore")
                 .font(.system(size: 13))
                 .foregroundStyle(.white.opacity(0.55))
         }
@@ -536,7 +562,7 @@ struct SamplesView: View {
 
 /// One slide of the horizontal Samples carousel. Renders the per-mockup
 /// SwiftUI screen inside an iPhone-frame card, with a 2-line caption
-/// (title + app · ★ rating) underneath.
+/// (title + concept app name) underneath.
 private struct SampleCarouselCard: View {
     let mockup: UsageMockup
     let cardWidth: CGFloat
@@ -584,18 +610,12 @@ private struct SampleCarouselCard: View {
             Text(mockup.title)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.white)
-            Text("\(mockup.appName)  ·  ★ \(formattedRating)")
+            // Concept mockup — show only the illustrative app name. No
+            // fabricated rating (these are example contexts, not real apps).
+            Text(mockup.appName)
                 .font(Theme.Typo.mono(11))
                 .foregroundStyle(.white.opacity(0.5))
         }
-    }
-
-    /// Deterministic rating derived from the mockup id so the caption is
-    /// stable across renders without needing a real `rating` field.
-    private var formattedRating: String {
-        let hash = abs(mockup.id.hashValue)
-        let rating = 4.6 + Double(hash % 4) * 0.1
-        return String(format: "%.1f", rating)
     }
 }
 

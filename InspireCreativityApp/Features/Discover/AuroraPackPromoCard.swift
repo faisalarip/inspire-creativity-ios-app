@@ -41,7 +41,7 @@ struct AuroraPackPromoCard: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 4) {
                         Image(systemName: "sparkles").font(.system(size: 10))
-                        Text("BUNDLE · NEW")
+                        Text("INSPIRECREATIVITY PRO")
                             .font(.system(size: 10, weight: .heavy))
                             .tracking(1.2)
                     }
@@ -55,11 +55,11 @@ struct AuroraPackPromoCard: View {
                         in: Capsule()
                     )
 
-                    Text("The Aurora Pack")
+                    Text("The Aurora Collection")
                         .font(.system(size: 24, weight: .heavy))
                         .foregroundStyle(.white)
 
-                    Text("7 mesh-gradient surfaces. $39.99 — save 50%.")
+                    Text("Lush mesh-gradient surfaces — unlock them and the entire library with Pro.")
                         .font(.system(size: 13))
                         .foregroundStyle(.white.opacity(0.7))
                         .lineLimit(2)
@@ -74,6 +74,6 @@ struct AuroraPackPromoCard: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Aurora Pack bundle promo")
+        .accessibilityLabel("Unlock the Aurora Collection with InspireCreativity Pro")
     }
 }

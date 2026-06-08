@@ -43,19 +43,20 @@ final class LibraryViewModel: ObservableObject {
     }
 
     private func bind() {
-        Publishers.CombineLatest3(
+        Publishers.CombineLatest(
             favoritesRepo.idsPublisher,
-            purchases.ownedIdsPublisher,
             purchases.isProPublisher
         )
-        .sink { [weak self] favs, ownedIds, isPro in
+        .sink { [weak self] favs, isPro in
             guard let self else { return }
             self.isPro = isPro
             self.favorites = self.repository.all().filter { favs.contains($0.id) }
+            // "Owned" = everything the user can actually open: free content,
+            // plus the whole library once Pro.
             self.owned = self.repository.all().filter { item in
-                item.isFree || isPro || ownedIds.contains(item.id)
+                item.isFree || isPro
             }
-            // Recent — demo data: last 3 from owned
+            // Recent — last 3 from owned.
             self.recent = Array(self.owned.prefix(3))
         }
         .store(in: &cancellables)

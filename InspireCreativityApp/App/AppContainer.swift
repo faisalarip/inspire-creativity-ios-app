@@ -16,6 +16,10 @@ final class AppContainer: ObservableObject {
     let animationRepository: AnimationRepositoryProtocol
     let favoritesRepository: FavoritesRepositoryProtocol
     let purchaseRepository: PurchaseRepositoryProtocol
+    /// StoreKit 2 entitlement authority. Also vended directly to the paywall
+    /// and Settings (for products / restore). `purchaseRepository` is this
+    /// same instance behind the protocol.
+    let store: StoreManager
     let authStore: AuthStore
 
     /// Mockups shown in the Discover "Aurora in the wild" row and the
@@ -28,12 +32,13 @@ final class AppContainer: ObservableObject {
         animationRepository: AnimationRepositoryProtocol = SupabaseConfig.isConfigured
             ? RemoteAnimationRepository()
             : InMemoryAnimationRepository(),
-        favoritesRepository: FavoritesRepositoryProtocol = FavoritesRepository(),
-        purchaseRepository: PurchaseRepositoryProtocol = PurchaseRepository()
+        favoritesRepository: FavoritesRepositoryProtocol = FavoritesRepository()
     ) {
+        let store = StoreManager()
+        self.store = store
+        self.purchaseRepository = store
         self.animationRepository = animationRepository
         self.favoritesRepository = favoritesRepository
-        self.purchaseRepository = purchaseRepository
         self.authStore = AuthStore()
 
         // Kick off the usage-mockups fetch alongside the animations fetch.
@@ -110,8 +115,23 @@ final class AppContainer: ObservableObject {
     }
 
     func makePaywallViewModel() -> PaywallViewModel {
-        PaywallViewModel(purchases: purchaseRepository)
+        PaywallViewModel(store: store)
     }
+}
+
+// MARK: ─────────────────────────────────────────────────────────────
+// MARK: External links — hosted legal pages + support contact
+// MARK: ─────────────────────────────────────────────────────────────
+
+/// Hosted resources surfaced in the paywall and Settings. These pages MUST be
+/// live and reachable before App Store submission (Guideline 3.1.2 / 5.1.1).
+/// Legal pages are hosted free on GitHub Pages (public repo `inspirecreativity-legal`).
+/// Swap these for a custom domain later if you register one.
+enum AppLinks {
+    static let privacyURL = URL(string: "https://faisalarip.github.io/inspirecreativity-legal/privacy/")!
+    static let termsURL   = URL(string: "https://faisalarip.github.io/inspirecreativity-legal/terms/")!
+    static let supportEmail = "support@inspirecreativity.app"
+    static let supportURL = URL(string: "mailto:support@inspirecreativity.app")!
 }
 
 // MARK: ─────────────────────────────────────────────────────────────
@@ -444,6 +464,11 @@ enum AuthService {
     private static var baseURL: String { SupabaseConfig.url }
     private static var anonKey: String { SupabaseConfig.anonKey }
 
+    /// Injectable URLSession. Production uses `.shared`; unit tests swap in a
+    /// session backed by a `URLProtocol` mock so HTTP can be stubbed
+    /// deterministically (see `MockURLProtocol` in the test target).
+    static var session: URLSession = .shared
+
     /// Shared decoder. Supabase returns ISO-8601 timestamps with fractional
     /// seconds (e.g. `2024-01-15T10:30:00.123456Z`), so we use a custom
     /// strategy that accepts both fractional and second-precision forms.
@@ -500,7 +525,7 @@ enum AuthService {
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await URLSession.shared.data(for: request)
+            (data, response) = try await session.data(for: request)
         } catch {
             throw AuthError.network(error.localizedDescription)
         }
@@ -539,11 +564,30 @@ enum AuthService {
     /// with a usable session. If email-confirm is **on**, Supabase returns
     /// 200 with `confirmation_sent_at` but no token — we surface that as
     /// `.confirmationRequired` so the UI can route to "check your email".
-    static func signUp(email: String, password: String) async throws -> SignUpResult {
+    static func signUp(
+        email: String,
+        password: String,
+        firstName: String = "",
+        lastName: String = ""
+    ) async throws -> SignUpResult {
+        var body: [String: Any] = ["email": email, "password": password]
+        // Pass first/last name as Supabase user metadata (`data` → user_metadata).
+        let trimmedFirst = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedLast = lastName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedFirst.isEmpty || !trimmedLast.isEmpty {
+            let fullName = [trimmedFirst, trimmedLast]
+                .filter { !$0.isEmpty }
+                .joined(separator: " ")
+            body["data"] = [
+                "first_name": trimmedFirst,
+                "last_name": trimmedLast,
+                "full_name": fullName
+            ]
+        }
         let request = try makeRequest(
             path: "/signup",
             method: "POST",
-            body: ["email": email, "password": password]
+            body: body
         )
         let (data, _) = try await send(request)
 
@@ -607,6 +651,16 @@ enum AuthService {
         _ = try await send(request)
     }
 
+    /// Sends a password-reset email via Supabase's `/auth/v1/recover`.
+    static func requestPasswordReset(email: String) async throws {
+        let request = try makeRequest(
+            path: "/recover",
+            method: "POST",
+            body: ["email": email]
+        )
+        _ = try await send(request)
+    }
+
     /// Asks Supabase to resend the signup confirmation email.
     static func resendConfirmation(email: String) async throws {
         let request = try makeRequest(
@@ -627,6 +681,23 @@ enum AuthService {
         )
         let (data, _) = try await send(request)
         return try decoder.decode(AuthUser.self, from: data)
+    }
+
+    /// Permanently deletes the signed-in user's account. Calls the
+    /// `delete-account` Supabase Edge Function, which verifies the caller's JWT
+    /// and uses the service role to delete the gotrue user + associated data.
+    /// Required by App Store Guideline 5.1.1(v) for apps that create accounts.
+    static func deleteAccount(accessToken: String) async throws {
+        guard let url = URL(string: "\(baseURL)/functions/v1/delete-account") else {
+            throw AuthError.unknown("Bad delete-account URL")
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue(anonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 20
+        _ = try await send(request)
     }
 }
 
@@ -684,12 +755,17 @@ final class AuthStore: ObservableObject {
 
     /// Signs the user up. On `.session(_)` we persist and clear the gate; on
     /// `.confirmationRequired` we stash the email for the verify screen.
-    func signUp(email: String, password: String) async {
+    func signUp(email: String, password: String, firstName: String = "", lastName: String = "") async {
         isLoading = true
         lastError = nil
         defer { isLoading = false }
         do {
-            let result = try await AuthService.signUp(email: email, password: password)
+            let result = try await AuthService.signUp(
+                email: email,
+                password: password,
+                firstName: firstName,
+                lastName: lastName
+            )
             switch result {
             case .session(let session):
                 persist(session)
@@ -737,6 +813,27 @@ final class AuthStore: ObservableObject {
         clearSession()
     }
 
+    /// Permanently deletes the user's account, then clears local state.
+    /// Returns true on success. Surfaces failures via `lastError`.
+    @discardableResult
+    func deleteAccount() async -> Bool {
+        guard let session else { return false }
+        isLoading = true
+        lastError = nil
+        defer { isLoading = false }
+        do {
+            try await AuthService.deleteAccount(accessToken: session.accessToken)
+            clearSession()
+            return true
+        } catch let error as AuthError {
+            lastError = error
+            return false
+        } catch {
+            lastError = .unknown(error.localizedDescription)
+            return false
+        }
+    }
+
     /// Re-sends the verification email for the pending email.
     func resendVerification() async {
         guard let email = pendingVerificationEmail else { return }
@@ -749,6 +846,25 @@ final class AuthStore: ObservableObject {
             lastError = error
         } catch {
             lastError = .unknown(error.localizedDescription)
+        }
+    }
+
+    /// Sends a password-reset email. Surfaces failures via `lastError`.
+    /// Returns true when the request was accepted.
+    @discardableResult
+    func sendPasswordReset(email: String) async -> Bool {
+        isLoading = true
+        lastError = nil
+        defer { isLoading = false }
+        do {
+            try await AuthService.requestPasswordReset(email: email)
+            return true
+        } catch let error as AuthError {
+            lastError = error
+            return false
+        } catch {
+            lastError = .unknown(error.localizedDescription)
+            return false
         }
     }
 

@@ -26,14 +26,12 @@ struct PaywallView: View {
             }
         }
         .background(Theme.Palette.background.ignoresSafeArea())
+        .onChange(of: viewModel.didComplete) { _, done in
+            if done { router.pop() }
+        }
     }
 
     private var heroBand: some View {
-        // The hero stack itself respects safe area, so the close + Restore
-        // row lands below the status bar and stays tappable. Only the
-        // visual background layers (gradient, grid, fade) opt into
-        // .ignoresSafeArea(edges: .top) so they still bleed under the
-        // status bar for the edge-to-edge look.
         ZStack(alignment: .top) {
             LinearGradient(
                 colors: [
@@ -71,14 +69,17 @@ struct PaywallView: View {
             .frame(height: 260)
             .ignoresSafeArea(edges: .top)
 
-            // Top nav — respects safe area so taps don't fall under the
-            // status bar's reserved hit region.
             HStack {
                 IconButton("xmark") { router.pop() }
                 Spacer()
-                Button("Restore") {}
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.7))
+                Button {
+                    Task { await viewModel.restore() }
+                } label: {
+                    Text("Restore")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+                .disabled(viewModel.isPurchasing)
             }
             .padding(.horizontal, 12)
             .padding(.top, 8)
@@ -146,77 +147,145 @@ struct PaywallView: View {
         .padding(.top, 26)
     }
 
+    @ViewBuilder
     private var planPicker: some View {
-        VStack(spacing: 10) {
-            ForEach(PaywallViewModel.Plan.allCases) { plan in
-                PlanRow(plan: plan, isActive: viewModel.plan == plan) {
-                    withAnimation(.easeOut(duration: 0.18)) {
-                        viewModel.plan = plan
+        if viewModel.isLoadingProducts {
+            ProgressView()
+                .progressViewStyle(.circular)
+                .tint(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 30)
+        } else if viewModel.productsUnavailable {
+            VStack(spacing: 6) {
+                Image(systemName: "wifi.exclamationmark")
+                    .font(.system(size: 24))
+                    .foregroundStyle(.white.opacity(0.5))
+                Text("Pricing unavailable")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+                Text("Check your connection and try again.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.55))
+                Button("Retry") { Task { await viewModel.store.loadProducts() } }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.accent)
+                    .padding(.top, 4)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 30)
+        } else {
+            VStack(spacing: 10) {
+                let plans = PaywallViewModel.Plan.allCases
+                ForEach(plans) { plan in
+                    PlanRow(
+                        title: plan.title,
+                        subtitle: viewModel.subtitle(for: plan),
+                        price: viewModel.displayPrice(for: plan),
+                        badge: plan.badge,
+                        isActive: viewModel.plan == plan,
+                        showsSelector: plans.count > 1
+                    ) {
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            viewModel.plan = plan
+                        }
                     }
                 }
             }
+            .padding(.horizontal, 24)
+            .padding(.top, 26)
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 26)
     }
 
+    @ViewBuilder
     private var cta: some View {
-        Button {
-            viewModel.subscribe()
-            router.pop()
-        } label: {
-            Text("Start 7-day free trial")
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(.white)
+        VStack(spacing: 10) {
+            if let message = viewModel.errorMessage {
+                Text(message)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color(red: 1.0, green: 0.5, blue: 0.5))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+
+            Button {
+                Task { await viewModel.purchaseSelected() }
+            } label: {
+                HStack(spacing: 8) {
+                    if viewModel.isPurchasing {
+                        ProgressView().progressViewStyle(.circular).tint(.white)
+                    }
+                    Text(viewModel.isPurchasing ? "Processing…" : viewModel.ctaTitle)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
+                }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 15)
                 .background(Theme.Palette.accent, in: RoundedRectangle(cornerRadius: 14))
                 .shadow(color: Theme.Palette.accent.opacity(0.35), radius: 16, y: 6)
+            }
+            .buttonStyle(.plain)
+            .disabled(viewModel.isPurchasing || viewModel.productsUnavailable || viewModel.product(for: viewModel.plan) == nil)
+            .opacity((viewModel.productsUnavailable || viewModel.product(for: viewModel.plan) == nil) ? 0.5 : 1)
         }
-        .buttonStyle(.plain)
         .padding(.horizontal, 24)
         .padding(.top, 16)
     }
 
     private var disclaimer: some View {
-        Text("Cancel anytime. Subscription auto-renews unless turned off 24h before the trial ends. Terms · Privacy.")
-            .font(.system(size: 11))
-            .foregroundStyle(.white.opacity(0.4))
-            .multilineTextAlignment(.center)
-            .lineSpacing(3)
-            .padding(.horizontal, 28)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity)
+        VStack(spacing: 8) {
+            Text(viewModel.disclosure)
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.4))
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+
+            HStack(spacing: 6) {
+                Link("Terms of Use", destination: AppLinks.termsURL)
+                Text("·").foregroundStyle(.white.opacity(0.3))
+                Link("Privacy Policy", destination: AppLinks.privacyURL)
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .tint(.white.opacity(0.6))
+        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity)
     }
 }
 
 private struct PlanRow: View {
-    let plan: PaywallViewModel.Plan
+    let title: String
+    let subtitle: String
+    let price: String
+    let badge: String?
     let isActive: Bool
+    var showsSelector: Bool = true
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .strokeBorder(
-                            isActive ? Theme.Palette.accent : Color.white.opacity(0.25),
-                            lineWidth: 2
-                        )
-                        .frame(width: 20, height: 20)
-                    if isActive {
+                if showsSelector {
+                    ZStack {
                         Circle()
-                            .fill(Theme.Palette.accent)
-                            .frame(width: 9, height: 9)
+                            .strokeBorder(
+                                isActive ? Theme.Palette.accent : Color.white.opacity(0.25),
+                                lineWidth: 2
+                            )
+                            .frame(width: 20, height: 20)
+                        if isActive {
+                            Circle()
+                                .fill(Theme.Palette.accent)
+                                .frame(width: 9, height: 9)
+                        }
                     }
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 8) {
-                        Text(plan.title)
+                        Text(title)
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(.white)
-                        if let badge = plan.badge {
+                        if let badge {
                             Text(badge.uppercased())
                                 .font(.system(size: 9, weight: .heavy))
                                 .tracking(0.4)
@@ -225,12 +294,12 @@ private struct PlanRow: View {
                                 .background(Theme.Palette.accent, in: RoundedRectangle(cornerRadius: 4))
                         }
                     }
-                    Text(plan.subtitle)
+                    Text(subtitle)
                         .font(.system(size: 12))
                         .foregroundStyle(.white.opacity(0.55))
                 }
                 Spacer()
-                Text(plan.price)
+                Text(price)
                     .font(Theme.Typo.mono(16, weight: .bold))
                     .foregroundStyle(.white)
             }

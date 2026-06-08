@@ -62,6 +62,7 @@ struct DetailView: View {
                         state: $sheet,
                         dragOffset: $dragOffset,
                         height: sheetHeight,
+                        containerHeight: h,
                         fileName: filename + ".swift",
                         source: viewModel.item.swiftCode,
                         locked: !viewModel.isOwned,
@@ -75,7 +76,14 @@ struct DetailView: View {
                 IconButton("chevron.left") { router.pop() }
                 Spacer()
                 HStack(spacing: 8) {
-                    IconButton("square.and.arrow.up") {}
+                    ShareLink(item: shareText) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 34, height: 34)
+                            .background(Color.white.opacity(0.08), in: Circle())
+                    }
+                    .accessibilityLabel("Share")
                     IconButton(viewModel.isFavorited ? "heart.fill" : "heart",
                                tint: viewModel.isFavorited ? Theme.Palette.accent : .white) {
                         viewModel.toggleFavorite()
@@ -86,6 +94,16 @@ struct DetailView: View {
             .padding(.top, 4)
         }
         .toolbar(.hidden, for: .navigationBar)
+    }
+
+    /// Share payload. Only includes the source code when the user actually
+    /// owns it, so sharing can't be used to bypass the paywall on Pro items.
+    private var shareText: String {
+        if viewModel.isOwned {
+            return "\(viewModel.item.name) — a SwiftUI animation from InspireCreativity\n\n\(viewModel.item.swiftCode)"
+        } else {
+            return "Check out \"\(viewModel.item.name)\" — a hand-crafted SwiftUI animation in InspireCreativity."
+        }
     }
 
     private var filename: String {
@@ -119,18 +137,18 @@ struct DetailView: View {
 
     private var statsBar: some View {
         HStack(spacing: 18) {
-            statCell(label: "RATING",
-                     value: String(format: "%.1f", viewModel.item.rating),
-                     subtitle: AnyView(RatingView(value: viewModel.item.rating, size: 9)))
-            Divider().frame(height: 38).background(Color.white.opacity(0.08))
-            statCell(label: "DOWNLOADS",
-                     value: "\(viewModel.item.downloads / 1000)k",
+            statCell(label: "CATEGORY",
+                     value: viewModel.item.category.displayName,
                      subtitle: nil)
             Divider().frame(height: 38).background(Color.white.opacity(0.08))
-            statCell(label: "PRICE",
-                     value: viewModel.item.priceLabel,
+            statCell(label: "LEVEL",
+                     value: viewModel.item.difficulty.rawValue.capitalized,
+                     subtitle: nil)
+            Divider().frame(height: 38).background(Color.white.opacity(0.08))
+            statCell(label: "ACCESS",
+                     value: viewModel.item.isPro ? "Pro" : "Free",
                      subtitle: nil,
-                     highlight: !viewModel.item.isFree)
+                     highlight: viewModel.item.isPro)
         }
         .padding(14)
         .background(Color.white.opacity(0.03), in: RoundedRectangle(cornerRadius: 12))
@@ -162,56 +180,38 @@ struct DetailView: View {
     @ViewBuilder
     private var ctaButton: some View {
         if viewModel.isOwned {
-            Button {} label: {
+            // No dead button — the code lives in the sheet below. Just a hint.
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Theme.Palette.success)
+                Text(viewModel.item.isFree
+                     ? "Free — drag up for the code"
+                     : "Unlocked — drag up for the code")
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.85))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
+        } else {
+            Button { router.push(.paywall) } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "tray.and.arrow.down.fill")
-                    Text(viewModel.item.isFree ? "Add to Library — Free" : "Owned")
+                    Image(systemName: "lock.fill")
+                    Text("Unlock everything with Pro")
                 }
                 .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color(red: 0x1A / 255, green: 0x0E / 255, blue: 0))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(Theme.Palette.accent, in: RoundedRectangle(cornerRadius: 14))
+                .background(
+                    LinearGradient(
+                        colors: [Theme.Palette.proGoldStart, Theme.Palette.proGoldEnd],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 14)
+                )
             }
             .buttonStyle(.plain)
-        } else {
-            VStack(spacing: 8) {
-                Button { viewModel.purchase() } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "lock.fill")
-                        Text("Unlock for $\(viewModel.item.price ?? 0, specifier: "%.2f")")
-                    }
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Color(red: 0x1A / 255, green: 0x0E / 255, blue: 0))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(
-                        LinearGradient(
-                            colors: [Theme.Palette.proGoldStart, Theme.Palette.proGoldEnd],
-                            startPoint: .topLeading, endPoint: .bottomTrailing
-                        ),
-                        in: RoundedRectangle(cornerRadius: 14)
-                    )
-                }
-                .buttonStyle(.plain)
-
-                Button { router.push(.paywall) } label: {
-                    HStack(spacing: 4) {
-                        Text("Or unlock everything with")
-                            .foregroundStyle(.white)
-                        Text("InspireCreativity Pro")
-                            .foregroundStyle(Theme.Palette.accent)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10))
-                            .foregroundStyle(.white)
-                    }
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
-                }
-                .buttonStyle(.plain)
-            }
         }
     }
 }

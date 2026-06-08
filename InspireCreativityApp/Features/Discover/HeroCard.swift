@@ -45,7 +45,7 @@ struct HeroCard: View {
                                 Avatar(item.author, size: 20)
                                 Text(item.author)
                                 Text("·").opacity(0.5)
-                                RatingView(value: item.rating, size: 10)
+                                Text(item.category.displayName)
                             }
                             .font(.system(size: 13))
                             .foregroundStyle(.white.opacity(0.8))

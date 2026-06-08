@@ -39,6 +39,8 @@ struct AnimationItem: Identifiable, Hashable {
     let swiftCode: String
 
     // MARK: - Computed
-    var isFree: Bool { price == nil }
-    var priceLabel: String { isFree ? "Free" : String(format: "$%.2f", price ?? 0) }
+    /// `isPro` is the single source of truth for access gating, so a card's
+    /// "Pro"/"Free" badge always matches what the user can actually open.
+    var isFree: Bool { !isPro }
+    var priceLabel: String { isFree ? "Free" : "Pro" }
 }

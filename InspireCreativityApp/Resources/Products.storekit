@@ -1,0 +1,35 @@
+{
+  "identifier" : "B6F0A2C1-0000-4E00-9000-INSPIRECREATE",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "14.99",
+      "familyShareable" : false,
+      "internalID" : "LIFETIME0001",
+      "localizations" : [
+        {
+          "description" : "Unlock the entire animation library forever with a single one-time purchase.",
+          "displayName" : "InspireCreativity Pro — Lifetime",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.faisalarip.InspireCreativityApp.pro.lifetime",
+      "referenceName" : "Pro Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "0000000000",
+    "_developerTeamID" : "0000000000",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 0,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

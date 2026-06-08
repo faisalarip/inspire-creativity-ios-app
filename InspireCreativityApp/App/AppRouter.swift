@@ -38,6 +38,7 @@ enum AppTab: String, CaseIterable, Hashable, Identifiable {
 enum AppRoute: Hashable {
     case detail(animationId: String)
     case paywall
+    case settings
 }
 
 /// Per-tab path storage + sheet presentation. Observable so views can bind.

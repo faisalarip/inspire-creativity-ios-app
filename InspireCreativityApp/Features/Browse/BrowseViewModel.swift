@@ -10,12 +10,12 @@ import Combine
 final class BrowseViewModel: ObservableObject {
 
     enum SortOrder: String, CaseIterable {
-        case popular = "Most popular"
-        case rating = "Highest rated"
+        case featured = "Featured"
+        case nameAsc = "A–Z"
     }
 
     @Published var selectedCategory: Category? = nil
-    @Published var sortOrder: SortOrder = .popular
+    @Published var sortOrder: SortOrder = .featured
     @Published var searchText: String = ""
 
     @Published private(set) var visibleItems: [AnimationItem] = []
@@ -66,14 +66,19 @@ final class BrowseViewModel: ObservableObject {
             }
         }
         switch sort {
-        case .popular:
-            visibleItems = items.sorted { $0.downloads > $1.downloads }
-        case .rating:
-            visibleItems = items.sorted { $0.rating > $1.rating }
+        case .featured:
+            // Curated order: featured first, then the repository's default
+            // ranking. (The ranking signal is internal and never shown as a
+            // user-facing metric.)
+            visibleItems = items.sorted {
+                ($0.isFeatured ? 1 : 0, $0.downloads) > ($1.isFeatured ? 1 : 0, $1.downloads)
+            }
+        case .nameAsc:
+            visibleItems = items.sorted { $0.name < $1.name }
         }
     }
 
     func toggleSort() {
-        sortOrder = sortOrder == .popular ? .rating : .popular
+        sortOrder = sortOrder == .featured ? .nameAsc : .featured
     }
 }

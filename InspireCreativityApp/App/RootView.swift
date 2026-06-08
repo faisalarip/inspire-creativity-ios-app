@@ -15,16 +15,18 @@ struct RootView: View {
     @StateObject private var router = AppRouter()
 
     var body: some View {
+        // Browsing the catalog never requires an account (Guideline 5.1.1).
+        // Sign-in is offered as an optional feature inside Settings; the
+        // verify-email interstitial still surfaces when a signup is pending.
         ZStack {
-            if authStore.isAuthenticated {
-                signedInShell
-                    .transition(.opacity)
-            } else {
+            signedInShell
+                .transition(.opacity)
+            if authStore.pendingVerificationEmail != nil {
                 AuthGateView()
                     .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: authStore.isAuthenticated)
+        .animation(.easeInOut(duration: 0.25), value: authStore.pendingVerificationEmail)
     }
 
     private var signedInShell: some View {
@@ -60,6 +62,9 @@ struct RootView: View {
                             .toolbar(.hidden, for: .navigationBar)
                     case .paywall:
                         PaywallView(viewModel: container.makePaywallViewModel())
+                            .toolbar(.hidden, for: .navigationBar)
+                    case .settings:
+                        SettingsView(store: container.store)
                             .toolbar(.hidden, for: .navigationBar)
                     }
                 }
@@ -141,6 +146,7 @@ private struct SignInView: View {
 
     @State private var email: String = ""
     @State private var password: String = ""
+    @State private var resetNote: String?
 
     var body: some View {
         ScrollView {
@@ -159,7 +165,22 @@ private struct SignInView: View {
                 }
                 .padding(.top, 32)
 
-                if let message = authStore.lastError?.errorDescription {
+                if let resetNote {
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(Theme.Palette.success)
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(resetNote)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.9))
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, 10).padding(.horizontal, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Theme.Palette.success.opacity(0.10))
+                    )
+                } else if let message = authStore.lastError?.errorDescription {
                     AuthErrorBanner(message: message)
                 }
 
@@ -179,13 +200,20 @@ private struct SignInView: View {
                     keyboard: .default
                 )
 
-                // Forgot password (TODO — out of scope).
                 HStack {
                     Spacer()
-                    Button("Forgot password?") {}
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.Palette.accent.opacity(0.5))
-                        .disabled(true)
+                    Button("Forgot password?") {
+                        Task {
+                            resetNote = nil
+                            let ok = await authStore.sendPasswordReset(
+                                email: email.trimmingCharacters(in: .whitespacesAndNewlines)
+                            )
+                            if ok { resetNote = "Password reset link sent. Check your email." }
+                        }
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.accent.opacity(canResetPassword ? 1 : 0.4))
+                    .disabled(!canResetPassword)
                 }
 
                 AuthPrimaryButton(
@@ -221,6 +249,10 @@ private struct SignInView: View {
         AuthValidation.isValidEmail(email) && password.count >= 6 && !authStore.isLoading
     }
 
+    private var canResetPassword: Bool {
+        AuthValidation.isValidEmail(email) && !authStore.isLoading
+    }
+
     private func submit() async {
         await authStore.signIn(
             email: email.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -235,6 +267,8 @@ private struct RegisterView: View {
     @EnvironmentObject private var authStore: AuthStore
     let onSignInTap: () -> Void
 
+    @State private var firstName: String = ""
+    @State private var lastName: String = ""
     @State private var email: String = ""
     @State private var password: String = ""
     @State private var confirmPassword: String = ""
@@ -261,6 +295,25 @@ private struct RegisterView: View {
                     AuthErrorBanner(message: local)
                 } else if let message = authStore.lastError?.errorDescription {
                     AuthErrorBanner(message: message)
+                }
+
+                HStack(spacing: 12) {
+                    AuthField(
+                        placeholder: "First name",
+                        text: $firstName,
+                        isSecure: false,
+                        contentType: .givenName,
+                        keyboard: .default,
+                        autocapitalization: .words
+                    )
+                    AuthField(
+                        placeholder: "Last name",
+                        text: $lastName,
+                        isSecure: false,
+                        contentType: .familyName,
+                        keyboard: .default,
+                        autocapitalization: .words
+                    )
                 }
 
                 AuthField(
@@ -314,7 +367,9 @@ private struct RegisterView: View {
     }
 
     private var canSubmit: Bool {
-        AuthValidation.isValidEmail(email)
+        !firstName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !lastName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && AuthValidation.isValidEmail(email)
             && password.count >= 6
             && password == confirmPassword
             && !authStore.isLoading
@@ -322,6 +377,12 @@ private struct RegisterView: View {
 
     private func submit() async {
         localError = nil
+        let trimmedFirst = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedLast = lastName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedFirst.isEmpty, !trimmedLast.isEmpty else {
+            localError = "Enter your first and last name."
+            return
+        }
         guard AuthValidation.isValidEmail(email) else {
             localError = "Enter a valid email address."
             return
@@ -336,7 +397,9 @@ private struct RegisterView: View {
         }
         await authStore.signUp(
             email: email.trimmingCharacters(in: .whitespacesAndNewlines),
-            password: password
+            password: password,
+            firstName: trimmedFirst,
+            lastName: trimmedLast
         )
     }
 }
@@ -463,6 +526,7 @@ private struct AuthField: View {
     let isSecure: Bool
     let contentType: UITextContentType?
     let keyboard: UIKeyboardType
+    var autocapitalization: TextInputAutocapitalization = .never
 
     var body: some View {
         Group {
@@ -471,7 +535,7 @@ private struct AuthField: View {
             } else {
                 TextField("", text: $text, prompt: prompt)
                     .keyboardType(keyboard)
-                    .textInputAutocapitalization(.never)
+                    .textInputAutocapitalization(autocapitalization)
                     .autocorrectionDisabled(true)
             }
         }

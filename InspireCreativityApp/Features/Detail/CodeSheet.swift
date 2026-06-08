@@ -13,6 +13,9 @@ struct CodeSheet: View {
     @Binding var state: DetailView.SheetState
     @Binding var dragOffset: CGFloat
     let height: CGFloat
+    /// Total height of the detail container, used for snap-point math so it's
+    /// correct on iPad / split-screen (not the full physical screen).
+    let containerHeight: CGFloat
     let fileName: String
     let source: String
     let locked: Bool
@@ -187,8 +190,8 @@ struct CodeSheet: View {
         let candidates: [DetailView.SheetState] = [.peek, .half, .full]
         // Pick nearest snap point based on current height
         let best = candidates.min(by: { a, b in
-            abs(a.height(in: UIScreen.main.bounds.height) - height) <
-            abs(b.height(in: UIScreen.main.bounds.height) - height)
+            abs(a.height(in: containerHeight) - height) <
+            abs(b.height(in: containerHeight) - height)
         }) ?? .peek
         withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
             state = best

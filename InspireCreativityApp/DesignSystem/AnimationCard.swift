@@ -52,11 +52,12 @@ struct AnimationCard: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
                     HStack(spacing: 6) {
-                        Text(item.author)
+                        Text(item.category.displayName)
                             .lineLimit(1)
                         Text("·")
-                        Text(item.priceLabel)
+                        Text(item.isPro ? "Pro" : "Free")
                             .font(Theme.Typo.mono(12))
+                            .foregroundStyle(item.isPro ? Theme.Palette.accent.opacity(0.9) : .white.opacity(0.5))
                     }
                     .font(.system(size: 12))
                     .foregroundStyle(.white.opacity(0.5))
@@ -67,7 +68,7 @@ struct AnimationCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(item.name), \(item.category.displayName), \(item.priceLabel)")
+        .accessibilityLabel("\(item.name), \(item.category.displayName), \(item.isPro ? "Pro" : "Free")")
     }
 
     private var iosBadge: some View {

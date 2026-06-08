@@ -103,13 +103,23 @@ struct AuthGateView: View {
 
             // Verify screen wins as long as a pending email exists.
             if let email = authStore.pendingVerificationEmail {
-                VerifyEmailView(email: email) {
-                    // "I've verified — Sign in" → drop pending, route to
-                    // sign in with the email pre-filled.
-                    prefilledEmail = email
-                    authStore.dismissPendingVerification()
-                    screen = .signIn
-                }
+                VerifyEmailView(
+                    email: email,
+                    onBack: {
+                        // Back → leave the verify interstitial and return to the
+                        // auth form the user came from (their field state is gone,
+                        // but the email is pre-filled for convenience).
+                        prefilledEmail = email
+                        authStore.dismissPendingVerification()
+                    },
+                    onReturnToSignIn: {
+                        // "I've verified — Sign in" → drop pending, route to
+                        // sign in with the email pre-filled.
+                        prefilledEmail = email
+                        authStore.dismissPendingVerification()
+                        screen = .signIn
+                    }
+                )
                 .transition(.opacity)
             } else {
                 switch screen {
@@ -410,6 +420,7 @@ private struct VerifyEmailView: View {
 
     @EnvironmentObject private var authStore: AuthStore
     let email: String
+    var onBack: () -> Void
     let onReturnToSignIn: () -> Void
 
     @State private var resendConfirmation: String?
@@ -491,6 +502,11 @@ private struct VerifyEmailView: View {
                 Spacer().frame(height: 60)
             }
             .padding(.horizontal, Theme.Spacing.xxl)
+        }
+        .overlay(alignment: .topLeading) {
+            IconButton("chevron.left", action: onBack)
+                .padding(.horizontal, Theme.Spacing.xxl)
+                .padding(.top, 8)
         }
     }
 

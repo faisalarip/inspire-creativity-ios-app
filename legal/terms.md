@@ -67,4 +67,4 @@ Material changes are reflected by the "Last updated" date above.
 
 ## 8. Contact
 
-Questions: **support@inspirecreativity.app**
+Questions: **faisalarip10@gmail.com**

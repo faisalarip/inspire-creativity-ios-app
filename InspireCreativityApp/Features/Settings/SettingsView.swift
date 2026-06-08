@@ -90,7 +90,7 @@ struct SettingsView: View {
     // MARK: - Purchases
 
     private var purchasesSection: some View {
-        SettingsCard(title: "Subscription") {
+        SettingsCard(title: "Purchases") {
             HStack(spacing: 12) {
                 Image(systemName: store.isPro ? "checkmark.seal.fill" : "lock.fill")
                     .foregroundStyle(store.isPro ? Theme.Palette.success : .white.opacity(0.6))

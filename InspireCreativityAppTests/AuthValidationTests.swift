@@ -37,3 +37,20 @@ final class AuthValidationTests: XCTestCase {
         XCTAssertTrue(AuthValidation.isValidEmail("  user@example.com \n"))
     }
 }
+
+/// Locks in the free/Pro split so a future seed edit can't silently give the
+/// catalog away (the bug where sub-$10 Pro backgrounds leaked as free).
+final class CatalogGatingTests: XCTestCase {
+
+    func testFreeTasterIsExactlyTwenty() {
+        let free = AnimationCatalogSeed.items.filter(\.isFree).count
+        XCTAssertEqual(free, 20, "Free taster drifted from 20 — check isPro flags in the seed/aurora descriptors")
+    }
+
+    func testIsFreeIsTheInverseOfIsPro() {
+        for item in AnimationCatalogSeed.items {
+            XCTAssertEqual(item.isFree, !item.isPro,
+                           "\(item.id): isFree must mirror !isPro so the badge and access gate never disagree")
+        }
+    }
+}

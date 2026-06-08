@@ -52,11 +52,17 @@ final class LibraryViewModel: ObservableObject {
             self.isPro = isPro
             self.favorites = self.repository.all().filter { favs.contains($0.id) }
             // "Owned" = everything the user can actually open: free content,
-            // plus the whole library once Pro.
-            self.owned = self.repository.all().filter { item in
-                item.isFree || isPro
-            }
-            // Recent — last 3 from owned.
+            // plus the whole library once Pro. Aurora background assets lead the
+            // list (they're the visual showcase), then by popularity.
+            self.owned = self.repository.all()
+                .filter { $0.isFree || isPro }
+                .sorted { lhs, rhs in
+                    let lhsBackground = lhs.category == .backgrounds ? 0 : 1
+                    let rhsBackground = rhs.category == .backgrounds ? 0 : 1
+                    if lhsBackground != rhsBackground { return lhsBackground < rhsBackground }
+                    return lhs.downloads > rhs.downloads
+                }
+            // Recent — first 3 of owned (a lightweight stand-in for recency).
             self.recent = Array(self.owned.prefix(3))
         }
         .store(in: &cancellables)

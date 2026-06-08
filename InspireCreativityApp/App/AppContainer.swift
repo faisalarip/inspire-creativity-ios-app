@@ -130,8 +130,8 @@ final class AppContainer: ObservableObject {
 enum AppLinks {
     static let privacyURL = URL(string: "https://faisalarip.github.io/inspirecreativity-legal/privacy/")!
     static let termsURL   = URL(string: "https://faisalarip.github.io/inspirecreativity-legal/terms/")!
-    static let supportEmail = "support@inspirecreativity.app"
-    static let supportURL = URL(string: "mailto:support@inspirecreativity.app")!
+    static let supportEmail = "faisalarip10@gmail.com"
+    static let supportURL = URL(string: "mailto:faisalarip10@gmail.com")!
 }
 
 // MARK: ─────────────────────────────────────────────────────────────

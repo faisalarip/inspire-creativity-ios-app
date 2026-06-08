@@ -64,4 +64,4 @@ updated" date above.
 
 ## Contact
 
-Questions or requests: **support@inspirecreativity.app**
+Questions or requests: **faisalarip10@gmail.com**

@@ -110,6 +110,14 @@ struct AuthGateView: View {
     @State private var screen: Screen = .signIn
     @State private var prefilledEmail: String = ""
 
+    // Register-form fields live here (not in RegisterView) so they survive the
+    // register → verify-email → back round-trip without being cleared.
+    @State private var regFirstName = ""
+    @State private var regLastName = ""
+    @State private var regEmail = ""
+    @State private var regPassword = ""
+    @State private var regConfirmPassword = ""
+
     var body: some View {
         ZStack {
             Theme.Palette.background.ignoresSafeArea()
@@ -145,11 +153,18 @@ struct AuthGateView: View {
                     }
                     .transition(.opacity)
                 case .register:
-                    RegisterView {
-                        // "Already have an account? Sign in" link.
-                        authStore.clearError()
-                        screen = .signIn
-                    }
+                    RegisterView(
+                        firstName: $regFirstName,
+                        lastName: $regLastName,
+                        email: $regEmail,
+                        password: $regPassword,
+                        confirmPassword: $regConfirmPassword,
+                        onSignInTap: {
+                            // "Already have an account? Sign in" link.
+                            authStore.clearError()
+                            screen = .signIn
+                        }
+                    )
                     .transition(.opacity)
                 }
             }
@@ -288,13 +303,13 @@ private struct SignInView: View {
 private struct RegisterView: View {
 
     @EnvironmentObject private var authStore: AuthStore
+    @Binding var firstName: String
+    @Binding var lastName: String
+    @Binding var email: String
+    @Binding var password: String
+    @Binding var confirmPassword: String
     let onSignInTap: () -> Void
 
-    @State private var firstName: String = ""
-    @State private var lastName: String = ""
-    @State private var email: String = ""
-    @State private var password: String = ""
-    @State private var confirmPassword: String = ""
     @State private var localError: String?
 
     var body: some View {

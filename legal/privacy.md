@@ -64,4 +64,4 @@ updated" date above.
 
 ## Contact
 
-Questions or requests: **faisalarip10@gmail.com**
+Questions or requests: **[faisalarip10@gmail.com](mailto:faisalarip10@gmail.com)**

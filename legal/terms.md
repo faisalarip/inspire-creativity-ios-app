@@ -67,4 +67,4 @@ Material changes are reflected by the "Last updated" date above.
 
 ## 8. Contact
 
-Questions: **faisalarip10@gmail.com**
+Questions: **[faisalarip10@gmail.com](mailto:faisalarip10@gmail.com)**

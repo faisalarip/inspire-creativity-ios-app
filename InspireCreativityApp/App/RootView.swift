@@ -12,6 +12,7 @@ struct RootView: View {
 
     @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var authStore: AuthStore
+    @EnvironmentObject private var store: StoreManager
     @StateObject private var router = AppRouter()
 
     var body: some View {
@@ -30,9 +31,15 @@ struct RootView: View {
                     .transition(.opacity)
                     .zIndex(2)
             }
+            if store.justPurchased {
+                PurchaseCongratsView { store.justPurchased = false }
+                    .transition(.opacity)
+                    .zIndex(3)
+            }
         }
         .animation(.easeInOut(duration: 0.25), value: authStore.pendingVerificationEmail)
         .animation(.easeInOut(duration: 0.3), value: authStore.justSignedIn)
+        .animation(.easeInOut(duration: 0.3), value: store.justPurchased)
     }
 
     private var signedInShell: some View {
@@ -751,6 +758,96 @@ private struct CongratsView: View {
 
             Button(action: onDismiss) {
                 Text("Start exploring")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+                    .background(Theme.Palette.accent, in: RoundedRectangle(cornerRadius: 14))
+                    .shadow(color: Theme.Palette.accent.opacity(0.35), radius: 16, y: 6)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 40)
+        }
+        .padding(.top, 22)
+    }
+}
+
+/// Celebratory overlay shown right after a successful Pro purchase.
+private struct PurchaseCongratsView: View {
+
+    let onDismiss: () -> Void
+
+    /// A spread of Pro animations to flaunt what just got unlocked.
+    private let showcaseIDs = ["au-galaxy", "hologram-card", "au-mirage",
+                               "liquid-chrome", "au-supernova", "au-oilslick"]
+
+    var body: some View {
+        ZStack {
+            Theme.Palette.background.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                heroGrid
+                content
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private var heroGrid: some View {
+        ZStack(alignment: .bottom) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3),
+                      spacing: 6) {
+                ForEach(showcaseIDs, id: \.self) { id in
+                    ZStack {
+                        Color.black
+                        AnimationPreviewRegistry.view(for: id)
+                    }
+                    .frame(height: 96)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+            }
+            .padding(10)
+
+            LinearGradient(colors: [.clear, Theme.Palette.background],
+                           startPoint: .center, endPoint: .bottom)
+                .allowsHitTesting(false)
+        }
+        .frame(height: 230)
+        .padding(.top, 56)
+    }
+
+    private var content: some View {
+        VStack(spacing: 14) {
+            HStack(spacing: 5) {
+                Image(systemName: "checkmark.seal.fill").font(.system(size: 11))
+                Text("INSPIRECREATIVITY PRO")
+                    .font(.system(size: 11, weight: .heavy)).tracking(0.5)
+            }
+            .foregroundStyle(Color(red: 0x1A / 255, green: 0x0E / 255, blue: 0))
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .background(
+                LinearGradient(colors: [Theme.Palette.proGoldStart, Theme.Palette.proGoldEnd],
+                               startPoint: .topLeading, endPoint: .bottomTrailing),
+                in: Capsule()
+            )
+
+            Text("You're Pro! 🎉")
+                .font(.system(size: 30, weight: .heavy))
+                .foregroundStyle(.white)
+
+            Text("You just unlocked the full library — all 100+ animations are yours forever. Tap any one to copy its production-ready SwiftUI straight into Xcode.")
+                .font(.system(size: 15))
+                .foregroundStyle(.white.opacity(0.65))
+                .multilineTextAlignment(.center)
+                .lineSpacing(2)
+                .padding(.horizontal, 28)
+                .padding(.top, 2)
+
+            Spacer()
+
+            Button(action: onDismiss) {
+                Text("Start creating")
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)

@@ -16,6 +16,7 @@ struct InspireCreativityApp: App {
             RootView()
                 .environmentObject(container)
                 .environmentObject(container.authStore)
+                .environmentObject(container.store)
                 .tint(Theme.Palette.accent)
                 .preferredColorScheme(.dark)
         }

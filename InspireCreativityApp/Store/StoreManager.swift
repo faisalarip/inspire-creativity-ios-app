@@ -45,6 +45,9 @@ final class StoreManager: ObservableObject, PurchaseRepositoryProtocol {
     @Published private(set) var isPro: Bool = false
     @Published private(set) var isLoadingProducts: Bool = false
     @Published private(set) var productsFailedToLoad: Bool = false
+    /// Set true right after a fresh purchase completes (not on restore), so the
+    /// UI can show a one-time "you're Pro" celebration. The view resets it.
+    @Published var justPurchased: Bool = false
 
     // MARK: - PurchaseRepositoryProtocol
 
@@ -98,6 +101,7 @@ final class StoreManager: ObservableObject, PurchaseRepositoryProtocol {
             let transaction = try checkVerified(verification)
             await transaction.finish()
             await refreshEntitlements()
+            justPurchased = true
             return .success
         case .pending:
             return .pending

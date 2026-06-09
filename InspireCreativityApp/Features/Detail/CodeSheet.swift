@@ -69,19 +69,19 @@ struct CodeSheet: View {
         )
         .shadow(color: .black.opacity(0.5), radius: 30, y: -8)
         .gesture(
-            DragGesture()
+            DragGesture(minimumDistance: 4)
                 .onChanged { value in
                     dragOffset = -value.translation.height
                 }
-                .onEnded { _ in
-                    snap()
+                .onEnded { value in
+                    snap(translation: value.translation.height,
+                         velocity: value.predictedEndTranslation.height)
                 }
         )
         .onTapGesture {
-            if state == .peek {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
-                    state = .half
-                }
+            // Tap anywhere on the bar expands one step (easy alternative to dragging).
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
+                state = stepUp(from: state)
             }
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: state)
@@ -89,11 +89,14 @@ struct CodeSheet: View {
 
     private var handle: some View {
         Capsule()
-            .fill(Color.white.opacity(0.2))
-            .frame(width: 36, height: 4)
+            .fill(Color.white.opacity(0.35))
+            .frame(width: 44, height: 5)
             .padding(.top, 10)
-            .padding(.bottom, 8)
+            .padding(.bottom, 10)
             .frame(maxWidth: .infinity)
+            // Enlarge the touch target well beyond the thin pill so it's easy
+            // to grab and drag up.
+            .contentShape(Rectangle())
     }
 
     private var header: some View {
@@ -187,15 +190,33 @@ struct CodeSheet: View {
         .padding(.bottom, 24)
     }
 
-    private func snap() {
-        let candidates: [DetailView.SheetState] = [.peek, .half, .full]
-        // Pick nearest snap point based on current height
-        let best = candidates.min(by: { a, b in
-            abs(a.height(in: containerHeight) - height) <
-            abs(b.height(in: containerHeight) - height)
-        }) ?? .peek
-        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
-            state = best
+    private static let order: [DetailView.SheetState] = [.peek, .half, .full]
+
+    private func stepUp(from s: DetailView.SheetState) -> DetailView.SheetState {
+        let i = Self.order.firstIndex(of: s) ?? 0
+        return Self.order[min(i + 1, Self.order.count - 1)]
+    }
+
+    private func stepDown(from s: DetailView.SheetState) -> DetailView.SheetState {
+        let i = Self.order.firstIndex(of: s) ?? 0
+        return Self.order[max(i - 1, 0)]
+    }
+
+    /// Direction-aware snapping: any upward drag/flick expands one step, any
+    /// downward one collapses one step. Combining translation with the
+    /// velocity-projected end makes even a short swipe register reliably —
+    /// far easier than snapping to the nearest absolute height.
+    private func snap(translation: CGFloat, velocity: CGFloat) {
+        let threshold: CGFloat = 24
+        let intent = (translation + velocity) / 2   // negative = upward
+        var target = state
+        if intent < -threshold {
+            target = stepUp(from: state)
+        } else if intent > threshold {
+            target = stepDown(from: state)
+        }
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+            state = target
             dragOffset = 0
         }
     }

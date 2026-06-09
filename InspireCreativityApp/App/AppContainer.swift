@@ -8,6 +8,8 @@
 //
 
 import Foundation
+import AuthenticationServices
+import UIKit
 
 /// Composition root. One instance per app launch, kept alive by the App.
 @MainActor
@@ -616,6 +618,46 @@ enum AuthService {
         return .confirmationRequired
     }
 
+    /// Exchanges a native Sign in with Apple identity token for a Supabase
+    /// session via the `id_token` grant. Mirrors `signIn()`'s decode path.
+    /// `nonce` is the *raw* (unhashed) nonce we generated client-side; Supabase
+    /// verifies it against the SHA-256 hash embedded in the Apple identity token.
+    static func signInWithApple(idToken: String, nonce: String) async throws -> AuthSession {
+        let request = try makeRequest(
+            path: "/token?grant_type=id_token",
+            method: "POST",
+            body: ["provider": "apple", "id_token": idToken, "nonce": nonce]
+        )
+        let (data, _) = try await send(request)
+        let token = try decoder.decode(TokenEnvelope.self, from: data)
+        guard let access = token.accessToken,
+              let refresh = token.refreshToken,
+              let user = token.user else {
+            throw AuthError.unknown("Malformed token response")
+        }
+        let expiresAt = Date().addingTimeInterval(token.expiresIn ?? 3600)
+        return AuthSession(
+            accessToken: access,
+            refreshToken: refresh,
+            expiresAt: expiresAt,
+            user: user
+        )
+    }
+
+    /// Fetches the current user with an access token obtained out-of-band (e.g.
+    /// from the OAuth callback fragment) and assembles an `AuthSession`. Used by
+    /// the Google web-OAuth flow, where tokens arrive in a redirect URL fragment
+    /// rather than a token-endpoint JSON body.
+    static func session(accessToken: String, refreshToken: String, expiresIn: Double) async throws -> AuthSession {
+        let user = try await currentUser(accessToken: accessToken)
+        return AuthSession(
+            accessToken: accessToken,
+            refreshToken: refreshToken,
+            expiresAt: Date().addingTimeInterval(expiresIn),
+            user: user
+        )
+    }
+
     /// Signs an existing user in. Throws `.emailNotConfirmed` when Supabase
     /// returns the corresponding 400, `.invalidCredentials` otherwise.
     static func signIn(email: String, password: String) async throws -> AuthSession {
@@ -808,6 +850,130 @@ final class AuthStore: ObservableObject {
         }
     }
 
+    /// Exchanges a native Sign in with Apple identity token for a Supabase
+    /// session and persists it. `nonce` is the raw nonce generated for the
+    /// authorization request.
+    func signInWithApple(idToken: String, nonce: String) async {
+        isLoading = true
+        lastError = nil
+        defer { isLoading = false }
+        do {
+            let session = try await AuthService.signInWithApple(idToken: idToken, nonce: nonce)
+            persist(session)
+            pendingVerificationEmail = nil
+            justSignedIn = true
+        } catch let error as AuthError {
+            lastError = error
+        } catch {
+            lastError = .unknown(error.localizedDescription)
+        }
+    }
+
+    /// Strong reference kept alive while a Google web-OAuth session is running;
+    /// `ASWebAuthenticationSession` is deallocated (and the flow cancelled) if
+    /// this is released.
+    private var webAuthSession: ASWebAuthenticationSession?
+    private let webAuthPresenter = WebAuthPresentationContextProvider()
+
+    /// Kicks off Google sign-in via Supabase's `/authorize` web OAuth flow in an
+    /// `ASWebAuthenticationSession`. Supabase returns the tokens in the callback
+    /// URL *fragment* (`#access_token=…&refresh_token=…&expires_in=…`). We parse
+    /// them, fetch the user, assemble a session, persist, and trigger the welcome.
+    func signInWithGoogle() {
+        let redirect = "inspirecreativity://auth-callback"
+        let encodedRedirect = redirect.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? redirect
+        let urlString = "\(SupabaseConfig.url)/auth/v1/authorize?provider=google&redirect_to=\(encodedRedirect)"
+        guard let url = URL(string: urlString) else {
+            lastError = .unknown("Bad Google sign-in URL")
+            return
+        }
+
+        lastError = nil
+        let session = ASWebAuthenticationSession(
+            url: url,
+            callbackURLScheme: "inspirecreativity"
+        ) { [weak self] callbackURL, error in
+            guard let self else { return }
+            Task { @MainActor in
+                self.handleGoogleCallback(callbackURL: callbackURL, error: error)
+            }
+        }
+        session.presentationContextProvider = webAuthPresenter
+        session.prefersEphemeralWebBrowserSession = false
+        webAuthSession = session
+        session.start()
+    }
+
+    /// Parses the OAuth callback URL fragment, exchanges it for a session, and
+    /// persists. Surfaces `error_description` and cancellation cleanly.
+    private func handleGoogleCallback(callbackURL: URL?, error: Error?) {
+        webAuthSession = nil
+
+        if let error {
+            // User cancelled — no error banner, just abort silently.
+            if let asError = error as? ASWebAuthenticationSessionError,
+               asError.code == .canceledLogin {
+                return
+            }
+            lastError = .network(error.localizedDescription)
+            return
+        }
+
+        guard let callbackURL else {
+            lastError = .unknown("No callback URL returned")
+            return
+        }
+
+        // Supabase puts tokens in the URL fragment, not the query.
+        let fragment = callbackURL.fragment ?? ""
+        let params = Self.parseURLEncodedPairs(fragment)
+
+        if let errorDescription = params["error_description"]?.removingPercentEncoding
+            ?? params["error_description"] {
+            lastError = .unknown(errorDescription.replacingOccurrences(of: "+", with: " "))
+            return
+        }
+
+        guard let accessToken = params["access_token"],
+              let refreshToken = params["refresh_token"] else {
+            lastError = .unknown("Sign-in did not return tokens. Please try again.")
+            return
+        }
+        let expiresIn = Double(params["expires_in"] ?? "") ?? 3600
+
+        isLoading = true
+        Task { @MainActor in
+            defer { isLoading = false }
+            do {
+                let session = try await AuthService.session(
+                    accessToken: accessToken,
+                    refreshToken: refreshToken,
+                    expiresIn: expiresIn
+                )
+                persist(session)
+                pendingVerificationEmail = nil
+                justSignedIn = true
+            } catch let authError as AuthError {
+                lastError = authError
+            } catch {
+                lastError = .unknown(error.localizedDescription)
+            }
+        }
+    }
+
+    /// Splits an `a=b&c=d` string into a dictionary (used for OAuth fragments).
+    private static func parseURLEncodedPairs(_ string: String) -> [String: String] {
+        var result: [String: String] = [:]
+        for pair in string.split(separator: "&") {
+            let parts = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard parts.count == 2 else { continue }
+            let key = String(parts[0])
+            let value = String(parts[1]).removingPercentEncoding ?? String(parts[1])
+            result[key] = value
+        }
+        return result
+    }
+
     /// Signs the user out. We always clear the local session — even if the
     /// network call fails — so the user is never stuck in a half-signed-out
     /// state.
@@ -905,5 +1071,20 @@ final class AuthStore: ObservableObject {
     private func clearSession() {
         session = nil
         defaults.removeObject(forKey: Self.defaultsKey)
+    }
+}
+
+/// Supplies the presentation anchor (a key window) for
+/// `ASWebAuthenticationSession`. The session needs a window to host its
+/// SFAuthenticationViewController; we hand it the app's active foreground
+/// window scene's key window.
+final class WebAuthPresentationContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+            ?? UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        let window = scene?.windows.first { $0.isKeyWindow } ?? scene?.windows.first
+        return window ?? ASPresentationAnchor()
     }
 }

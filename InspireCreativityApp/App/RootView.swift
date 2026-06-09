@@ -7,6 +7,8 @@
 //
 
 import SwiftUI
+import AuthenticationServices
+import CryptoKit
 
 struct RootView: View {
 
@@ -279,6 +281,9 @@ private struct SignInView: View {
                 }
                 .padding(.top, 4)
 
+                SocialAuthSection()
+                    .padding(.top, 8)
+
                 HStack(spacing: 6) {
                     Text("Don't have an account?")
                         .font(.system(size: 13))
@@ -399,6 +404,9 @@ private struct RegisterView: View {
                     Task { await submit() }
                 }
                 .padding(.top, 4)
+
+                SocialAuthSection()
+                    .padding(.top, 8)
 
                 HStack(spacing: 6) {
                     Text("Already have an account?")
@@ -860,6 +868,138 @@ private struct PurchaseCongratsView: View {
             .padding(.bottom, 40)
         }
         .padding(.top, 22)
+    }
+}
+
+// MARK: ─────────────────────────────────────────────────────────────
+// MARK: Social sign-in — Apple (native) + Google (web OAuth)
+// MARK: ─────────────────────────────────────────────────────────────
+
+/// "or" divider followed by the Apple + Google buttons. Reused at the bottom
+/// of both SignInView and RegisterView. The buttons match the primary CTA's
+/// sizing (54-ish pt tall) and the app's dark styling.
+private struct SocialAuthSection: View {
+
+    @EnvironmentObject private var authStore: AuthStore
+
+    /// Raw (unhashed) nonce for the in-flight Apple request. Supabase needs the
+    /// raw value to validate against the hash embedded in the identity token.
+    @State private var appleRawNonce: String?
+
+    var body: some View {
+        VStack(spacing: 14) {
+            // "or" divider
+            HStack(spacing: 12) {
+                Rectangle()
+                    .fill(Theme.Palette.hairline)
+                    .frame(height: 0.5)
+                Text("or")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.4))
+                Rectangle()
+                    .fill(Theme.Palette.hairline)
+                    .frame(height: 0.5)
+            }
+
+            // Sign in with Apple (native AuthenticationServices button).
+            SignInWithAppleButton(.signIn) { request in
+                let raw = AppleSignInNonce.randomNonce()
+                appleRawNonce = raw
+                request.requestedScopes = [.fullName, .email]
+                request.nonce = AppleSignInNonce.sha256(raw)
+            } onCompletion: { result in
+                handleAppleCompletion(result)
+            }
+            .signInWithAppleButtonStyle(.black)
+            .frame(height: 50)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(Theme.Palette.hairline, lineWidth: 0.5)
+            )
+            .disabled(authStore.isLoading)
+
+            // Continue with Google (custom button → web OAuth).
+            Button {
+                authStore.signInWithGoogle()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "globe")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Continue with Google")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color.white.opacity(0.07))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .strokeBorder(Theme.Palette.hairline, lineWidth: 0.5)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(authStore.isLoading)
+        }
+    }
+
+    private func handleAppleCompletion(_ result: Result<ASAuthorization, Error>) {
+        switch result {
+        case .success(let authorization):
+            guard
+                let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                let rawNonce = appleRawNonce,
+                let tokenData = credential.identityToken,
+                let idToken = String(data: tokenData, encoding: .utf8)
+            else {
+                authStore.lastError = .unknown("Apple sign-in returned no identity token.")
+                return
+            }
+            Task { await authStore.signInWithApple(idToken: idToken, nonce: rawNonce) }
+        case .failure(let error):
+            // User cancellation should be silent.
+            if let asError = error as? ASAuthorizationError, asError.code == .canceled {
+                return
+            }
+            authStore.lastError = .network(error.localizedDescription)
+        }
+    }
+}
+
+/// Cryptographic nonce helpers for Sign in with Apple. The raw nonce is sent to
+/// Supabase; its SHA-256 hex digest is what we attach to the authorization
+/// request (Apple embeds the hash in the signed identity token).
+enum AppleSignInNonce {
+    /// Generates a URL-safe random nonce of `length` characters.
+    static func randomNonce(length: Int = 32) -> String {
+        precondition(length > 0)
+        let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-._")
+        var result = ""
+        var remaining = length
+        while remaining > 0 {
+            var randoms = [UInt8](repeating: 0, count: 16)
+            let status = SecRandomCopyBytes(kSecRandomDefault, randoms.count, &randoms)
+            // Fall back to arc4random if SecRandom is unavailable (never on-device).
+            if status != errSecSuccess {
+                randoms = randoms.map { _ in UInt8.random(in: 0...255) }
+            }
+            for random in randoms where remaining > 0 {
+                if Int(random) < charset.count * (256 / charset.count) {
+                    result.append(charset[Int(random) % charset.count])
+                    remaining -= 1
+                }
+            }
+        }
+        return result
+    }
+
+    /// SHA-256 of `input`, lowercase hex (the form Apple expects for `nonce`).
+    static func sha256(_ input: String) -> String {
+        let digest = SHA256.hash(data: Data(input.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }
 

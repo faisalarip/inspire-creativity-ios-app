@@ -9,6 +9,7 @@ struct DiscoverView: View {
 
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var container: AppContainer
+    @EnvironmentObject private var authStore: AuthStore
     @StateObject private var viewModel: DiscoverViewModel
 
     init(viewModel: DiscoverViewModel) {
@@ -49,7 +50,7 @@ struct DiscoverView: View {
                 }
 
                 AuroraPackPromoCard {
-                    router.push(.paywall)
+                    router.requestPaywall(isAuthenticated: authStore.isAuthenticated)
                 }
                 .padding(.horizontal, Theme.Spacing.xl)
                 .padding(.top, Theme.Spacing.xxxl)

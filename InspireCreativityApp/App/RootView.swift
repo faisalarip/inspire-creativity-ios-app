@@ -55,6 +55,13 @@ struct RootView: View {
         .environmentObject(router)
         .preferredColorScheme(.dark)
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: router.hidesTabBar)
+        .sheet(isPresented: $router.showAuthGate) {
+            AuthGateView()
+                .environmentObject(authStore)
+        }
+        .onChange(of: authStore.isAuthenticated) { _, isAuth in
+            if isAuth { router.authDidComplete() }
+        }
     }
 
     @ViewBuilder

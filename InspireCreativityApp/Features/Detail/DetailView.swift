@@ -220,7 +220,7 @@ struct DetailView: View {
             .padding(.vertical, 14)
             .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
         } else {
-            Button { router.push(.paywall) } label: {
+            Button { router.requestPaywall(isAuthenticated: authStore.isAuthenticated) } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "lock.fill")
                     Text("Unlock everything with Pro")

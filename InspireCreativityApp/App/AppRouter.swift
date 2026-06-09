@@ -47,6 +47,12 @@ final class AppRouter: ObservableObject {
 
     @Published var selectedTab: AppTab = .discover
 
+    /// Drives a global sign-in sheet (RootView presents it). Used to gate the
+    /// paywall behind authentication.
+    @Published var showAuthGate: Bool = false
+    /// When true, completing sign-in should land the user on the paywall.
+    private var pendingPaywallAfterAuth = false
+
     @Published var discoverPath: [AppRoute] = []
     @Published var browsePath: [AppRoute] = []
     @Published var samplesPath: [AppRoute] = []
@@ -58,6 +64,28 @@ final class AppRouter: ObservableObject {
         case .browse:   return Binding(get: { self.browsePath },   set: { self.browsePath = $0 })
         case .samples:   return Binding(get: { self.samplesPath },   set: { self.samplesPath = $0 })
         case .library:  return Binding(get: { self.libraryPath },  set: { self.libraryPath = $0 })
+        }
+    }
+
+    /// Opens the paywall, but requires sign-in first. A signed-out user is
+    /// shown the auth gate; once they sign in, `authDidComplete()` pushes the
+    /// paywall so they land exactly where they were headed.
+    func requestPaywall(isAuthenticated: Bool) {
+        if isAuthenticated {
+            push(.paywall)
+        } else {
+            pendingPaywallAfterAuth = true
+            showAuthGate = true
+        }
+    }
+
+    /// Called by RootView when authentication succeeds. Dismisses the auth gate
+    /// and continues any deferred navigation (e.g. the pending paywall).
+    func authDidComplete() {
+        showAuthGate = false
+        if pendingPaywallAfterAuth {
+            pendingPaywallAfterAuth = false
+            push(.paywall)
         }
     }
 

@@ -103,7 +103,7 @@ struct LibraryView: View {
             }
             Spacer()
             if !viewModel.isPro {
-                Button { router.push(.paywall) } label: {
+                Button { router.requestPaywall(isAuthenticated: authStore.isAuthenticated) } label: {
                     Text("Go Pro")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(.white)

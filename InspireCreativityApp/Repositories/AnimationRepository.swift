@@ -73,7 +73,9 @@ final class InMemoryAnimationRepository: AnimationRepositoryProtocol {
     }
 
     func trending() -> [AnimationItem] {
-        ["liquid-heart", "hologram-card", "elastic-tabs", "morphing-fab", "aurora-mesh"]
+        // Lead with the (free) aurora backgrounds — they're the visual hook —
+        // then a couple of popular hand-crafted pieces.
+        ["au-nebula", "au-solar", "au-bokeh", "liquid-heart", "hologram-card"]
             .compactMap(find(id:))
     }
 

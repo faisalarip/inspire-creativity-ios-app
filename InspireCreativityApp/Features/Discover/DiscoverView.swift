@@ -154,7 +154,7 @@ struct UsageMockup: Identifiable, Hashable {
         .init(id: "mock-weather",         title: "Weather Forecast",       appName: "Skyline",          animationId: "au-storm",          why: "Storm Front bg signals conditions before reading any number.", layout: .weather),
         .init(id: "mock-bank-success",    title: "Transfer Sent",          appName: "BluePay",          animationId: "au-solar",          why: "Solar burst behind the checkmark = pure satisfaction.", layout: .bankSuccess),
         .init(id: "mock-photo-gallery",   title: "Photo Memories",         appName: "Bokeh",            animationId: "au-bokeh",          why: "Soft Bokeh dots echo lens blur — feels like film, not phone.", layout: .photoGallery),
-        .init(id: "mock-launch-splash",   title: "Launch Splash",          appName: "Orbit",            animationId: "au-galaxy",         why: "Galaxy spin gives 1.5s of magic instead of a dead loading dot.", layout: .launchSplash),
+        .init(id: "mock-launch-splash",   title: "Launch Splash",          appName: "Orbit",            animationId: "au-nebula",         why: "A drifting nebula gives 1.5s of magic instead of a dead loading dot.", layout: .launchSplash),
         .init(id: "mock-audio-call",      title: "Live Audio Room",        appName: "Tuesday Studio",   animationId: "au-pulsar",         why: "Pulsar beats with the active speaker — engagement signal you can feel.", layout: .audioCall),
         .init(id: "mock-voice-assistant", title: "Voice Assistant",        appName: "Aria",             animationId: "au-pearl",          why: "Pearl iridescence reads as \"intelligent listening\" not \"stuck\".", layout: .voiceAssistant),
         .init(id: "mock-nft",             title: "NFT Detail",             appName: "Strata",           animationId: "au-holofoil",       why: "Holographic foil shimmer is the universal \"rare\" signal.", layout: .nft),
@@ -1956,41 +1956,96 @@ private struct MockLaunchSplashView: View {
     var body: some View {
         ZStack {
             AnimationPreviewRegistry.view(for: mockup.animationId)
+            // Soft focal glow so the splash centre reads as intentional light,
+            // not a dead/dark frame.
+            RadialGradient(
+                colors: [Theme.Palette.accent.opacity(0.35), .clear],
+                center: .center, startRadius: 8, endRadius: 180
+            )
+            .blendMode(.screen)
+            .allowsHitTesting(false)
             VStack(spacing: 0) {
                 MockStatusBar()
                     .padding(.horizontal, 20).padding(.top, 14)
                 Spacer()
-                ZStack {
-                    RoundedRectangle(cornerRadius: 28)
-                        .fill(.ultraThinMaterial)
-                        .frame(width: 100, height: 100)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 28)
-                                .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
-                        )
-                    Image(systemName: "circle.dashed")
-                        .font(.system(size: 42, weight: .light))
-                        .overlay(
-                            Circle().fill(Color.white).frame(width: 12, height: 12)
-                        )
-                }
-                .padding(.bottom, 18)
+                OrbitLogo()
+                    .padding(.bottom, 18)
                 Text("Orbit")
                     .font(.system(size: 30, weight: .heavy))
                 Text("Find your gravity.")
                     .font(.system(size: 13)).opacity(0.65).tracking(1)
                 Spacer()
-                HStack(spacing: 6) {
-                    Circle().stroke(Color.white.opacity(0.6), lineWidth: 1.5)
-                        .frame(width: 14, height: 14)
-                    Text("Connecting…")
-                        .font(.system(size: 11)).opacity(0.6)
-                }
-                .padding(.bottom, 14)
+                LaunchLoadingDots()
+                    .padding(.bottom, 18)
                 MockHomeIndicator()
             }
             .foregroundStyle(.white)
         }
+    }
+}
+
+/// "Orbit" app mark for the launch-splash mockup: a glowing planet with a
+/// moon orbiting it. Replaces a dashed-circle SF Symbol that read as a broken
+/// image / loading placeholder.
+private struct OrbitLogo: View {
+    @State private var angle: Double = 0
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 28)
+                .fill(.ultraThinMaterial)
+                .frame(width: 100, height: 100)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28)
+                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
+                )
+            // Orbit ring.
+            Circle()
+                .stroke(Color.white.opacity(0.25), lineWidth: 1.5)
+                .frame(width: 66, height: 66)
+            // Planet.
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [Theme.Palette.accent, Color(red: 0.49, green: 0.31, blue: 0.91)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                )
+                .frame(width: 28, height: 28)
+                .shadow(color: Theme.Palette.accent.opacity(0.5), radius: 10)
+            // Moon, revolving on the ring.
+            Circle()
+                .fill(.white)
+                .frame(width: 7, height: 7)
+                .shadow(color: .white.opacity(0.8), radius: 4)
+                .offset(x: 33)
+                .rotationEffect(.degrees(angle))
+        }
+        .onAppear {
+            withAnimation(.linear(duration: 6).repeatForever(autoreverses: false)) {
+                angle = 360
+            }
+        }
+    }
+}
+
+/// Three pulsing dots — a polished "launching" indicator that reads as
+/// intentional, unlike a lone spinner + "Connecting…" which looks stuck.
+private struct LaunchLoadingDots: View {
+    @State private var animating = false
+    var body: some View {
+        HStack(spacing: 7) {
+            ForEach(0..<3, id: \.self) { i in
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 6, height: 6)
+                    .opacity(animating ? 1 : 0.3)
+                    .animation(
+                        .easeInOut(duration: 0.6).repeatForever().delay(Double(i) * 0.2),
+                        value: animating
+                    )
+            }
+        }
+        .onAppear { animating = true }
     }
 }
 

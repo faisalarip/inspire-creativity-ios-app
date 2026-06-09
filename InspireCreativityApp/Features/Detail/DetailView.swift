@@ -10,10 +10,17 @@ import SwiftUI
 struct DetailView: View {
 
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var authStore: AuthStore
     @StateObject private var viewModel: DetailViewModel
 
     @State private var sheet: SheetState = .peek
     @State private var dragOffset: CGFloat = 0
+    @State private var showAuthSheet = false
+
+    /// The full code is shown only to a signed-in user who owns the item.
+    /// Signed-out users see a sign-in gate; signed-in users without Pro see
+    /// the Pro paywall gate (for Pro items).
+    private var canViewCode: Bool { authStore.isAuthenticated && viewModel.isOwned }
 
     init(viewModel: DetailViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -40,7 +47,7 @@ struct DetailView: View {
 
             GeometryReader { proxy in
                 let h = proxy.size.height + proxy.safeAreaInsets.top + proxy.safeAreaInsets.bottom
-                let sheetHeight = max(56, sheet.height(in: h) + dragOffset)
+                let sheetHeight = max(256, sheet.height(in: h) + dragOffset)
                 let previewHeight = max(180, h * 0.42)
 
                 ZStack(alignment: .bottom) {
@@ -65,8 +72,20 @@ struct DetailView: View {
                         containerHeight: h,
                         fileName: filename + ".swift",
                         source: viewModel.item.swiftCode,
-                        locked: !viewModel.isOwned,
-                        onUnlock: { router.push(.paywall) }
+                        locked: !canViewCode,
+                        lockTitle: authStore.isAuthenticated
+                            ? "Preview is limited"
+                            : "Sign in to view the full code",
+                        lockCTA: authStore.isAuthenticated
+                            ? "Unlock to view full code"
+                            : "Sign in",
+                        onUnlock: {
+                            if authStore.isAuthenticated {
+                                router.push(.paywall)
+                            } else {
+                                showAuthSheet = true
+                            }
+                        }
                     )
                 }
             }
@@ -94,12 +113,19 @@ struct DetailView: View {
             .padding(.top, 4)
         }
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showAuthSheet) {
+            AuthGateView()
+                .environmentObject(authStore)
+        }
+        .onChange(of: authStore.isAuthenticated) { _, isAuth in
+            if isAuth { showAuthSheet = false }
+        }
     }
 
-    /// Share payload. Only includes the source code when the user actually
-    /// owns it, so sharing can't be used to bypass the paywall on Pro items.
+    /// Share payload. Only includes the source when the signed-in user can
+    /// view it, so sharing can't bypass the sign-in gate or the Pro paywall.
     private var shareText: String {
-        if viewModel.isOwned {
+        if canViewCode {
             return "\(viewModel.item.name) — a SwiftUI animation from InspireCreativity\n\n\(viewModel.item.swiftCode)"
         } else {
             return "Check out \"\(viewModel.item.name)\" — a hand-crafted SwiftUI animation in InspireCreativity."

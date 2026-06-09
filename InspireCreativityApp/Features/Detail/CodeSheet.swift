@@ -19,6 +19,11 @@ struct CodeSheet: View {
     let fileName: String
     let source: String
     let locked: Bool
+    /// Headline shown over the blurred code when locked (differs for the
+    /// sign-in gate vs the Pro gate).
+    var lockTitle: String = "Preview is limited"
+    /// Label for the unlock button in the locked overlay.
+    var lockCTA: String = "Unlock to view full code"
     let onUnlock: () -> Void
 
     @State private var copied = false
@@ -27,36 +32,32 @@ struct CodeSheet: View {
         VStack(spacing: 0) {
             handle
             header
-            if state != .peek {
-                ScrollView {
-                    SwiftCodeView(source: source)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 6)
-                        .padding(.bottom, 32)
-                        .blur(radius: locked ? 8 : 0)
-                        .allowsHitTesting(!locked)
-                }
-                .overlay {
-                    if locked {
-                        ZStack {
-                            // Dim the blurred code further so the unlock CTA is the focus.
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.05, green: 0.07, blue: 0.09).opacity(0.4),
-                                    Color(red: 0.05, green: 0.07, blue: 0.09).opacity(0.85)
-                                ],
-                                startPoint: .top, endPoint: .bottom
-                            )
-                            VStack {
-                                Spacer()
-                                lockedOverlay
-                            }
+            ScrollView {
+                SwiftCodeView(source: source)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 6)
+                    .padding(.bottom, 32)
+                    .blur(radius: locked ? 3 : 0)
+                    .allowsHitTesting(!locked)
+            }
+            .overlay {
+                if locked {
+                    ZStack {
+                        // Dim the blurred code further so the unlock CTA is the focus.
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.05, green: 0.07, blue: 0.09).opacity(0.4),
+                                Color(red: 0.05, green: 0.07, blue: 0.09).opacity(0.85)
+                            ],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                        VStack {
+                            Spacer()
+                            lockedOverlay
                         }
-                        .allowsHitTesting(true)
                     }
+                    .allowsHitTesting(true)
                 }
-            } else {
-                Spacer(minLength: 0)
             }
         }
         .frame(height: height, alignment: .top)
@@ -165,11 +166,11 @@ struct CodeSheet: View {
 
     private var lockedOverlay: some View {
         VStack(spacing: 8) {
-            Text("Preview is limited")
+            Text(lockTitle)
                 .font(.system(size: 13))
                 .foregroundStyle(.white.opacity(0.8))
             Button(action: onUnlock) {
-                Text("Unlock to view full code")
+                Text(lockCTA)
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14).padding(.vertical, 9)

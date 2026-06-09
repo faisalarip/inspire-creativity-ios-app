@@ -25,8 +25,14 @@ struct RootView: View {
                 AuthGateView()
                     .transition(.opacity)
             }
+            if authStore.justSignedIn {
+                CongratsView { authStore.justSignedIn = false }
+                    .transition(.opacity)
+                    .zIndex(2)
+            }
         }
         .animation(.easeInOut(duration: 0.25), value: authStore.pendingVerificationEmail)
+        .animation(.easeInOut(duration: 0.3), value: authStore.justSignedIn)
     }
 
     private var signedInShell: some View {
@@ -629,6 +635,106 @@ private struct AuthErrorBanner: View {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(Color(red: 1.0, green: 0.35, blue: 0.35).opacity(0.4), lineWidth: 0.5)
         )
+    }
+}
+
+// MARK: ─────────────────────────────────────────────────────────────
+// MARK: Post-sign-in welcome
+// MARK: ─────────────────────────────────────────────────────────────
+
+/// Celebratory one-time welcome shown right after a fresh sign-in / sign-up.
+/// Highlights the free taster so a brand-new account immediately sees value.
+private struct CongratsView: View {
+
+    let onDismiss: () -> Void
+
+    /// A few of the free aurora backgrounds, shown live as a teaser.
+    private let freeAuroraIDs = ["au-nebula", "au-solar", "au-liquiddrop",
+                                 "au-arctic", "au-bokeh", "au-goldfoil"]
+
+    var body: some View {
+        ZStack {
+            Theme.Palette.background.ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                heroGrid
+                content
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private var heroGrid: some View {
+        ZStack(alignment: .bottom) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3),
+                      spacing: 6) {
+                ForEach(freeAuroraIDs, id: \.self) { id in
+                    ZStack {
+                        Color.black
+                        AnimationPreviewRegistry.view(for: id)
+                    }
+                    .frame(height: 96)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+            }
+            .padding(10)
+
+            LinearGradient(
+                colors: [.clear, Theme.Palette.background],
+                startPoint: .center, endPoint: .bottom
+            )
+            .allowsHitTesting(false)
+        }
+        .frame(height: 230)
+        .padding(.top, 56)
+    }
+
+    private var content: some View {
+        VStack(spacing: 14) {
+            HStack(spacing: 5) {
+                Image(systemName: "sparkles").font(.system(size: 10))
+                Text("20 FREE ANIMATIONS")
+                    .font(.system(size: 11, weight: .heavy))
+                    .tracking(0.5)
+            }
+            .foregroundStyle(Color(red: 0x1A / 255, green: 0x0E / 255, blue: 0))
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .background(
+                LinearGradient(
+                    colors: [Theme.Palette.proGoldStart, Theme.Palette.proGoldEnd],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                ),
+                in: Capsule()
+            )
+
+            Text("You're in! 🎉")
+                .font(.system(size: 30, weight: .heavy))
+                .foregroundStyle(.white)
+
+            Text("Enjoy 20 animations on us — including a set of gorgeous aurora backgrounds. Browse, preview, and copy the SwiftUI source straight into Xcode.")
+                .font(.system(size: 15))
+                .foregroundStyle(.white.opacity(0.65))
+                .multilineTextAlignment(.center)
+                .lineSpacing(2)
+                .padding(.horizontal, 28)
+                .padding(.top, 2)
+
+            Spacer()
+
+            Button(action: onDismiss) {
+                Text("Start exploring")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+                    .background(Theme.Palette.accent, in: RoundedRectangle(cornerRadius: 14))
+                    .shadow(color: Theme.Palette.accent.opacity(0.35), radius: 16, y: 6)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 24)
+            .padding(.bottom, 40)
+        }
+        .padding(.top, 22)
     }
 }
 

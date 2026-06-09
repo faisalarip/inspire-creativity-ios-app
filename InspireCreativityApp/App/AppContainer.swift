@@ -716,6 +716,10 @@ final class AuthStore: ObservableObject {
     /// When signup returned `.confirmationRequired` we stash the email here
     /// so the verify-email screen can show it and the resend button works.
     @Published private(set) var pendingVerificationEmail: String?
+    /// Set true exactly when a fresh sign-in / sign-up succeeds (NOT on session
+    /// restore at launch), so the UI can show a one-time welcome. The view
+    /// resets it to false once shown.
+    @Published var justSignedIn: Bool = false
 
     private static let defaultsKey = "enigma.auth.session"
     private let defaults: UserDefaults
@@ -770,6 +774,7 @@ final class AuthStore: ObservableObject {
             case .session(let session):
                 persist(session)
                 pendingVerificationEmail = nil
+                justSignedIn = true
             case .confirmationRequired:
                 pendingVerificationEmail = email
             }
@@ -789,6 +794,7 @@ final class AuthStore: ObservableObject {
             let session = try await AuthService.signIn(email: email, password: password)
             persist(session)
             pendingVerificationEmail = nil
+            justSignedIn = true
         } catch let error as AuthError {
             lastError = error
         } catch {

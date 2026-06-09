@@ -185,6 +185,9 @@ private struct SignInView: View {
     @State private var email: String = ""
     @State private var password: String = ""
     @State private var resetNote: String?
+    /// When true, `resetNote` is a gentle prompt (e.g. "enter your email")
+    /// rather than a success confirmation — styled neutrally, not green.
+    @State private var resetNoteIsPrompt = false
 
     var body: some View {
         ScrollView {
@@ -204,9 +207,10 @@ private struct SignInView: View {
                 .padding(.top, 32)
 
                 if let resetNote {
+                    let tint = resetNoteIsPrompt ? Theme.Palette.accent : Theme.Palette.success
                     HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(Theme.Palette.success)
+                        Image(systemName: resetNoteIsPrompt ? "info.circle.fill" : "checkmark.circle.fill")
+                            .foregroundStyle(tint)
                             .font(.system(size: 13, weight: .semibold))
                         Text(resetNote)
                             .font(.system(size: 13, weight: .medium))
@@ -216,7 +220,7 @@ private struct SignInView: View {
                     .padding(.vertical, 10).padding(.horizontal, 12)
                     .background(
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Theme.Palette.success.opacity(0.10))
+                            .fill(tint.opacity(0.10))
                     )
                 } else if let message = authStore.lastError?.errorDescription {
                     AuthErrorBanner(message: message)
@@ -242,16 +246,21 @@ private struct SignInView: View {
                     Spacer()
                     Button("Forgot password?") {
                         Task {
+                            let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard AuthValidation.isValidEmail(trimmed) else {
+                                resetNoteIsPrompt = true
+                                resetNote = "Enter your email address above, then tap “Forgot password?” again."
+                                return
+                            }
                             resetNote = nil
-                            let ok = await authStore.sendPasswordReset(
-                                email: email.trimmingCharacters(in: .whitespacesAndNewlines)
-                            )
+                            resetNoteIsPrompt = false
+                            let ok = await authStore.sendPasswordReset(email: trimmed)
                             if ok { resetNote = "Password reset link sent. Check your email." }
                         }
                     }
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.Palette.accent.opacity(canResetPassword ? 1 : 0.4))
-                    .disabled(!canResetPassword)
+                    .foregroundStyle(Theme.Palette.accent)
+                    .disabled(authStore.isLoading)
                 }
 
                 AuthPrimaryButton(
@@ -287,9 +296,6 @@ private struct SignInView: View {
         AuthValidation.isValidEmail(email) && password.count >= 6 && !authStore.isLoading
     }
 
-    private var canResetPassword: Bool {
-        AuthValidation.isValidEmail(email) && !authStore.isLoading
-    }
 
     private func submit() async {
         await authStore.signIn(

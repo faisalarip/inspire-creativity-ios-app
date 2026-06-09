@@ -651,10 +651,16 @@ enum AuthService {
         _ = try await send(request)
     }
 
-    /// Sends a password-reset email via Supabase's `/auth/v1/recover`.
+    /// Sends a password-reset email via Supabase's `/auth/v1/recover`. The
+    /// `redirect_to` points at our hosted reset page, which consumes the
+    /// recovery token from the link and lets the user set a new password.
+    /// NOTE: this URL must be in Supabase → Auth → URL Configuration →
+    /// Redirect URLs, or gotrue ignores it and falls back to the Site URL.
     static func requestPasswordReset(email: String) async throws {
+        let redirect = "https://faisalarip.github.io/inspirecreativity-legal/reset/"
+        let encoded = redirect.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? redirect
         let request = try makeRequest(
-            path: "/recover",
+            path: "/recover?redirect_to=\(encoded)",
             method: "POST",
             body: ["email": email]
         )

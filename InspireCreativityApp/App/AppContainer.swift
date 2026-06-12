@@ -201,8 +201,20 @@ struct AnimationDTO: Decodable {
             rating: rating ?? 5.0,
             price: price,
             description: description,
-            swiftCode: swift_code ?? ""
+            swiftCode: resolvedSwiftCode()
         )
+    }
+
+    /// Code sample for the row. Prefers the server-supplied `swift_code`; when it
+    /// is null but the row carries a palette, generate a palette-true snippet from
+    /// the aurora descriptor so the code sheet matches the preview instead of
+    /// shipping an empty sheet.
+    private func resolvedSwiftCode() -> String {
+        if let swift_code, !swift_code.isEmpty { return swift_code }
+        if let descriptor = toAuroraDescriptor() {
+            return AuroraCodeGen.swiftCode(for: descriptor)
+        }
+        return ""
     }
 
     /// If the row supplies a palette (and optionally an engine), produce a

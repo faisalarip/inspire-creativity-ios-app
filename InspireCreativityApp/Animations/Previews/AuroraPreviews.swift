@@ -211,6 +211,10 @@ struct AuroraDescriptor {
     let particles: AuroraParticles?
 }
 
+// IMPORTANT — keep in sync with `AuroraCodeGen` in Animations/AuroraCodeGen.swift.
+// The per-engine code templates there are a mechanical port of this view's
+// rendering. If you change an engine's rendering below, update the matching
+// template in AuroraCodeGen so the copied code keeps matching the preview.
 struct ParametricAuroraPreview: View {
     let descriptor: AuroraDescriptor
     @State private var t: Double = 0

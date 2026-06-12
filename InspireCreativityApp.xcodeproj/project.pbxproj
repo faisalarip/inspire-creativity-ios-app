@@ -36,6 +36,7 @@
 		558128C8EAB2EEF4C660773B /* HexColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A6703F807C783B2C426ADB6 /* HexColor.swift */; };
 		55F7A68CF2C1D4E3D9D5B144 /* AuthValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA308513D84255C3951D32D /* AuthValidationTests.swift */; };
 		55F7A68CF2C1D4E3D9D5B145 /* CatalogPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA308513D84255C3951D32E /* CatalogPolicyTests.swift */; };
+		E47927F041A11F6FA21D94B3 /* AuroraCodeGenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E359BB92170C0ED91B2520CF /* AuroraCodeGenTests.swift */; };
 		5C4F2E7BD1D4FF17E7F762E4 /* AnimationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6B7915621E0B7956B01D868 /* AnimationRepository.swift */; };
 		5C7AE8FD57EEA3DE1C0E20F4 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EC77EA4D5A71E148B7FE7E3 /* AppRouter.swift */; };
 		5FD2913CE07BF132B18BF5F1 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772EB0C6915BB039D9E2468B /* Theme.swift */; };
@@ -49,6 +50,7 @@
 		8209D3F5A6F84A50E183D1C4 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E2CA19008E4095446DFDD3 /* SearchView.swift */; };
 		871704859E5F1DACFA93B81C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2D7586E1E77DA3D2DFAB881 /* Foundation.framework */; };
 		90677EED8BEACF9DB9D25769 /* AnimationPreviewRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AC5A43E55628209613E297E /* AnimationPreviewRegistry.swift */; };
+		4431CAFA5D4C67684A73BC9D /* AuroraCodeGen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C5F461F15679801F8B87BA1 /* AuroraCodeGen.swift */; };
 		974A7B90B561E10D30F14155 /* PurchaseRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 959AF64BF0F8536C8885F891 /* PurchaseRepository.swift */; };
 		97F6358CB2A2369D7A1AED9F /* FavoritesRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56FE1D93A4E036DDEE1BABFB /* FavoritesRepository.swift */; };
 		9DD2540ABB188E04B6D7C234 /* IconButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 033038572D9397EFBE11BDA6 /* IconButton.swift */; };
@@ -100,6 +102,7 @@
 		37A5D643CFF4A20D9F882776 /* CategoryGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryGrid.swift; sourceTree = "<group>"; };
 		382C8889FB11F1F8A88D4523 /* Badges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Badges.swift; sourceTree = "<group>"; };
 		3AC5A43E55628209613E297E /* AnimationPreviewRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationPreviewRegistry.swift; sourceTree = "<group>"; };
+		2C5F461F15679801F8B87BA1 /* AuroraCodeGen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuroraCodeGen.swift; sourceTree = "<group>"; };
 		411F3E0F2A3ADCCC3E07957A /* DetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailViewModel.swift; sourceTree = "<group>"; };
 		41E2CA19008E4095446DFDD3 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		47F9550584FD300878A00C10 /* BrowseViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseViewModel.swift; sourceTree = "<group>"; };
@@ -142,6 +145,7 @@
 		F884AF643F2A03F7498F3EDB /* HeroCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroCard.swift; sourceTree = "<group>"; };
 		FDA308513D84255C3951D32D /* AuthValidationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthValidationTests.swift; sourceTree = "<group>"; };
 		FDA308513D84255C3951D32E /* CatalogPolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CatalogPolicyTests.swift; sourceTree = "<group>"; };
+		E359BB92170C0ED91B2520CF /* AuroraCodeGenTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuroraCodeGenTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -302,6 +306,7 @@
 				EBA2741E26DB5539EAD51C34 /* AuthStoreTests.swift */,
 				FDA308513D84255C3951D32D /* AuthValidationTests.swift */,
 				FDA308513D84255C3951D32E /* CatalogPolicyTests.swift */,
+				E359BB92170C0ED91B2520CF /* AuroraCodeGenTests.swift */,
 				361E22506EB084BF5ED5B712 /* MockURLProtocol.swift */,
 			);
 			path = InspireCreativityAppTests;
@@ -404,6 +409,7 @@
 			children = (
 				26702578B81927296AEEE09B /* Previews */,
 				3AC5A43E55628209613E297E /* AnimationPreviewRegistry.swift */,
+				2C5F461F15679801F8B87BA1 /* AuroraCodeGen.swift */,
 			);
 			path = Animations;
 			sourceTree = "<group>";
@@ -506,6 +512,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				90677EED8BEACF9DB9D25769 /* AnimationPreviewRegistry.swift in Sources */,
+				4431CAFA5D4C67684A73BC9D /* AuroraCodeGen.swift in Sources */,
 				B7DB0BD3C7E915732C924B0D /* AdvancedPreviews.swift in Sources */,
 				3D182AA758147979C31C574E /* AuroraPreviews.swift in Sources */,
 				D2972E9D5510B9B3BAC823ED /* CorePreviews.swift in Sources */,
@@ -566,6 +573,7 @@
 				35350DFE964C701DD6016C07 /* AuthStoreTests.swift in Sources */,
 				55F7A68CF2C1D4E3D9D5B144 /* AuthValidationTests.swift in Sources */,
 				55F7A68CF2C1D4E3D9D5B145 /* CatalogPolicyTests.swift in Sources */,
+				E47927F041A11F6FA21D94B3 /* AuroraCodeGenTests.swift in Sources */,
 				126192DAB8E3A2A077F07F52 /* MockURLProtocol.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

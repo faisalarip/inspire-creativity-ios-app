@@ -118,14 +118,13 @@ struct ElasticTabsPreview: View {
         .background(Color.white.opacity(0.06), in: Capsule())
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.spring(response: 0.45, dampingFraction: 0.65), value: selection)
-        .onAppear { runLoop() }
+        .task { await runLoop() }
     }
-    private func runLoop() {
-        Task { @MainActor in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_100_000_000)
-                selection = (selection + 1) % labels.count
-            }
+    @MainActor
+    private func runLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 1_100_000_000)
+            selection = (selection + 1) % labels.count
         }
     }
 }
@@ -241,14 +240,13 @@ struct MorphingFabPreview: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.spring(response: 0.5, dampingFraction: 0.65), value: open)
-        .onAppear { runLoop() }
+        .task { await runLoop() }
     }
-    private func runLoop() {
-        Task { @MainActor in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_300_000_000)
-                open.toggle()
-            }
+    @MainActor
+    private func runLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 1_300_000_000)
+            open.toggle()
         }
     }
 }

@@ -14,6 +14,7 @@ struct RootView: View {
     @EnvironmentObject private var authStore: AuthStore
     @EnvironmentObject private var store: StoreManager
     @StateObject private var router = AppRouter()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         // Browsing the catalog never requires an account (Guideline 5.1.1).
@@ -46,11 +47,18 @@ struct RootView: View {
         ZStack(alignment: .bottom) {
             Theme.Palette.background.ignoresSafeArea()
 
+            // Tabs stay mounted (preserving scroll/nav state) but hidden tabs
+            // pause their animation previews — `opacity(0)` alone keeps every
+            // repeatForever preview rendering, which cooks the device.
             ZStack {
                 tabContent(.discover).opacity(router.selectedTab == .discover ? 1 : 0)
+                    .environment(\.previewsPaused, paused(unless: .discover))
                 tabContent(.browse).opacity(router.selectedTab == .browse ? 1 : 0)
+                    .environment(\.previewsPaused, paused(unless: .browse))
                 tabContent(.samples).opacity(router.selectedTab == .samples ? 1 : 0)
+                    .environment(\.previewsPaused, paused(unless: .samples))
                 tabContent(.library).opacity(router.selectedTab == .library ? 1 : 0)
+                    .environment(\.previewsPaused, paused(unless: .library))
             }
             .animation(.easeOut(duration: 0.15), value: router.selectedTab)
 
@@ -62,13 +70,12 @@ struct RootView: View {
         .environmentObject(router)
         .preferredColorScheme(.dark)
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: router.hidesTabBar)
-        .sheet(isPresented: $router.showAuthGate) {
-            AuthGateView()
-                .environmentObject(authStore)
-        }
-        .onChange(of: authStore.isAuthenticated) { _, isAuth in
-            if isAuth { router.authDidComplete() }
-        }
+    }
+
+    /// Previews pause in every tab except the selected one, and everywhere
+    /// while the scene isn't active.
+    private func paused(unless tab: AppTab) -> Bool {
+        router.selectedTab != tab || scenePhase != .active
     }
 
     @ViewBuilder

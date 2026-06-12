@@ -17,10 +17,15 @@ struct DetailView: View {
     @State private var dragOffset: CGFloat = 0
     @State private var showAuthSheet = false
 
-    /// The full code is shown only to a signed-in user who owns the item.
-    /// Signed-out users see a sign-in gate; signed-in users without Pro see
-    /// the Pro paywall gate (for Pro items).
-    private var canViewCode: Bool { authStore.isAuthenticated && viewModel.isOwned }
+    /// Three-way gate (see `CodeAccess`): the Pro entitlement unlocks code in
+    /// any auth state, Pro items route to the paywall, and free items ask
+    /// signed-out users for the (free) sign-in.
+    private var access: CodeAccess {
+        CodeAccess.evaluate(itemIsPro: viewModel.item.isPro,
+                            hasProEntitlement: viewModel.hasPro,
+                            isAuthenticated: authStore.isAuthenticated)
+    }
+    private var canViewCode: Bool { access == .granted }
 
     init(viewModel: DetailViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -73,17 +78,17 @@ struct DetailView: View {
                         fileName: filename + ".swift",
                         source: viewModel.item.swiftCode,
                         locked: !canViewCode,
-                        lockTitle: authStore.isAuthenticated
-                            ? "Preview is limited"
-                            : "Sign in to view the full code",
-                        lockCTA: authStore.isAuthenticated
-                            ? "Unlock to view full code"
-                            : "Sign in",
+                        lockTitle: access == .needsSignIn
+                            ? "Sign in to view the full code"
+                            : "Preview is limited",
+                        lockCTA: access == .needsSignIn
+                            ? "Sign in"
+                            : "Unlock to view full code",
                         onUnlock: {
-                            if authStore.isAuthenticated {
-                                router.push(.paywall)
-                            } else {
-                                showAuthSheet = true
+                            switch access {
+                            case .needsPro: router.push(.paywall)
+                            case .needsSignIn: showAuthSheet = true
+                            case .granted: break
                             }
                         }
                     )
@@ -220,7 +225,7 @@ struct DetailView: View {
             .padding(.vertical, 14)
             .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
         } else {
-            Button { router.requestPaywall(isAuthenticated: authStore.isAuthenticated) } label: {
+            Button { router.push(.paywall) } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "lock.fill")
                     Text("Unlock everything with Pro")

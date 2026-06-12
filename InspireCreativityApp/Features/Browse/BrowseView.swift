@@ -110,6 +110,9 @@ struct BrowseView: View {
                 Spacer().frame(height: 120)
             }
         }
+        .refreshable {
+            await viewModel.reload()
+        }
         .background(Theme.Palette.background)
         .ignoresSafeArea(edges: .bottom)
     }

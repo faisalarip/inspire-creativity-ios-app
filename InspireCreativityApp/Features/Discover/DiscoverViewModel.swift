@@ -38,4 +38,10 @@ final class DiscoverViewModel: ObservableObject {
             }
             .store(in: &cancellables)
     }
+
+    /// Pull-to-refresh: re-fetches the remote catalog. On success the
+    /// repository posts `.animationsUpdated`, which refreshes the rows above.
+    func reload() async {
+        await repository.refresh()
+    }
 }

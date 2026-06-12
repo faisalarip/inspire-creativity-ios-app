@@ -9,7 +9,6 @@ struct DiscoverView: View {
 
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var container: AppContainer
-    @EnvironmentObject private var authStore: AuthStore
     @StateObject private var viewModel: DiscoverViewModel
 
     init(viewModel: DiscoverViewModel) {
@@ -39,7 +38,7 @@ struct DiscoverView: View {
                 }
 
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
+                    LazyHStack(spacing: 12) {
                         ForEach(viewModel.trending) { item in
                             AnimationCard(item, size: .small) {
                                 router.push(.detail(animationId: item.id))
@@ -50,7 +49,7 @@ struct DiscoverView: View {
                 }
 
                 AuroraPackPromoCard {
-                    router.requestPaywall(isAuthenticated: authStore.isAuthenticated)
+                    router.push(.paywall)
                 }
                 .padding(.horizontal, Theme.Spacing.xl)
                 .padding(.top, Theme.Spacing.xxxl)
@@ -66,7 +65,9 @@ struct DiscoverView: View {
                     .padding(.bottom, 12)
 
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 14) {
+                    // Lazy: 30 mockups, each embedding a live aurora preview —
+                    // an eager HStack instantiates (and animates) all of them.
+                    LazyHStack(spacing: 14) {
                         ForEach(container.usageMockups) { m in
                             UsageMockupCard(mockup: m) {
                                 router.push(.detail(animationId: m.animationId))
@@ -98,6 +99,10 @@ struct DiscoverView: View {
 
                 Spacer().frame(height: 120)
             }
+        }
+        .refreshable {
+            await viewModel.reload()
+            await container.refreshUsageMockups()
         }
         .background(Theme.Palette.background)
         .ignoresSafeArea(edges: .bottom)
@@ -514,7 +519,9 @@ struct SamplesView: View {
                     .padding(.bottom, 14)
 
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 18) {
+                    // Lazy for the same reason as Discover's mockup row: only
+                    // the on-screen cards should exist (each animates forever).
+                    LazyHStack(spacing: 18) {
                         ForEach(container.usageMockups) { m in
                             SampleCarouselCard(
                                 mockup: m,

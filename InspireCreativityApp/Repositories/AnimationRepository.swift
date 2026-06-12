@@ -27,6 +27,27 @@ protocol AnimationRepositoryProtocol {
     func trending() -> [AnimationItem]
     /// Recently added list (curated subset).
     func newlyAdded() -> [AnimationItem]
+    /// Re-fetches the catalog from the backing store. Returns true when the
+    /// cache changed (the repository then posts `.animationsUpdated`).
+    @discardableResult
+    func refresh() async -> Bool
+}
+
+extension AnimationRepositoryProtocol {
+    /// Seeded in-memory catalogs have nothing to re-fetch.
+    @discardableResult
+    func refresh() async -> Bool { false }
+}
+
+/// Curated id lists shared by every repository implementation so the
+/// Discover rows can't drift between the bundled and remote catalogs.
+enum CuratedRows {
+    /// Lead with the (free) aurora backgrounds — they're the visual hook —
+    /// then a couple of popular hand-crafted pieces.
+    static let trendingIDs = ["au-nebula", "au-solar", "au-bokeh",
+                              "liquid-heart", "hologram-card"]
+    static let newlyAddedIDs = ["parallax-card", "glitch-text",
+                                "spring-chain", "liquid-tabs"]
 }
 
 /// In-memory animation catalog. Data is seeded once at construction.
@@ -73,14 +94,10 @@ final class InMemoryAnimationRepository: AnimationRepositoryProtocol {
     }
 
     func trending() -> [AnimationItem] {
-        // Lead with the (free) aurora backgrounds — they're the visual hook —
-        // then a couple of popular hand-crafted pieces.
-        ["au-nebula", "au-solar", "au-bokeh", "liquid-heart", "hologram-card"]
-            .compactMap(find(id:))
+        CuratedRows.trendingIDs.compactMap(find(id:))
     }
 
     func newlyAdded() -> [AnimationItem] {
-        ["parallax-card", "glitch-text", "spring-chain", "liquid-tabs"]
-            .compactMap(find(id:))
+        CuratedRows.newlyAddedIDs.compactMap(find(id:))
     }
 }

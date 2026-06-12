@@ -30,31 +30,30 @@ struct SpringChainPreview: View {
                 .shadow(color: Theme.Palette.accent, radius: 8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { runLoop() }
+        .task { await runLoop() }
     }
-    private func runLoop() {
-        Task { @MainActor in
-            let positions: [CGPoint] = [
-                .init(x: 40, y: 30), .init(x: 160, y: 40),
-                .init(x: 50, y: 90), .init(x: 150, y: 100)
-            ]
-            var idx = 0
-            while !Task.isCancelled {
-                let target = positions[idx % positions.count]
-                withAnimation(.spring(response: 0.7, dampingFraction: 0.55)) {
-                    leader = target
-                }
-                // Stagger the followers with delays
-                for f in 0..<followers.count {
-                    let delay = UInt64(80_000_000 * (f + 1))
-                    try? await Task.sleep(nanoseconds: delay)
-                    withAnimation(.spring(response: 0.7, dampingFraction: 0.55)) {
-                        followers[f] = target
-                    }
-                }
-                try? await Task.sleep(nanoseconds: 600_000_000)
-                idx += 1
+    @MainActor
+    private func runLoop() async {
+        let positions: [CGPoint] = [
+            .init(x: 40, y: 30), .init(x: 160, y: 40),
+            .init(x: 50, y: 90), .init(x: 150, y: 100)
+        ]
+        var idx = 0
+        while !Task.isCancelled {
+            let target = positions[idx % positions.count]
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.55)) {
+                leader = target
             }
+            // Stagger the followers with delays
+            for f in 0..<followers.count {
+                let delay = UInt64(80_000_000 * (f + 1))
+                try? await Task.sleep(nanoseconds: delay)
+                withAnimation(.spring(response: 0.7, dampingFraction: 0.55)) {
+                    followers[f] = target
+                }
+            }
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            idx += 1
         }
     }
 }
@@ -82,27 +81,26 @@ struct ThrowableCardPreview: View {
             .offset(offset)
             .shadow(radius: 12, y: 6)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onAppear { runLoop() }
+            .task { await runLoop() }
     }
-    private func runLoop() {
-        Task { @MainActor in
-            while !Task.isCancelled {
-                withAnimation(.spring(response: 0.55, dampingFraction: 0.6)) {
-                    offset = CGSize(width: 30, height: -8)
-                    rotation = 6
-                }
-                try? await Task.sleep(nanoseconds: 600_000_000)
-                withAnimation(.spring(response: 0.6, dampingFraction: 0.55)) {
-                    offset = CGSize(width: -28, height: 6)
-                    rotation = -8
-                }
-                try? await Task.sleep(nanoseconds: 700_000_000)
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                    offset = .zero
-                    rotation = 0
-                }
-                try? await Task.sleep(nanoseconds: 800_000_000)
+    @MainActor
+    private func runLoop() async {
+        while !Task.isCancelled {
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.6)) {
+                offset = CGSize(width: 30, height: -8)
+                rotation = 6
             }
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.55)) {
+                offset = CGSize(width: -28, height: 6)
+                rotation = -8
+            }
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                offset = .zero
+                rotation = 0
+            }
+            try? await Task.sleep(nanoseconds: 800_000_000)
         }
     }
 }

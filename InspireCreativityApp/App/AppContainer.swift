@@ -162,7 +162,8 @@ extension Notification.Name {
 }
 
 /// JSON row coming out of Supabase REST (`/rest/v1/animations`).
-private struct AnimationDTO: Decodable {
+/// Internal (not private) so unit tests can lock the fail-closed mapping.
+struct AnimationDTO: Decodable {
     let id: String
     let name: String
     let category: String
@@ -190,7 +191,8 @@ private struct AnimationDTO: Decodable {
             category: category,
             difficulty: difficulty,
             iosVersion: ios_version ?? "17+",
-            isPro: is_pro ?? false,
+            // Fail closed: a null is_pro must never give paid content away.
+            isPro: is_pro ?? true,
             isFeatured: is_featured ?? false,
             tintHex: tint_hex ?? "#0a0a0c",
             author: author,
@@ -220,7 +222,7 @@ private struct AnimationDTO: Decodable {
         return AuroraDescriptor(
             id: id, name: name, theme: category,
             engine: engineValue, palette: palette,
-            speed: 12, isPro: is_pro ?? false, price: price,
+            speed: 12, isPro: is_pro ?? true, price: price,
             use: description, particles: nil
         )
     }
@@ -331,13 +333,11 @@ final class RemoteAnimationRepository: AnimationRepositoryProtocol {
     }
 
     func trending() -> [AnimationItem] {
-        ["liquid-heart", "hologram-card", "elastic-tabs", "morphing-fab", "aurora-mesh"]
-            .compactMap(find(id:))
+        CuratedRows.trendingIDs.compactMap(find(id:))
     }
 
     func newlyAdded() -> [AnimationItem] {
-        ["parallax-card", "glitch-text", "spring-chain", "liquid-tabs"]
-            .compactMap(find(id:))
+        CuratedRows.newlyAddedIDs.compactMap(find(id:))
     }
 }
 

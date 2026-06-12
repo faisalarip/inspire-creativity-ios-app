@@ -35,6 +35,7 @@
 		54C3BE92DD3EF6AB8DC4817C /* Avatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 679AE81CA42247506DBED20F /* Avatar.swift */; };
 		558128C8EAB2EEF4C660773B /* HexColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A6703F807C783B2C426ADB6 /* HexColor.swift */; };
 		55F7A68CF2C1D4E3D9D5B144 /* AuthValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA308513D84255C3951D32D /* AuthValidationTests.swift */; };
+		55F7A68CF2C1D4E3D9D5B145 /* CatalogPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA308513D84255C3951D32E /* CatalogPolicyTests.swift */; };
 		5C4F2E7BD1D4FF17E7F762E4 /* AnimationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6B7915621E0B7956B01D868 /* AnimationRepository.swift */; };
 		5C7AE8FD57EEA3DE1C0E20F4 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EC77EA4D5A71E148B7FE7E3 /* AppRouter.swift */; };
 		5FD2913CE07BF132B18BF5F1 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772EB0C6915BB039D9E2468B /* Theme.swift */; };
@@ -140,6 +141,7 @@
 		EF0182DF85A7CD0319333F24 /* InspireCreativityApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = InspireCreativityApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F884AF643F2A03F7498F3EDB /* HeroCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroCard.swift; sourceTree = "<group>"; };
 		FDA308513D84255C3951D32D /* AuthValidationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthValidationTests.swift; sourceTree = "<group>"; };
+		FDA308513D84255C3951D32E /* CatalogPolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CatalogPolicyTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -299,6 +301,7 @@
 				2CE4F0C7112E7E24D6033AB2 /* AuthSessionCodableTests.swift */,
 				EBA2741E26DB5539EAD51C34 /* AuthStoreTests.swift */,
 				FDA308513D84255C3951D32D /* AuthValidationTests.swift */,
+				FDA308513D84255C3951D32E /* CatalogPolicyTests.swift */,
 				361E22506EB084BF5ED5B712 /* MockURLProtocol.swift */,
 			);
 			path = InspireCreativityAppTests;
@@ -562,6 +565,7 @@
 				A4109B0B6310725E8ABBE8F2 /* AuthSessionCodableTests.swift in Sources */,
 				35350DFE964C701DD6016C07 /* AuthStoreTests.swift in Sources */,
 				55F7A68CF2C1D4E3D9D5B144 /* AuthValidationTests.swift in Sources */,
+				55F7A68CF2C1D4E3D9D5B145 /* CatalogPolicyTests.swift in Sources */,
 				126192DAB8E3A2A077F07F52 /* MockURLProtocol.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

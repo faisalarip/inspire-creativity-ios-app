@@ -81,4 +81,10 @@ final class BrowseViewModel: ObservableObject {
     func toggleSort() {
         sortOrder = sortOrder == .featured ? .nameAsc : .featured
     }
+
+    /// Pull-to-refresh: re-fetches the remote catalog. On success the
+    /// repository posts `.animationsUpdated`, which re-derives the grid.
+    func reload() async {
+        await repository.refresh()
+    }
 }

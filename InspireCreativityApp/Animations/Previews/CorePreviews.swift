@@ -26,16 +26,15 @@ struct SpringButtonPreview: View {
                 }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { runLoop() }
+        .task { await runLoop() }
     }
-    private func runLoop() {
-        Task { @MainActor in
-            while !Task.isCancelled {
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.55)) { pressed = true }
-                try? await Task.sleep(nanoseconds: 300_000_000)
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.55)) { pressed = false }
-                try? await Task.sleep(nanoseconds: 900_000_000)
-            }
+    @MainActor
+    private func runLoop() async {
+        while !Task.isCancelled {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.55)) { pressed = true }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.55)) { pressed = false }
+            try? await Task.sleep(nanoseconds: 900_000_000)
         }
     }
 }
@@ -67,17 +66,16 @@ struct HeartBurstPreview: View {
                 .animation(.spring(response: 0.35, dampingFraction: 0.45), value: liked)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { runLoop() }
+        .task { await runLoop() }
     }
-    private func runLoop() {
-        Task { @MainActor in
-            while !Task.isCancelled {
-                liked.toggle()
-                burst = true
-                try? await Task.sleep(nanoseconds: 700_000_000)
-                burst = false
-                try? await Task.sleep(nanoseconds: 900_000_000)
-            }
+    @MainActor
+    private func runLoop() async {
+        while !Task.isCancelled {
+            liked.toggle()
+            burst = true
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            burst = false
+            try? await Task.sleep(nanoseconds: 900_000_000)
         }
     }
 }
@@ -127,19 +125,18 @@ struct PullRefreshPreview: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { runLoop() }
+        .task { await runLoop() }
     }
-    private func runLoop() {
-        Task { @MainActor in
-            while !Task.isCancelled {
-                withAnimation(.easeOut(duration: 0.8)) { progress = 1 }
-                try? await Task.sleep(nanoseconds: 800_000_000)
-                refreshing = true
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
-                refreshing = false
-                withAnimation(.easeIn(duration: 0.3)) { progress = 0 }
-                try? await Task.sleep(nanoseconds: 600_000_000)
-            }
+    @MainActor
+    private func runLoop() async {
+        while !Task.isCancelled {
+            withAnimation(.easeOut(duration: 0.8)) { progress = 1 }
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            refreshing = true
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            refreshing = false
+            withAnimation(.easeIn(duration: 0.3)) { progress = 0 }
+            try? await Task.sleep(nanoseconds: 600_000_000)
         }
     }
 }
@@ -180,14 +177,13 @@ struct CardFlipPreview: View {
         }
         .frame(width: 110, height: 70)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { runLoop() }
+        .task { await runLoop() }
     }
-    private func runLoop() {
-        Task { @MainActor in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_400_000_000)
-                withAnimation(.spring(response: 0.6, dampingFraction: 0.75)) { flipped.toggle() }
-            }
+    @MainActor
+    private func runLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.75)) { flipped.toggle() }
         }
     }
 }
@@ -292,16 +288,15 @@ struct ToastPreview: View {
         }
         .padding(.top, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { runLoop() }
+        .task { await runLoop() }
     }
-    private func runLoop() {
-        Task { @MainActor in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 700_000_000)
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { show = true }
-                try? await Task.sleep(nanoseconds: 1_400_000_000)
-                withAnimation(.easeInOut(duration: 0.3)) { show = false }
-            }
+    @MainActor
+    private func runLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { show = true }
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            withAnimation(.easeInOut(duration: 0.3)) { show = false }
         }
     }
 }
@@ -350,15 +345,14 @@ struct NumberTickerPreview: View {
             .contentTransition(.numericText(value: Double(value)))
             .animation(.spring(response: 0.5, dampingFraction: 0.7), value: value)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .onAppear { runLoop() }
+            .task { await runLoop() }
     }
-    private func runLoop() {
-        Task { @MainActor in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_200_000_000)
-                value += Int.random(in: 1...20)
-                if value > 2000 { value = 1100 }
-            }
+    @MainActor
+    private func runLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            value += Int.random(in: 1...20)
+            if value > 2000 { value = 1100 }
         }
     }
 }
@@ -386,14 +380,13 @@ struct HamburgerPreview: View {
         .frame(width: 36, height: 36)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: open)
-        .onAppear { runLoop() }
+        .task { await runLoop() }
     }
-    private func runLoop() {
-        Task { @MainActor in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_300_000_000)
-                open.toggle()
-            }
+    @MainActor
+    private func runLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 1_300_000_000)
+            open.toggle()
         }
     }
 }
@@ -459,14 +452,13 @@ struct LiquidTabsPreview: View {
         .padding(.horizontal, 18)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.spring(response: 0.45, dampingFraction: 0.7), value: selection)
-        .onAppear { runLoop() }
+        .task { await runLoop() }
     }
-    private func runLoop() {
-        Task { @MainActor in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                selection = (selection + 1) % icons.count
-            }
+    @MainActor
+    private func runLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            selection = (selection + 1) % icons.count
         }
     }
 }
@@ -494,16 +486,15 @@ struct ConfettiPreview: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { runLoop() }
+        .task { await runLoop() }
     }
-    private func runLoop() {
-        Task { @MainActor in
-            while !Task.isCancelled {
-                go = false
-                try? await Task.sleep(nanoseconds: 50_000_000)
-                go = true
-                try? await Task.sleep(nanoseconds: 1_300_000_000)
-            }
+    @MainActor
+    private func runLoop() async {
+        while !Task.isCancelled {
+            go = false
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            go = true
+            try? await Task.sleep(nanoseconds: 1_300_000_000)
         }
     }
 }
@@ -583,15 +574,14 @@ struct ProgressArcPreview: View {
         }
         .frame(width: 80, height: 80)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { runLoop() }
+        .task { await runLoop() }
     }
-    private func runLoop() {
-        Task { @MainActor in
-            while !Task.isCancelled {
-                let target = Double.random(in: 0.3...0.95)
-                progress = target
-                try? await Task.sleep(nanoseconds: 1_300_000_000)
-            }
+    @MainActor
+    private func runLoop() async {
+        while !Task.isCancelled {
+            let target = Double.random(in: 0.3...0.95)
+            progress = target
+            try? await Task.sleep(nanoseconds: 1_300_000_000)
         }
     }
 }

@@ -62,16 +62,54 @@ enum AnimationPreviewRegistry {
     static var runtimeDescriptors: [String: AuroraDescriptor] = [:]
 
     /// Returns the preview view for a given id, or a fallback placeholder.
+    /// Every preview is wrapped in `PreviewStage` so subtrees marked paused
+    /// (hidden tabs, inactive scene) stop rendering entirely.
     @ViewBuilder
     static func view(for id: String) -> some View {
-        if let make = builders[id] {
-            make()
-        } else if let descriptor = AuroraDescriptors.byId[id] {
-            ParametricAuroraPreview(descriptor: descriptor)
-        } else if let descriptor = runtimeDescriptors[id] {
-            ParametricAuroraPreview(descriptor: descriptor)
+        PreviewStage {
+            if let make = builders[id] {
+                make()
+            } else if let descriptor = AuroraDescriptors.byId[id] {
+                ParametricAuroraPreview(descriptor: descriptor)
+            } else if let descriptor = runtimeDescriptors[id] {
+                ParametricAuroraPreview(descriptor: descriptor)
+            } else {
+                PlaceholderPreview(id: id)
+            }
+        }
+    }
+}
+
+// MARK: - Power management
+
+private struct PreviewsPausedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// True when animation previews in this subtree must stop rendering.
+    /// RootView sets it for hidden tabs and inactive scenes: every preview is
+    /// `repeatForever`/loop-driven, so leaving them mounted off-screen keeps
+    /// the GPU redrawing continuously (device heat + battery drain).
+    var previewsPaused: Bool {
+        get { self[PreviewsPausedKey.self] }
+        set { self[PreviewsPausedKey.self] = newValue }
+    }
+}
+
+/// Swaps a live preview for a static fill while paused. Unmounting the
+/// preview subtree stops its `repeatForever` animations and cancels its
+/// `.task` drive loops; remounting restarts the animation from scratch,
+/// which is fine for decorative previews.
+private struct PreviewStage<Content: View>: View {
+    @Environment(\.previewsPaused) private var paused
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        if paused {
+            Color.black
         } else {
-            PlaceholderPreview(id: id)
+            content()
         }
     }
 }

@@ -730,10 +730,20 @@ final class AuthStore: ObservableObject {
     private static let defaultsKey = "enigma.auth.session"
     private let defaults: UserDefaults
 
+    /// supabase-swift-backed engine for the two social flows. Lazily built so
+    /// the SDK `SupabaseClient` is only constructed when a social button is
+    /// actually tapped — email auth never touches it. Injectable for tests.
+    private let socialAuth: () -> SocialAuthServicing
+    private lazy var socialAuthService: SocialAuthServicing = socialAuth()
+
     var isAuthenticated: Bool { session != nil }
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        socialAuth: @escaping () -> SocialAuthServicing = { SocialAuthService() }
+    ) {
         self.defaults = defaults
+        self.socialAuth = socialAuth
         if let data = defaults.data(forKey: Self.defaultsKey) {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
@@ -805,6 +815,48 @@ final class AuthStore: ObservableObject {
             lastError = error
         } catch {
             lastError = .unknown(error.localizedDescription)
+        }
+    }
+
+    /// Signs in via Sign in with Apple. `idToken` is the JWT extracted from the
+    /// `ASAuthorizationAppleIDCredential`; `nonce` is the *raw* (unhashed)
+    /// nonce whose SHA-256 was attached to the authorization request — Supabase
+    /// needs the raw value to validate the hash embedded in the token. Mirrors
+    /// the email `signIn` shape: persists on success, surfaces typed errors.
+    func signInWithApple(idToken: String, nonce: String) async {
+        isLoading = true
+        lastError = nil
+        defer { isLoading = false }
+        do {
+            let session = try await socialAuthService.signInWithApple(idToken: idToken, nonce: nonce)
+            persist(session)
+            pendingVerificationEmail = nil
+            justSignedIn = true
+        } catch let error as AuthError {
+            lastError = error
+        } catch {
+            lastError = .network(error.localizedDescription)
+        }
+    }
+
+    /// Signs in via Google web OAuth (ASWebAuthenticationSession-backed inside
+    /// the SDK). Mirrors the email `signIn` shape. User cancellation surfaces
+    /// as a thrown error from the SDK; we map it to `.network` like any other
+    /// failure (the UI simply shows the banner — there's no special-casing of
+    /// cancel here because there's no token to act on).
+    func signInWithGoogle() async {
+        isLoading = true
+        lastError = nil
+        defer { isLoading = false }
+        do {
+            let session = try await socialAuthService.signInWithGoogle()
+            persist(session)
+            pendingVerificationEmail = nil
+            justSignedIn = true
+        } catch let error as AuthError {
+            lastError = error
+        } catch {
+            lastError = .network(error.localizedDescription)
         }
     }
 

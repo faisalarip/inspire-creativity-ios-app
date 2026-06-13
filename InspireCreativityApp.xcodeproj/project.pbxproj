@@ -48,6 +48,9 @@
 		7A57DC411B958841D94C22F2 /* AuroraPackPromoCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E732010C44DA939BEC3410 /* AuroraPackPromoCard.swift */; };
 		8209D3F5A6F84A50E183D1C4 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E2CA19008E4095446DFDD3 /* SearchView.swift */; };
 		871704859E5F1DACFA93B81C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2D7586E1E77DA3D2DFAB881 /* Foundation.framework */; };
+		319E121B5FDDA09BBED857C8 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = FA9A8BB58F4DD4C3E0A71147 /* Supabase */; };
+		46D88684076430FFA4E2611C /* SocialAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3D86A2772663765B1B8AD1C /* SocialAuthService.swift */; };
+		6C2F7BDB68B188632AD59293 /* SocialAuthSessionMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6231D97F09CFF8978A45474D /* SocialAuthSessionMappingTests.swift */; };
 		90677EED8BEACF9DB9D25769 /* AnimationPreviewRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AC5A43E55628209613E297E /* AnimationPreviewRegistry.swift */; };
 		974A7B90B561E10D30F14155 /* PurchaseRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 959AF64BF0F8536C8885F891 /* PurchaseRepository.swift */; };
 		97F6358CB2A2369D7A1AED9F /* FavoritesRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56FE1D93A4E036DDEE1BABFB /* FavoritesRepository.swift */; };
@@ -129,6 +132,7 @@
 		BFDAC0DB5D6B97DE0FF62E14 /* ProBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProBadge.swift; sourceTree = "<group>"; };
 		C6B7915621E0B7956B01D868 /* AnimationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationRepository.swift; sourceTree = "<group>"; };
 		CBC451507EFC0E1F6FF23208 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		FCDFAA623C062EC44FE48AC7 /* InspireCreativityApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = InspireCreativityApp.entitlements; sourceTree = "<group>"; };
 		CEB7FD6D0E9A8A53A3C95972 /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
 		CF7AD31123582821158EDBE3 /* CorePreviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CorePreviews.swift; sourceTree = "<group>"; };
 		D2FA671FB62178768DC33684 /* AuthServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthServiceTests.swift; sourceTree = "<group>"; };
@@ -137,6 +141,8 @@
 		E0A26A73E32CA21847D50130 /* InspireCreativityAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = InspireCreativityAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E872C6A233E789C02029A285 /* RatingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RatingView.swift; sourceTree = "<group>"; };
 		EA8184AB99520780EA38DE62 /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
+		A3D86A2772663765B1B8AD1C /* SocialAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialAuthService.swift; sourceTree = "<group>"; };
+		6231D97F09CFF8978A45474D /* SocialAuthSessionMappingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SocialAuthSessionMappingTests.swift; sourceTree = "<group>"; };
 		EBA2741E26DB5539EAD51C34 /* AuthStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthStoreTests.swift; sourceTree = "<group>"; };
 		EF0182DF85A7CD0319333F24 /* InspireCreativityApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = InspireCreativityApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F884AF643F2A03F7498F3EDB /* HeroCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroCard.swift; sourceTree = "<group>"; };
@@ -157,6 +163,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				319E121B5FDDA09BBED857C8 /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -272,6 +279,7 @@
 			children = (
 				D224CBEECC6CCC1C4DFEAA0F /* Animations */,
 				C66F682FA6DE68D41C231B69 /* App */,
+				5C2C6697E75EB176D84DB43D /* Auth */,
 				473A583C5C6C2C1CF47544C4 /* DesignSystem */,
 				9A0F55A11546BBEB3F7E83B8 /* Features */,
 				1D77BB28479B5D10307A06A5 /* Models */,
@@ -281,6 +289,7 @@
 				12F1C9823B7D241C34392D7F /* Info.plist */,
 				07C7BBF7BEA8AE2FAE7CBF7C /* Store */,
 				CBC451507EFC0E1F6FF23208 /* PrivacyInfo.xcprivacy */,
+				FCDFAA623C062EC44FE48AC7 /* InspireCreativityApp.entitlements */,
 			);
 			path = InspireCreativityApp;
 			sourceTree = "<group>";
@@ -302,6 +311,7 @@
 				EBA2741E26DB5539EAD51C34 /* AuthStoreTests.swift */,
 				FDA308513D84255C3951D32D /* AuthValidationTests.swift */,
 				FDA308513D84255C3951D32E /* CatalogPolicyTests.swift */,
+				6231D97F09CFF8978A45474D /* SocialAuthSessionMappingTests.swift */,
 				361E22506EB084BF5ED5B712 /* MockURLProtocol.swift */,
 			);
 			path = InspireCreativityAppTests;
@@ -387,6 +397,14 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		5C2C6697E75EB176D84DB43D /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				A3D86A2772663765B1B8AD1C /* SocialAuthService.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
 		C66F682FA6DE68D41C231B69 /* App */ = {
 			isa = PBXGroup;
 			children = (
@@ -424,6 +442,9 @@
 			dependencies = (
 			);
 			name = InspireCreativityApp;
+			packageProductDependencies = (
+				FA9A8BB58F4DD4C3E0A71147 /* Supabase */,
+			);
 			productName = InspireCreativityApp;
 			productReference = EF0182DF85A7CD0319333F24 /* InspireCreativityApp.app */;
 			productType = "com.apple.product-type.application";
@@ -470,6 +491,9 @@
 				Base,
 			);
 			mainGroup = 2B731CEFC6751AAE0EC69B98;
+			packageReferences = (
+				510C8809CD17B88FB302F445 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			productRefGroup = B23D89B2D2DF3745A003AEB1 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -511,6 +535,7 @@
 				D2972E9D5510B9B3BAC823ED /* CorePreviews.swift in Sources */,
 				4D2308714EEBF813AD3D4CB6 /* CreativePreviews.swift in Sources */,
 				46C61154580A67BC625036C5 /* AppContainer.swift in Sources */,
+				46D88684076430FFA4E2611C /* SocialAuthService.swift in Sources */,
 				5C7AE8FD57EEA3DE1C0E20F4 /* AppRouter.swift in Sources */,
 				0E7AE278E26BC029387ABD01 /* FloatingTabBar.swift in Sources */,
 				2F3CCB17876C5D4828C866E4 /* RootView.swift in Sources */,
@@ -566,6 +591,7 @@
 				35350DFE964C701DD6016C07 /* AuthStoreTests.swift in Sources */,
 				55F7A68CF2C1D4E3D9D5B144 /* AuthValidationTests.swift in Sources */,
 				55F7A68CF2C1D4E3D9D5B145 /* CatalogPolicyTests.swift in Sources */,
+				6C2F7BDB68B188632AD59293 /* SocialAuthSessionMappingTests.swift in Sources */,
 				126192DAB8E3A2A077F07F52 /* MockURLProtocol.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -605,6 +631,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = InspireCreativityApp/InspireCreativityApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"InspireCreativityApp/Preview Content\"";
@@ -621,7 +648,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.inspirecreativity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -690,6 +717,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = InspireCreativityApp/InspireCreativityApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"InspireCreativityApp/Preview Content\"";
@@ -706,7 +734,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.inspirecreativity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -775,6 +803,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		510C8809CD17B88FB302F445 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.47.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		FA9A8BB58F4DD4C3E0A71147 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 510C8809CD17B88FB302F445 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 46F86FAA6BBF9AC94A7E4595 /* Project object */;
 }

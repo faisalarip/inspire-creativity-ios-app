@@ -333,7 +333,10 @@ enum AnimationCatalogSeed {
             rating: rating,
             price: keepPro ? 10 : nil,
             description: "\(d.theme) · \(d.use). Animated mesh background tuned with the \(d.palette.count)-color palette.",
-            swiftCode: Code.auroraMesh
+            // Palette-true: each aurora item's code is generated from its own
+            // descriptor so the copied snippet matches the preview the buyer saw.
+            // (Previously all aurora items shared one hardcoded `Code.auroraMesh`.)
+            swiftCode: AuroraCodeGen.swiftCode(for: d)
         )
     }
 

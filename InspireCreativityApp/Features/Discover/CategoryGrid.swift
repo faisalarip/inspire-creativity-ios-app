@@ -9,7 +9,7 @@ import SwiftUI
 
 struct CategoryGrid: View {
     let categories: [(category: Category, count: Int)]
-    let onPick: () -> Void
+    let onPick: (Category) -> Void
 
     var body: some View {
         LazyVGrid(
@@ -17,7 +17,9 @@ struct CategoryGrid: View {
             spacing: 10
         ) {
             ForEach(categories.prefix(6), id: \.category.id) { entry in
-                CategoryTile(category: entry.category, count: entry.count, action: onPick)
+                CategoryTile(category: entry.category, count: entry.count) {
+                    onPick(entry.category)
+                }
             }
         }
         .padding(.horizontal, Theme.Spacing.xl)

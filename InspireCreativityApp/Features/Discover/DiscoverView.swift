@@ -78,7 +78,9 @@ struct DiscoverView: View {
                 }
 
                 SectionHeader("Browse by category")
-                CategoryGrid(categories: viewModel.categories) {
+                CategoryGrid(categories: viewModel.categories) { category in
+                    // Carry the tapped category into a filtered Browse tab.
+                    router.pendingBrowseCategory = category
                     router.selectedTab = .browse
                 }
 

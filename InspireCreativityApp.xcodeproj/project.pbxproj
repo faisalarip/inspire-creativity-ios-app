@@ -36,6 +36,7 @@
 		558128C8EAB2EEF4C660773B /* HexColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A6703F807C783B2C426ADB6 /* HexColor.swift */; };
 		55F7A68CF2C1D4E3D9D5B144 /* AuthValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA308513D84255C3951D32D /* AuthValidationTests.swift */; };
 		55F7A68CF2C1D4E3D9D5B145 /* CatalogPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA308513D84255C3951D32E /* CatalogPolicyTests.swift */; };
+		7A1C0DE5B0F1CA7E90AB0001 /* BrowseFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C0DE5B0F1CA7E90AB0002 /* BrowseFilterTests.swift */; };
 		E47927F041A11F6FA21D94B3 /* AuroraCodeGenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E359BB92170C0ED91B2520CF /* AuroraCodeGenTests.swift */; };
 		5C4F2E7BD1D4FF17E7F762E4 /* AnimationRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6B7915621E0B7956B01D868 /* AnimationRepository.swift */; };
 		5C7AE8FD57EEA3DE1C0E20F4 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EC77EA4D5A71E148B7FE7E3 /* AppRouter.swift */; };
@@ -151,6 +152,7 @@
 		F884AF643F2A03F7498F3EDB /* HeroCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroCard.swift; sourceTree = "<group>"; };
 		FDA308513D84255C3951D32D /* AuthValidationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthValidationTests.swift; sourceTree = "<group>"; };
 		FDA308513D84255C3951D32E /* CatalogPolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CatalogPolicyTests.swift; sourceTree = "<group>"; };
+		7A1C0DE5B0F1CA7E90AB0002 /* BrowseFilterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowseFilterTests.swift; sourceTree = "<group>"; };
 		E359BB92170C0ED91B2520CF /* AuroraCodeGenTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuroraCodeGenTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -315,6 +317,7 @@
 				EBA2741E26DB5539EAD51C34 /* AuthStoreTests.swift */,
 				FDA308513D84255C3951D32D /* AuthValidationTests.swift */,
 				FDA308513D84255C3951D32E /* CatalogPolicyTests.swift */,
+				7A1C0DE5B0F1CA7E90AB0002 /* BrowseFilterTests.swift */,
 				E359BB92170C0ED91B2520CF /* AuroraCodeGenTests.swift */,
 				6231D97F09CFF8978A45474D /* SocialAuthSessionMappingTests.swift */,
 				361E22506EB084BF5ED5B712 /* MockURLProtocol.swift */,
@@ -598,6 +601,7 @@
 				35350DFE964C701DD6016C07 /* AuthStoreTests.swift in Sources */,
 				55F7A68CF2C1D4E3D9D5B144 /* AuthValidationTests.swift in Sources */,
 				55F7A68CF2C1D4E3D9D5B145 /* CatalogPolicyTests.swift in Sources */,
+				7A1C0DE5B0F1CA7E90AB0001 /* BrowseFilterTests.swift in Sources */,
 				E47927F041A11F6FA21D94B3 /* AuroraCodeGenTests.swift in Sources */,
 				6C2F7BDB68B188632AD59293 /* SocialAuthSessionMappingTests.swift in Sources */,
 				126192DAB8E3A2A077F07F52 /* MockURLProtocol.swift in Sources */,

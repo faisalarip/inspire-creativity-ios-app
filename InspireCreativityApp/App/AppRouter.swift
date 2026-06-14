@@ -47,6 +47,11 @@ final class AppRouter: ObservableObject {
 
     @Published var selectedTab: AppTab = .discover
 
+    /// Set when a category tile is tapped on Discover; BrowseView reads it (via
+    /// `takePendingBrowseCategory()`) on the next change and pre-filters to that
+    /// category. nil means "no pending drill-down".
+    @Published var pendingBrowseCategory: Category?
+
     @Published var discoverPath: [AppRoute] = []
     @Published var browsePath: [AppRoute] = []
     @Published var samplesPath: [AppRoute] = []
@@ -59,6 +64,14 @@ final class AppRouter: ObservableObject {
         case .samples:   return Binding(get: { self.samplesPath },   set: { self.samplesPath = $0 })
         case .library:  return Binding(get: { self.libraryPath },  set: { self.libraryPath = $0 })
         }
+    }
+
+    /// Returns the pending Browse-tab category and clears it, so a tapped
+    /// category applies exactly once (re-tapping the same category re-triggers
+    /// it because the value goes nil → category again).
+    func takePendingBrowseCategory() -> Category? {
+        defer { pendingBrowseCategory = nil }
+        return pendingBrowseCategory
     }
 
     func push(_ route: AppRoute) {

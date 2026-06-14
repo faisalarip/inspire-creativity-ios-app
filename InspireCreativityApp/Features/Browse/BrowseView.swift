@@ -113,6 +113,13 @@ struct BrowseView: View {
         .refreshable {
             await viewModel.reload()
         }
+        // Apply a category drilled-in from Discover. Uses onChange, not
+        // onAppear: RootView keeps all four tabs mounted in an opacity ZStack,
+        // so onAppear fires once at launch and never on tab switch.
+        .onChange(of: router.pendingBrowseCategory) { _, newValue in
+            guard newValue != nil, let category = router.takePendingBrowseCategory() else { return }
+            viewModel.selectedCategory = category
+        }
         .background(Theme.Palette.background)
         .ignoresSafeArea(edges: .bottom)
     }

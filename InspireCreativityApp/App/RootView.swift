@@ -933,9 +933,16 @@ private struct SocialAuthSection: View {
             Button {
                 Task { await authStore.signInWithGoogle() }
             } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "globe")
-                        .font(.system(size: 16, weight: .semibold))
+                HStack(spacing: 10) {
+                    // Official multi-color Google "G" (asset, not an SF Symbol).
+                    // `.original` keeps its four brand colors through the
+                    // HStack's white `foregroundStyle`. Per Google's branding,
+                    // the unaltered full-color mark is used as-is.
+                    Image("GoogleG")
+                        .renderingMode(.original)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 18, height: 18)
                     Text("Continue with Google")
                         .font(.system(size: 15, weight: .semibold))
                 }

@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""Integrate a generated batch: write view (+ metal) files and wiring, then run
+the pbxproj adder and the code-sample generator.
+
+Inputs:
+  --spec   batch spec JSON from prepare_batch.py
+  --gen    workflow output JSON: [{id, viewSource, metalSource?}, ...]
+
+After this runs, build with xcodebuild to verify the batch.
+"""
+import argparse, json, os, re, subprocess, sys
+import catalog_lib as cl
+
+REG_FILE = os.path.join(cl.ROOT, "InspireCreativityApp/Animations/Catalog/BespokeAnimations.swift")
+SEED_FILE = os.path.join(cl.ROOT, "InspireCreativityApp/Repositories/Seed/BespokeSeed.swift")
+REG_MARK = "// BESPOKE-REGISTRATION-INSERT"
+SEED_MARK = "// BESPOKE-SEED-INSERT"
+INTEGRATED = os.path.join(cl.ROOT, "Tools/integrated_ids.json")
+
+def swift_str(s: str) -> str:
+    return json.dumps(" ".join(s.split()), ensure_ascii=False)  # collapse whitespace, escape
+
+def normalize(src: str) -> str:
+    """Auto-fix the two systemic compile hazards seen in calibration:
+    1. Strip `#Preview` blocks — they go ambiguous (`SwiftUI.Preview` vs
+       `UIKit.Preview`) whenever a file imports UIKit, and add no catalog value.
+    2. A local `extension Color { init(hex:) }` collides with the app's
+       `HexColor.init(hex:)` (access level doesn't disambiguate same-signature
+       members on a type). Rename the external label to `hexCode`, keep the
+       internal name `hex` so the body is untouched and the snippet stays
+       self-contained & paste-ready.
+    """
+    out = src
+    while True:
+        m = re.search(r'\n[ \t]*(//[^\n]*\n[ \t]*)?#Preview\b', out)
+        if not m:
+            break
+        brace = out.find('{', m.end())
+        if brace == -1:
+            break
+        depth, i = 0, brace
+        while i < len(out):
+            if out[i] == '{':
+                depth += 1
+            elif out[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        out = out[:m.start()] + out[i + 1:]
+    if 'extension Color' in out and '(hex:' in out:
+        out = out.replace('init(hex:', 'init(hexCode hex:').replace('Color(hex:', 'Color(hexCode:')
+    return out.rstrip() + '\n'
+
+def insert_before_marker(path, marker, block):
+    txt = open(path, encoding="utf-8").read()
+    if marker not in txt:
+        sys.exit(f"marker {marker} not found in {path}")
+    txt = txt.replace(marker, block + marker, 1)
+    open(path, "w", encoding="utf-8").write(txt)
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--spec", required=True)
+    ap.add_argument("--gen", required=True)
+    args = ap.parse_args()
+
+    specs = {s["id"]: s for s in json.load(open(args.spec, encoding="utf-8"))}
+    gen = json.load(open(args.gen, encoding="utf-8"))
+    if isinstance(gen, dict) and "results" in gen:
+        gen = gen["results"]
+
+    new_files, reg_lines, seed_lines, done_ids, skipped = [], [], [], [], []
+    for item in gen:
+        if not item:
+            continue
+        cid = item.get("id")
+        spec = specs.get(cid)
+        if not spec:
+            skipped.append(f"{cid} (no spec)"); continue
+        src = normalize((item.get("viewSource") or "").strip())
+        if "struct " not in src or spec["typeName"] not in src:
+            skipped.append(f"{cid} (viewSource missing struct {spec['typeName']})"); continue
+
+        folder_abs = os.path.join(cl.CATALOG_DIR, spec["folder"])
+        os.makedirs(folder_abs, exist_ok=True)
+
+        # markers
+        markers = [f"// catalog-id: {cid}"]
+        metal_src = (item.get("metalSource") or "").strip()
+        if spec["isMetal"] and metal_src:
+            markers.append(f"// catalog-metal: {spec['typeName']}.metal")
+        header = "\n".join(markers) + "\n"
+        if not src.startswith("//") and "import SwiftUI" in src:
+            body = header + src
+        else:
+            body = header + src
+        swift_path = os.path.join(folder_abs, spec["typeName"] + ".swift")
+        open(swift_path, "w", encoding="utf-8").write(body if body.endswith("\n") else body + "\n")
+        new_files.append(os.path.relpath(swift_path, cl.ROOT))
+
+        if spec["isMetal"] and metal_src:
+            metal_path = os.path.join(folder_abs, spec["typeName"] + ".metal")
+            open(metal_path, "w", encoding="utf-8").write(metal_src + ("\n" if not metal_src.endswith("\n") else ""))
+            new_files.append(os.path.relpath(metal_path, cl.ROOT))
+
+        tn = spec["typeName"]
+        reg_lines.append(
+            f'        .init(id: "{cid}",\n'
+            f'              grid: {{ AnyView({tn}(demo: true)) }},\n'
+            f'              interactive: {{ AnyView({tn}(demo: false)) }}),\n')
+        seed_lines.append(
+            f'        make(id: "{cid}", name: {swift_str(spec["name"])},\n'
+            f'             category: {cl.CATEGORY_ENUM[spec["category"]]}, difficulty: {cl.DIFFICULTY_ENUM[spec["difficulty"]]}, iosVersion: "{spec["iosVersion"]}",\n'
+            f'             tintHex: "{spec["tintHex"]}",\n'
+            f'             description: {swift_str(spec["behavior"])}),\n')
+        done_ids.append(cid)
+
+    if not done_ids:
+        print("nothing integrated. skipped:", skipped); sys.exit(1)
+
+    insert_before_marker(REG_FILE, REG_MARK, "".join(reg_lines))
+    insert_before_marker(SEED_FILE, SEED_MARK, "".join(seed_lines))
+
+    # pbxproj + codesamples
+    subprocess.run(["ruby", os.path.join(cl.ROOT, "Tools/add_sources.rb"), *new_files], cwd=cl.ROOT, check=True)
+    subprocess.run(["python3", os.path.join(cl.ROOT, "Tools/gen_codesamples.py")], cwd=cl.ROOT, check=True)
+
+    prev = set(json.load(open(INTEGRATED))) if os.path.exists(INTEGRATED) else set()
+    prev.update(done_ids)
+    json.dump(sorted(prev), open(INTEGRATED, "w"), indent=1)
+
+    print(f"\nINTEGRATED {len(done_ids)}: {', '.join(done_ids)}")
+    if skipped:
+        print(f"SKIPPED {len(skipped)}: {skipped}")
+    print(f"new files: {len(new_files)}")
+
+if __name__ == "__main__":
+    main()

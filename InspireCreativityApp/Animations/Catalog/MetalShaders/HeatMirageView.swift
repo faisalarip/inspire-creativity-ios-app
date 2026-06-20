@@ -79,5 +79,3 @@ struct HeatMirageView: View {
                 y: (cos(t * 0.37) * 0.5 + 0.5) * size.height)
     }
 }
-
-#Preview { HeatMirageView(demo: true).frame(height: 200) }

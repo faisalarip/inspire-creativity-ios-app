@@ -119,5 +119,3 @@ struct ShatterTextRenderer: TextRenderer {
         }
     }
 }
-
-#Preview { GlassShatterSettleView(demo: true).frame(height: 200) }

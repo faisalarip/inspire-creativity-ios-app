@@ -165,5 +165,3 @@ private struct SheetMorphStage: View {
         }
     }
 }
-
-#Preview { RubberBandSheetMorphView(demo: true).frame(height: 200) }

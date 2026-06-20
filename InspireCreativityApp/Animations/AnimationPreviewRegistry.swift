@@ -69,6 +69,8 @@ enum AnimationPreviewRegistry {
         PreviewStage {
             if let make = builders[id] {
                 make()
+            } else if let make = BespokeAnimations.gridBuilders[id] {
+                make()
             } else if let descriptor = AuroraDescriptors.byId[id] {
                 ParametricAuroraPreview(descriptor: descriptor)
             } else if let descriptor = runtimeDescriptors[id] {
@@ -76,6 +78,18 @@ enum AnimationPreviewRegistry {
             } else {
                 PlaceholderPreview(id: id)
             }
+        }
+    }
+
+    /// Preview for the large Detail surface. Bespoke animations supply a real,
+    /// finger-interactive variant here; everything else falls back to the
+    /// self-driving grid loop from `view(for:)`.
+    @ViewBuilder
+    static func interactiveView(for id: String) -> some View {
+        if let make = BespokeAnimations.interactiveBuilders[id] {
+            PreviewStage { make() }
+        } else {
+            view(for: id)
         }
     }
 }

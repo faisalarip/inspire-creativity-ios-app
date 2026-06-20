@@ -16,6 +16,9 @@ struct DetailView: View {
     @State private var sheet: SheetState = .peek
     @State private var dragOffset: CGFloat = 0
     @State private var showAuthSheet = false
+    /// True while a finger is on the interactive preview, so the enclosing
+    /// ScrollView stops scrolling and the preview's own gesture wins.
+    @State private var previewInteracting = false
 
     /// Three-way gate (see `CodeAccess`): the Pro entitlement unlocks code in
     /// any auth state, Pro items route to the paywall, and free items ask
@@ -60,14 +63,24 @@ struct DetailView: View {
                         VStack(spacing: 0) {
                             ZStack {
                                 Color(hex: viewModel.item.tintHex)
-                                AnimationPreviewRegistry.view(for: viewModel.item.id)
+                                AnimationPreviewRegistry.interactiveView(for: viewModel.item.id)
                             }
                             .frame(height: previewHeight)
+                            // Claim the touch at touch-down (minimumDistance 0) and
+                            // disable the ScrollView while the finger is on the preview,
+                            // so an interactive piece's own vertical drag isn't stolen
+                            // by scrolling. Taps elsewhere scroll normally.
+                            .simultaneousGesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onChanged { _ in previewInteracting = true }
+                                    .onEnded { _ in previewInteracting = false }
+                            )
 
                             meta
                                 .padding(.bottom, sheetHeight + 20)
                         }
                     }
+                    .scrollDisabled(previewInteracting)
                     .ignoresSafeArea(edges: .top)
 
                     CodeSheet(

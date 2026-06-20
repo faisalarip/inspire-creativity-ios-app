@@ -19,6 +19,7 @@ Grow the catalog by **210 bespoke animations** that are "creative and wonderful"
 | Interactivity | **Self-driving demo loop in grid + real finger-interaction in Detail** | User pick. Grid tiles are tiny/auto-play; Detail is large and can host real gestures. |
 | Category mix | **Gesture-weighted** across all 10 categories | User pick. |
 | Count | **210** (Gestures 40 · Micro-interactions 35 · Buttons 25 · Transitions 25 · Text effects 20 · Loaders 20 · Navigation 15 · Onboarding 12 · Metal Shaders 10 · Backgrounds 8) | Headroom over "200+", gesture-weighted. |
+| Pricing | **All 210 are Pro** | `CatalogGatingTests` locks the free taster at exactly 20; new premium content must not add to the free set. The catalog JSON's per-item `isPro` is overridden to Pro at seed time (`BespokeSeed.make`). |
 
 ## 3. How an animation exists today (baseline)
 
@@ -61,6 +62,7 @@ struct <TypeName>: View {
 - **`demo: true`** drives itself (a `PhaseAnimator`/`TimelineView` cycles the gesture's progress 0→1→0) so the grid tile looks alive with no touch.
 - **`demo: false`** wires the real gesture (`DragGesture`, `MagnifyGesture`, `RotationGesture`, …).
 - The file is **self-contained and paste-ready** (embeds its own `Color(hex:)` etc. when needed), exactly like `AuroraCodeGen`'s output — so its source *is* the `swiftCode`.
+- **Metal Shaders exception:** custom shaders need a companion `.metal` file in the target (SwiftUI can't compile a shader from a string). So a Metal item is *two* files — `XxxView.swift` (marked `// catalog-metal: Xxx.metal`) + `Xxx.metal`. The generated `swiftCode` embeds the `.metal` source as a trailing comment block so the snippet is still complete. Requires the Metal toolchain (see Gate 1 findings).
 
 ### 4.2 Registry extension (additive, zero churn to existing 107)
 
@@ -121,6 +123,15 @@ Agents return **data, never file edits** (the 4 central files would conflict und
 - **SwiftUI-only, zero app deps** — no `Theme`, `HexColor`, or design-system references. This is the entire basis of `swiftCode = source`; it's an explicit **reject** criterion. (Accepted consequence: catalog animations don't use app Theme colors — fine for a standalone catalog.)
 - **Deterministic `typeName`** — derived centrally from `id`, uniqueness checked across all 210 **plus** the existing 107 symbols (`SpringButtonPreview`, etc.). Agents don't name their own structs (collisions surface only at link time).
 - **Sanitized folder/group names** — `Micro-interactions`→`MicroInteractions`, `Text effects`→`TextEffects`, `Metal Shaders`→`MetalShaders`.
+- **Demo loop must never go fully blank** — a `previewLoop` that drops to zero opacity / off-screen (e.g. a shatter scatter phase) leaves grid tiles momentarily empty. Keep a legible minimum state every frame.
+
+### 5.3 Gate 1 — outcome (PASSED, on branch `feat/bespoke-animations-catalog`)
+Hand-authored slice of 3 (`ges-rubberband-sheet-morph`, `tx-shatter-glass`, `mtl-heat-mirage`) proved the full pipeline: file → `add_sources.rb` → registry (grid+interactive) → `BespokeSeed` → `gen_codesamples.py` → `xcodebuild` **green** → all tests pass → app launches & renders the new tiles (correct Pro/iOS badges, no crash). Findings, all resolved:
+
+1. **Metal toolchain required (Xcode 26).** `.metal` files fail with *"missing Metal Toolchain"* until `xcodebuild -downloadComponent MetalToolchain` is run once (≈705 MB, now installed). Without it, the Metal Shaders category can't build.
+2. **`ScrollView` vs. vertical drag.** `DetailView`'s preview sits in a `ScrollView`; an interactive vertical drag was at risk of being stolen by scroll. **Resolved generically** in `DetailView`: a `simultaneousGesture(DragGesture(minimumDistance: 0))` flips `previewInteracting` at touch-down and `.scrollDisabled(previewInteracting)` frees the preview's own gesture. No per-category special-casing needed.
+3. **Free-taster invariant.** `CatalogGatingTests` requires exactly 20 free items → all bespoke forced Pro (see §2 Pricing).
+4. **Toolchain:** scheme `InspireCreativityApp`, sim `iPhone 17 Pro`, Xcode 26.3, bundle `com.inspirecreativity`. Catalog counter rose 109→112 confirming the merge.
 
 ## 6. Risks & mitigations
 

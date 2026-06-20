@@ -342,7 +342,7 @@ enum AnimationCatalogSeed {
 
     /// All catalog items, with Pro pricing normalized to a flat $10 across both
     /// handcrafted and aurora-derived entries.
-    static let items: [AnimationItem] = (handcrafted + auroraDerived).map { item in
+    static let items: [AnimationItem] = (handcrafted + auroraDerived + BespokeSeed.bespoke).map { item in
         guard item.isPro else { return item }
         return AnimationItem(
             id: item.id, name: item.name, category: item.category,

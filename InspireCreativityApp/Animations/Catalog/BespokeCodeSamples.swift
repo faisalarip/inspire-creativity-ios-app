@@ -25419,6 +25419,1141 @@ private extension Color {
 
 // MARK: - Preview
 """###,
+        "ld-coin-flip-stack": ###"""
+import SwiftUI
+
+// MARK: - CoinFlipStackView_Coin Flip Stack
+// A single coin flips on its horizontal (X) axis with 3D perspective.
+// The heads/tails face swaps at the 90 degree crossing; a foreshortened
+// ground shadow stretches and shrinks with cos(angle). In demo mode it
+// auto-flips forever; the real component idle-spins AND accepts a vertical
+// fling whose release velocity seeds a friction-decayed spin that eases to
+// a face-up rest before resuming the idle spin.
+struct CoinFlipStackView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            CoinFlipStackView_CoinFlipStage(demo: demo, size: geo.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Motion model
+
+private enum CoinFlipStackView_FlipPhase {
+    /// Continuous self-driving spin. `velocity` in degrees/sec.
+    case idle(startAngle: Double, startTime: TimeInterval, velocity: Double)
+    /// Finger is down; angle is held externally via drag translation.
+    case dragging(heldAngle: Double)
+    /// Friction-decayed fling easing to a face-up target.
+    case settling(startAngle: Double, target: Double, startTime: TimeInterval)
+}
+
+private struct CoinFlipStackView_CoinMotion {
+    var phase: CoinFlipStackView_FlipPhase
+    /// Angle captured when a drag begins, so translation is additive.
+    var dragAnchor: Double = 0
+
+    /// Closed-form angle as a pure function of the current clock — no
+    /// state mutation happens during the view update.
+    func angle(at now: TimeInterval) -> Double {
+        switch phase {
+        case let .idle(startAngle, startTime, velocity):
+            return startAngle + velocity * (now - startTime)
+        case let .dragging(heldAngle):
+            return heldAngle
+        case let .settling(startAngle, target, startTime):
+            let k: Double = 2.6                 // friction coefficient
+            let travel = target - startAngle
+            let t = max(0, now - startTime)
+            return startAngle + travel * (1 - exp(-k * t))
+        }
+    }
+
+    /// Once settling has effectively asymptoted, hand back to idle so the
+    /// coin keeps gently flipping and never freezes edge-on.
+    func advanced(at now: TimeInterval) -> CoinFlipStackView_CoinMotion {
+        guard case let .settling(_, target, startTime) = phase else { return self }
+        if now - startTime > 2.4 {
+            var copy = self
+            copy.phase = .idle(startAngle: target, startTime: now, velocity: CoinFlipStackView_CoinMotion.idleVelocity)
+            return copy
+        }
+        return self
+    }
+
+    static let idleVelocity: Double = 150   // degrees/sec resting spin
+}
+
+// MARK: - Stage (drives angle for both modes)
+
+private struct CoinFlipStackView_CoinFlipStage: View {
+    let demo: Bool
+    let size: CGSize
+
+    @State private var motion = CoinFlipStackView_CoinMotion(
+        phase: .idle(startAngle: 0, startTime: 0, velocity: CoinFlipStackView_CoinMotion.idleVelocity)
+    )
+    @State private var didSeedIdle = false
+
+    private var coinDiameter: CGFloat {
+        min(size.width, size.height) * 0.56
+    }
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let now = context.date.timeIntervalSinceReferenceDate
+            let angle = currentAngle(now: now)
+            content(angle: angle, now: now)
+        }
+        .contentShape(Rectangle())
+        .gesture(flingGesture, including: demo ? .none : .all)
+        .onAppear {
+            guard !didSeedIdle else { return }
+            didSeedIdle = true
+            let now = Date().timeIntervalSinceReferenceDate
+            motion.phase = .idle(startAngle: 0, startTime: now, velocity: CoinFlipStackView_CoinMotion.idleVelocity)
+        }
+    }
+
+    // MARK: angle source
+
+    private func currentAngle(now: TimeInterval) -> Double {
+        if demo {
+            // Self-driving: a gentle ease so the flip has a little life,
+            // never zero and never blank.
+            let speed: Double = 200
+            let base = now * speed
+            let wobble = sin(now * 0.9) * 14
+            return base + wobble
+        } else {
+            // Promote a finished settle back to idle without mutating
+            // state inside the body update.
+            let promoted = motion.advanced(at: now)
+            if case .idle = promoted.phase, case .settling = motion.phase {
+                DispatchQueue.main.async { motion = promoted }
+            }
+            return motion.angle(at: now)
+        }
+    }
+
+    // MARK: layout
+
+    @ViewBuilder
+    private func content(angle: Double, now: TimeInterval) -> some View {
+        let radians = angle * .pi / 180
+        let faceFactor = cos(radians)               // +1 heads-flat ... -1 tails-flat
+        let edgeFactor = abs(faceFactor)            // 1 flat, 0 edge-on
+        let d = coinDiameter
+
+        ZStack {
+            CoinFlipStackView_GroundShadow(diameter: d, edgeFactor: edgeFactor)
+                .offset(y: d * 0.52)
+
+            CoinFlipStackView_LandingStack(diameter: d)
+                .offset(y: d * 0.50)
+                .opacity(0.9)
+
+            CoinFlipStackView_Coin(angle: angle, faceFactor: faceFactor, edgeFactor: edgeFactor, diameter: d)
+                .offset(y: liftOffset(edgeFactor: edgeFactor, d: d))
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    /// A tiny vertical lift while edge-on sells the toss arc.
+    private func liftOffset(edgeFactor: CGFloat, d: CGFloat) -> CGFloat {
+        -(1 - edgeFactor) * d * 0.06
+    }
+
+    // MARK: gesture
+
+    private var flingGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if case .dragging = motion.phase {
+                    let delta = Double(value.translation.height) * -0.9
+                    motion.phase = .dragging(heldAngle: motion.dragAnchor + delta)
+                } else {
+                    let now = Date().timeIntervalSinceReferenceDate
+                    let held = motion.angle(at: now)
+                    motion.dragAnchor = held
+                    motion.phase = .dragging(heldAngle: held)
+                }
+            }
+            .onEnded { value in
+                let now = Date().timeIntervalSinceReferenceDate
+                let held: Double
+                if case let .dragging(h) = motion.phase { held = h } else { held = motion.angle(at: now) }
+                // Upward flick (negative height velocity) spins forward.
+                let v0 = Double(value.velocity.height) * -0.9   // deg/sec
+                let k: Double = 2.6
+                let naturalRest = held + v0 / k
+                let target = (naturalRest / 180).rounded() * 180   // nearest face-up
+                motion.phase = .settling(startAngle: held, target: target, startTime: now)
+            }
+    }
+}
+
+// MARK: - The coin
+
+private struct CoinFlipStackView_Coin: View {
+    let angle: Double
+    let faceFactor: Double      // cos(angle)
+    let edgeFactor: CGFloat     // abs(cos(angle))
+    let diameter: CGFloat
+
+    private var headsVisible: Bool { faceFactor >= 0 }
+
+    var body: some View {
+        ZStack {
+            // Metallic edge / rim — always present so the coin never reads
+            // as a blank line when edge-on.
+            CoinFlipStackView_CoinRim(diameter: diameter, edgeFactor: edgeFactor)
+
+            // Heads
+            CoinFlipStackView_CoinFace(
+                diameter: diameter,
+                emblem: "crown.fill",
+                base: Color(red: 0.95, green: 0.80, blue: 0.40),
+                rim: Color(red: 0.70, green: 0.52, blue: 0.18)
+            )
+            .opacity(headsVisible ? 1 : 0)
+
+            // Tails — pre-rotated 180 about X so the back face is not mirrored.
+            CoinFlipStackView_CoinFace(
+                diameter: diameter,
+                emblem: "star.fill",
+                base: Color(red: 0.82, green: 0.84, blue: 0.90),
+                rim: Color(red: 0.45, green: 0.50, blue: 0.60)
+            )
+            .rotation3DEffect(.degrees(180), axis: (x: 1, y: 0, z: 0))
+            .opacity(headsVisible ? 0 : 1)
+        }
+        .frame(width: diameter, height: diameter)
+        .rotation3DEffect(
+            .degrees(angle),
+            axis: (x: 1, y: 0, z: 0),
+            anchor: .center,
+            anchorZ: 0,
+            perspective: 0.55
+        )
+        // Top-light specular sweep tied to the face tilt.
+        .overlay(specular)
+    }
+
+    private var specular: some View {
+        Ellipse()
+            .fill(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.32 * Double(edgeFactor)), .clear],
+                    startPoint: .top,
+                    endPoint: .center
+                )
+            )
+            .frame(width: diameter * 0.7, height: diameter * 0.5)
+            .offset(y: -diameter * 0.18)
+            .scaleEffect(y: edgeFactor, anchor: .center)
+            .rotation3DEffect(.degrees(angle), axis: (x: 1, y: 0, z: 0), perspective: 0.55)
+            .allowsHitTesting(false)
+            .blendMode(.screen)
+    }
+}
+
+// MARK: - CoinFlipStackView_Coin face
+
+private struct CoinFlipStackView_CoinFace: View {
+    let diameter: CGFloat
+    let emblem: String
+    let base: Color
+    let rim: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [base, base.opacity(0.92), rim],
+                        center: .init(x: 0.38, y: 0.30),
+                        startRadius: diameter * 0.04,
+                        endRadius: diameter * 0.62
+                    )
+                )
+
+            // Angular metallic glint around the disc.
+            Circle()
+                .strokeBorder(
+                    AngularGradient(
+                        colors: [
+                            Color.white.opacity(0.55), rim.opacity(0.0),
+                            Color.white.opacity(0.35), rim.opacity(0.0),
+                            Color.white.opacity(0.55)
+                        ],
+                        center: .center
+                    ),
+                    lineWidth: diameter * 0.06
+                )
+
+            // Inner ring detail.
+            Circle()
+                .strokeBorder(rim.opacity(0.55), lineWidth: diameter * 0.018)
+                .padding(diameter * 0.11)
+
+            Image(systemName: emblem)
+                .font(.system(size: diameter * 0.34, weight: .black))
+                .foregroundStyle(rim.opacity(0.85))
+                .shadow(color: .white.opacity(0.4), radius: 0.5, y: -0.5)
+        }
+        .frame(width: diameter, height: diameter)
+        .clipShape(Circle())
+    }
+}
+
+// MARK: - Metallic rim (visible edge-on)
+
+private struct CoinFlipStackView_CoinRim: View {
+    let diameter: CGFloat
+    let edgeFactor: CGFloat   // 1 flat, 0 edge-on
+
+    var body: some View {
+        // Thickness reads when the coin turns toward its edge.
+        let thickness = diameter * 0.10 * (1 - edgeFactor) + diameter * 0.014
+        Capsule()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.55, green: 0.50, blue: 0.42),
+                        Color(red: 0.92, green: 0.88, blue: 0.78),
+                        Color(red: 0.50, green: 0.46, blue: 0.40)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(width: diameter, height: max(thickness, diameter * 0.02))
+    }
+}
+
+// MARK: - Ground shadow
+
+private struct CoinFlipStackView_GroundShadow: View {
+    let diameter: CGFloat
+    let edgeFactor: CGFloat   // wide when flat, thin when edge-on
+
+    var body: some View {
+        let w = diameter * (0.42 + 0.46 * edgeFactor)
+        let h = diameter * 0.16
+        Ellipse()
+            .fill(Color.black.opacity(0.30 + 0.18 * Double(edgeFactor)))
+            .frame(width: max(w, diameter * 0.18), height: h)
+            .blur(radius: diameter * 0.05)
+    }
+}
+
+// MARK: - Optional static landing stack (flavor)
+
+private struct CoinFlipStackView_LandingStack: View {
+    let diameter: CGFloat
+
+    var body: some View {
+        let w = diameter * 0.78
+        let t = diameter * 0.07
+        VStack(spacing: -t * 0.45) {
+            stackCoin(width: w * 0.96, thickness: t, shade: 0.78)
+            stackCoin(width: w, thickness: t, shade: 0.86)
+            stackCoin(width: w * 0.94, thickness: t, shade: 0.74)
+        }
+        .opacity(0.85)
+    }
+
+    private func stackCoin(width: CGFloat, thickness: CGFloat, shade: Double) -> some View {
+        Capsule()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.62 * shade, green: 0.58 * shade, blue: 0.46 * shade),
+                        Color(red: 0.90 * shade, green: 0.84 * shade, blue: 0.62 * shade),
+                        Color(red: 0.55 * shade, green: 0.50 * shade, blue: 0.40 * shade)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(width: width, height: thickness)
+    }
+}
+"""###,
+        "ld-comet-trail-orbit": ###"""
+import SwiftUI
+
+/// Comet Trail — a bright comet head laps an elliptical orbit, accelerating at
+/// perihelion (Kepler), trailing a tapering particle tail that always streams
+/// radially away from the focal "sun" (solar-wind motif). Fully self-driving;
+/// `demo` does not change behavior because the spec's interaction is "auto".
+struct CometTrailOrbitView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { _ in
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                Canvas { context, size in
+                    drawScene(in: &context, size: size, time: t)
+                }
+            }
+        }
+        .background(background)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Tunables
+
+    private let period: Double = 3.4          // seconds per lap
+    private let eccentricity: CGFloat = 0.62  // ellipse + speed variation
+    private let trailCount: Int = 46          // particles in the tail
+    private let trailStep: Double = 0.018     // time gap between particles (s)
+    private let pushDistance: CGFloat = 0.10  // radial anti-focus push per age unit
+
+    private var background: some View {
+        // Deep space gradient so the glow reads on the tile and the detail view.
+        RadialGradient(
+            colors: [
+                Color(red: 0.07, green: 0.09, blue: 0.16),
+                Color(red: 0.03, green: 0.04, blue: 0.08)
+            ],
+            center: .center,
+            startRadius: 4,
+            endRadius: 260
+        )
+    }
+
+    // MARK: - Geometry
+
+    struct Orbit {
+        var center: CGPoint
+        var a: CGFloat      // semi-major (x)
+        var b: CGFloat      // semi-minor (y)
+        var focus: CGPoint  // the "sun"
+        var unit: CGFloat   // base size unit for scaling visuals
+    }
+
+    private func makeOrbit(size: CGSize) -> Orbit {
+        let unit = min(size.width, size.height)
+        // Leave margin so the head never clips at aphelion, even in a 120pt tile.
+        let a = unit * 0.34
+        let b = a * sqrt(max(0.0001, 1 - Double(eccentricity) * Double(eccentricity)))
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let c = a * eccentricity                    // center-to-focus distance
+        let focus = CGPoint(x: center.x + c, y: center.y)
+        return Orbit(center: center, a: a, b: b, focus: focus, unit: unit)
+    }
+
+    /// Solve Kepler's equation M = E - e·sinE for the eccentric anomaly E.
+    private func solveE(meanAnomaly M: Double) -> Double {
+        let e = Double(eccentricity)
+        var E = M
+        for _ in 0..<5 {
+            let f = E - e * sin(E) - M
+            let fp = 1 - e * cos(E)
+            E -= f / fp
+        }
+        return E
+    }
+
+    /// Position on the orbit for an absolute time, using a Kepler time mapping.
+    private func orbitPos(time: Double, orbit: Orbit) -> CGPoint {
+        let M = 2 * Double.pi * (time / period)
+        let E = solveE(meanAnomaly: M)
+        let x = orbit.center.x + orbit.a * CGFloat(cos(E))
+        let y = orbit.center.y + orbit.b * CGFloat(sin(E))
+        return CGPoint(x: x, y: y)
+    }
+
+    // MARK: - Drawing
+
+    private func drawScene(in context: inout GraphicsContext, size: CGSize, time: Double) {
+        let orbit = makeOrbit(size: size)
+
+        drawOrbitGuide(in: &context, orbit: orbit)
+        drawSun(in: &context, orbit: orbit, time: time)
+
+        // Instantaneous speed (numeric derivative) drives glow + tail length.
+        let head = orbitPos(time: time, orbit: orbit)
+        let prev = orbitPos(time: time - 0.012, orbit: orbit)
+        let speed = hypot(head.x - prev.x, head.y - prev.y)
+        let speedNorm = normalizedSpeed(speed, orbit: orbit)
+
+        drawTail(in: &context, orbit: orbit, time: time, speedNorm: speedNorm)
+        drawHead(in: &context, at: head, orbit: orbit, speedNorm: speedNorm)
+    }
+
+    /// Map raw per-frame displacement into a 0...1 liveliness factor.
+    private func normalizedSpeed(_ speed: CGFloat, orbit: Orbit) -> CGFloat {
+        let ref = orbit.unit * 0.012
+        let v = speed / max(ref, 0.001)
+        return min(1, max(0, (v - 0.4) / 1.6))
+    }
+
+    private func drawOrbitGuide(in context: inout GraphicsContext, orbit: Orbit) {
+        let rect = CGRect(
+            x: orbit.center.x - orbit.a,
+            y: orbit.center.y - orbit.b,
+            width: orbit.a * 2,
+            height: orbit.b * 2
+        )
+        let path = Path(ellipseIn: rect)
+        context.stroke(
+            path,
+            with: .color(Color(red: 0.36, green: 0.42, blue: 0.62).opacity(0.16)),
+            style: StrokeStyle(lineWidth: 1, dash: [2, 5])
+        )
+    }
+
+    private func drawSun(in context: inout GraphicsContext, orbit: Orbit, time: Double) {
+        let pulse = 0.5 + 0.5 * sin(time * 2.0)
+        let r = orbit.unit * 0.05
+        let glowR = r * (2.4 + 0.5 * CGFloat(pulse))
+        let glowRect = CGRect(
+            x: orbit.focus.x - glowR,
+            y: orbit.focus.y - glowR,
+            width: glowR * 2,
+            height: glowR * 2
+        )
+        context.fill(
+            Path(ellipseIn: glowRect),
+            with: .radialGradient(
+                Gradient(colors: [
+                    Color(red: 1.0, green: 0.78, blue: 0.42).opacity(0.45),
+                    Color(red: 1.0, green: 0.6, blue: 0.25).opacity(0.0)
+                ]),
+                center: orbit.focus,
+                startRadius: 0,
+                endRadius: glowR
+            )
+        )
+        let coreRect = CGRect(
+            x: orbit.focus.x - r,
+            y: orbit.focus.y - r,
+            width: r * 2,
+            height: r * 2
+        )
+        context.fill(
+            Path(ellipseIn: coreRect),
+            with: .radialGradient(
+                Gradient(colors: [
+                    Color(red: 1.0, green: 0.95, blue: 0.8),
+                    Color(red: 1.0, green: 0.72, blue: 0.34)
+                ]),
+                center: orbit.focus,
+                startRadius: 0,
+                endRadius: r
+            )
+        )
+    }
+
+    private func drawTail(
+        in context: inout GraphicsContext,
+        orbit: Orbit,
+        time: Double,
+        speedNorm: CGFloat
+    ) {
+        // Tail is longer + brighter when the comet moves fast (near perihelion).
+        let lengthFactor = 0.55 + 0.45 * speedNorm
+        let count = max(8, Int(CGFloat(trailCount) * lengthFactor))
+        let push = orbit.unit * pushDistance
+
+        // Draw oldest particle first so the bright young head end paints on top.
+        for index in stride(from: count - 1, through: 0, by: -1) {
+            let age = Double(index)
+            let sampleTime = time - age * trailStep
+            let base = orbitPos(time: sampleTime, orbit: orbit)
+
+            // Radial direction away from the focal "sun".
+            let dx = base.x - orbit.focus.x
+            let dy = base.y - orbit.focus.y
+            let len = max(hypot(dx, dy), 0.001)
+            let nx = dx / len
+            let ny = dy / len
+
+            // Radial anti-focus push dominates so the tail points AWAY from the
+            // focus (solar wind) rather than tracing the orbit path.
+            let ageNorm = CGFloat(index) / CGFloat(max(1, count - 1))
+            let offset = push * ageNorm * (1.0 + 1.4 * speedNorm)
+            let pos = CGPoint(x: base.x + nx * offset, y: base.y + ny * offset)
+
+            let fade = pow(1.0 - ageNorm, 1.6)
+            let dotR = orbit.unit * (0.026 * fade + 0.004)
+            let opacity = Double(fade) * (0.5 + 0.5 * Double(speedNorm))
+
+            let dotRect = CGRect(
+                x: pos.x - dotR,
+                y: pos.y - dotR,
+                width: dotR * 2,
+                height: dotR * 2
+            )
+            let color = tailColor(ageNorm: ageNorm).opacity(opacity)
+            context.fill(Path(ellipseIn: dotRect), with: .color(color))
+        }
+    }
+
+    private func tailColor(ageNorm: CGFloat) -> Color {
+        // Hot white-blue near the head, cooling to deep blue at the tip.
+        let r = 0.65 + (1.0 - Double(ageNorm)) * 0.35
+        let g = 0.78 + (1.0 - Double(ageNorm)) * 0.18
+        let b = 1.0
+        return Color(red: r, green: g, blue: b)
+    }
+
+    private func drawHead(
+        in context: inout GraphicsContext,
+        at head: CGPoint,
+        orbit: Orbit,
+        speedNorm: CGFloat
+    ) {
+        let brightness = 0.6 + 0.4 * speedNorm
+        let glowR = orbit.unit * (0.085 + 0.05 * speedNorm)
+        let glowRect = CGRect(
+            x: head.x - glowR,
+            y: head.y - glowR,
+            width: glowR * 2,
+            height: glowR * 2
+        )
+        context.fill(
+            Path(ellipseIn: glowRect),
+            with: .radialGradient(
+                Gradient(colors: [
+                    Color(red: 0.85, green: 0.93, blue: 1.0).opacity(0.85 * brightness),
+                    Color(red: 0.5, green: 0.72, blue: 1.0).opacity(0.0)
+                ]),
+                center: head,
+                startRadius: 0,
+                endRadius: glowR
+            )
+        )
+        let coreR = orbit.unit * (0.022 + 0.008 * speedNorm)
+        let coreRect = CGRect(
+            x: head.x - coreR,
+            y: head.y - coreR,
+            width: coreR * 2,
+            height: coreR * 2
+        )
+        context.fill(
+            Path(ellipseIn: coreRect),
+            with: .radialGradient(
+                Gradient(colors: [
+                    Color(red: 1.0, green: 1.0, blue: 1.0),
+                    Color(red: 0.78, green: 0.9, blue: 1.0)
+                ]),
+                center: head,
+                startRadius: 0,
+                endRadius: coreR
+            )
+        )
+    }
+}
+"""###,
+        "ld-dna-helix": ###"""
+import SwiftUI
+
+/// DNA Helix — two phosphate strands corkscrew as a double helix with base-pair
+/// rungs. Each strand node's horizontal position is a sine of its vertical phase,
+/// and each rung's width/opacity scales by the cosine of that phase to fake 3D
+/// depth, with nearer rungs drawn on top.
+///
+/// - `demo == true`: a self-driving `TimelineView(.animation)` corkscrews the
+///   helix continuously, the depth scaling pulsing the rungs.
+/// - `demo == false`: the same idle spin runs, but a horizontal `DragGesture`
+///   scrubs the twist phase (move faster to scrub faster, direction sets sign);
+///   releasing hands control back to the idle spin with no visible jump.
+struct DnaHelixView: View {
+    var demo: Bool = false
+
+    // Committed twist accumulated from prior auto segments + finished drags.
+    @State private var committedPhase: Double = 0
+    // Wall-clock anchor for the current auto-spin segment.
+    @State private var segmentStart: Date = .init()
+    // Live horizontal drag translation (points) while a finger is down.
+    @State private var dragWidth: CGFloat = 0
+    // True while a finger is actively scrubbing.
+    @State private var dragging: Bool = false
+
+    // Visual constants.
+    private let rungCount: Int = 18
+    private let autoSpeed: Double = 1.05          // radians / second idle spin
+    private let twists: Double = 2.4              // full turns across the height
+    private let scrubSensitivity: Double = 0.012  // radians per drag point
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+
+            TimelineView(.animation) { context in
+                let phase = currentPhase(now: context.date)
+                helixCanvas(size: size, phase: phase)
+            }
+            .contentShape(Rectangle())
+            .modifier(
+                DnaHelixView_ScrubGesture(
+                    enabled: !demo,
+                    onChanged: { translation in handleDragChanged(translation) },
+                    onEnded: { handleDragEnded() }
+                )
+            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Phase bookkeeping (seamless auto <-> drag hand-off)
+
+    private func currentPhase(now: Date) -> Double {
+        let auto = dragging ? 0 : now.timeIntervalSince(segmentStart) * autoSpeed
+        let scrub = Double(dragWidth) * scrubSensitivity
+        return committedPhase + auto + scrub
+    }
+
+    private func handleDragChanged(_ translation: CGSize) {
+        if !dragging {
+            // Lock in the auto-spin accrued up to this instant, then freeze it.
+            let elapsed = Date().timeIntervalSince(segmentStart) * autoSpeed
+            committedPhase += elapsed
+            dragging = true
+        }
+        dragWidth = translation.width
+    }
+
+    private func handleDragEnded() {
+        committedPhase += Double(dragWidth) * scrubSensitivity
+        dragWidth = 0
+        dragging = false
+        segmentStart = Date()
+    }
+
+    // MARK: - Rendering
+
+    private func helixCanvas(size: CGSize, phase: Double) -> some View {
+        Canvas { ctx, canvasSize in
+            drawHelix(into: &ctx, size: canvasSize, phase: phase)
+        }
+    }
+
+    private func drawHelix(into ctx: inout GraphicsContext, size: CGSize, phase: Double) {
+        let w: CGFloat = size.width
+        let h: CGFloat = size.height
+        guard w > 1, h > 1 else { return }
+
+        let centerX: CGFloat = w / 2
+        let inset: CGFloat = max(8, min(w, h) * 0.10)
+        let amplitude: CGFloat = max(6, (w / 2) - inset)
+        let topY: CGFloat = inset
+        let usableHeight: CGFloat = max(1, h - inset * 2)
+        let freq: Double = twists * 2 * .pi  // radians across normalized [0,1]
+
+        // Build rung descriptors, then sort so the back-facing ones draw first.
+        var rungs: [Rung] = []
+        rungs.reserveCapacity(rungCount)
+        let count = rungCount
+        for i in 0..<count {
+            let t: Double = count > 1 ? Double(i) / Double(count - 1) : 0.5
+            let y: CGFloat = topY + CGFloat(t) * usableHeight
+            let angle: Double = t * freq + phase
+
+            // Strand A and B are half a turn apart.
+            let offsetA: CGFloat = CGFloat(sin(angle)) * amplitude
+            let offsetB: CGFloat = CGFloat(sin(angle + .pi)) * amplitude
+            // Depth term from cosine: +1 = front, -1 = back.
+            let depth: Double = cos(angle)
+
+            rungs.append(
+                Rung(
+                    y: y,
+                    xA: centerX + offsetA,
+                    xB: centerX + offsetB,
+                    depth: depth,
+                    nodeRadius: nodeRadius(forHeight: h),
+                    hue: t
+                )
+            )
+        }
+
+        // Painter's algorithm: smallest depth (furthest back) first.
+        rungs.sort { $0.depth < $1.depth }
+
+        for rung in rungs {
+            drawRung(rung, into: &ctx, height: h)
+        }
+    }
+
+    private func drawRung(_ rung: Rung, into ctx: inout GraphicsContext, height: CGFloat) {
+        // Map depth (-1...1) to legible, clamped scale & opacity (never blank).
+        let norm: Double = (rung.depth + 1) / 2                 // 0 (back) ... 1 (front)
+        let scale: CGFloat = CGFloat(0.5 + norm * 0.5)          // 0.5 ... 1.0
+        let lineOpacity: Double = 0.22 + norm * 0.55            // 0.22 ... 0.77
+        let nodeOpacity: Double = 0.45 + norm * 0.55            // 0.45 ... 1.0
+
+        let nodeR: CGFloat = max(1.5, rung.nodeRadius * scale)
+        let lineW: CGFloat = max(1.0, (height * 0.010) * scale)
+
+        // Base-pair rung connecting the two strands.
+        var rungPath = Path()
+        rungPath.move(to: CGPoint(x: rung.xA, y: rung.y))
+        rungPath.addLine(to: CGPoint(x: rung.xB, y: rung.y))
+        let strokeColor = rungColor(forHue: rung.hue).opacity(lineOpacity)
+        ctx.stroke(rungPath, with: .color(strokeColor), lineWidth: lineW)
+
+        // Strand nodes (phosphate backbone beads). Glow halo + core.
+        drawNode(at: CGPoint(x: rung.xA, y: rung.y),
+                 radius: nodeR, opacity: nodeOpacity,
+                 color: strandColorA, into: &ctx)
+        drawNode(at: CGPoint(x: rung.xB, y: rung.y),
+                 radius: nodeR, opacity: nodeOpacity,
+                 color: strandColorB, into: &ctx)
+    }
+
+    private func drawNode(at point: CGPoint,
+                          radius: CGFloat,
+                          opacity: Double,
+                          color: Color,
+                          into ctx: inout GraphicsContext) {
+        // Soft halo.
+        let haloRect = CGRect(
+            x: point.x - radius * 1.9,
+            y: point.y - radius * 1.9,
+            width: radius * 3.8,
+            height: radius * 3.8
+        )
+        let halo = Path(ellipseIn: haloRect)
+        ctx.fill(halo, with: .color(color.opacity(opacity * 0.22)))
+
+        // Solid core.
+        let coreRect = CGRect(
+            x: point.x - radius,
+            y: point.y - radius,
+            width: radius * 2,
+            height: radius * 2
+        )
+        let core = Path(ellipseIn: coreRect)
+        ctx.fill(core, with: .color(color.opacity(opacity)))
+
+        // Tiny specular highlight for a beaded sheen.
+        let hiR: CGFloat = radius * 0.42
+        let hiRect = CGRect(
+            x: point.x - radius * 0.32 - hiR,
+            y: point.y - radius * 0.32 - hiR,
+            width: hiR * 2,
+            height: hiR * 2
+        )
+        let highlight = Path(ellipseIn: hiRect)
+        ctx.fill(highlight, with: .color(Color(red: 1, green: 1, blue: 1).opacity(opacity * 0.55)))
+    }
+
+    private func nodeRadius(forHeight h: CGFloat) -> CGFloat {
+        max(3, h * 0.028)
+    }
+
+    // MARK: - Palette (literals only, no design-system deps)
+
+    private var strandColorA: Color {
+        Color(red: 0.30, green: 0.78, blue: 1.00)   // cyan-blue
+    }
+    private var strandColorB: Color {
+        Color(red: 1.00, green: 0.42, blue: 0.62)   // warm pink
+    }
+
+    private func rungColor(forHue t: Double) -> Color {
+        // Blend the two strand colors so base pairs read as bridges between them.
+        let mix = (sin(t * .pi) + 1) / 2
+        return Color(
+            red: 0.30 + (1.00 - 0.30) * mix,
+            green: 0.78 + (0.42 - 0.78) * mix,
+            blue: 1.00 + (0.62 - 1.00) * mix
+        )
+    }
+
+    // MARK: - Rung model
+
+    struct Rung {
+        let y: CGFloat
+        let xA: CGFloat
+        let xB: CGFloat
+        let depth: Double
+        let nodeRadius: CGFloat
+        let hue: Double
+    }
+}
+
+// MARK: - Conditional drag gesture
+
+/// Attaches a horizontal scrub `DragGesture` only when `enabled`, keeping the
+/// rendering path identical in both demo and interactive modes.
+private struct DnaHelixView_ScrubGesture: ViewModifier {
+    let enabled: Bool
+    let onChanged: (CGSize) -> Void
+    let onEnded: () -> Void
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in onChanged(value.translation) }
+                    .onEnded { _ in onEnded() }
+            )
+        } else {
+            content
+        }
+    }
+}
+"""###,
+        "ld-dot-grid-wave": ###"""
+import SwiftUI
+
+// MARK: - Dot Grid Ripple
+// A 2D grid of dots pulses in size and brightness as a circular wavefront
+// sweeps outward from a moving origin. Each dot is delayed by its distance
+// from the wave center. Idle: an auto-emitting origin drifts on a Lissajous
+// path. Interactive: taps drop new wavefronts at the finger, layered on top.
+struct DotGridWaveView: View {
+    var demo: Bool = false
+
+    // Tap-spawned wavefronts: where they started and when (reference-time seconds).
+    @State private var waves: [DotGridWaveView_TapWave] = []
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            content(in: size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.039, green: 0.063, blue: 0.078))
+        .clipped()
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let now = timeline.date.timeIntervalSinceReferenceDate
+            canvas(in: size, now: now)
+        }
+        .contentShape(Rectangle())
+        .modifier(DotGridWaveView_TapWaveModifier(enabled: !demo) { location, when in
+            registerTap(at: location, when: when)
+        })
+    }
+
+    private func canvas(in size: CGSize, now: TimeInterval) -> some View {
+        Canvas { context, canvasSize in
+            draw(in: &context, size: canvasSize, now: now)
+        }
+    }
+
+    // MARK: Tap handling
+
+    private func registerTap(at location: CGPoint, when: TimeInterval) {
+        // Drop rings that have already finished so the array stays bounded.
+        let alive = waves.filter { wave in (when - wave.birth) < DotGridWaveView_TapWave.lifetime }
+        var next = alive
+        next.append(DotGridWaveView_TapWave(origin: location, birth: when))
+        // Hard cap as a safety net for rapid tapping.
+        if next.count > 8 {
+            next.removeFirst(next.count - 8)
+        }
+        waves = next
+    }
+
+    // MARK: Rendering
+
+    private func draw(in context: inout GraphicsContext, size: CGSize, now: TimeInterval) {
+        let layout = DotGridWaveView_GridLayout(size: size)
+        guard layout.columns > 0, layout.rows > 0 else { return }
+
+        let drift = driftOrigin(in: size, now: now)
+        let baseColor = dotColor()
+
+        for row in 0..<layout.rows {
+            for col in 0..<layout.columns {
+                let center = layout.point(col: col, row: row)
+                let energy = totalEnergy(at: center, now: now, drift: drift)
+                drawDot(in: &context,
+                        center: center,
+                        baseRadius: layout.baseRadius,
+                        energy: energy,
+                        color: baseColor)
+            }
+        }
+    }
+
+    private func drawDot(in context: inout GraphicsContext,
+                         center: CGPoint,
+                         baseRadius: CGFloat,
+                         energy: CGFloat,
+                         color: Color) {
+        // energy is 0...1. Keep a floor so the grid is never blank/dark.
+        let clamped = max(0.0, min(1.0, energy))
+        let radius = baseRadius * (0.55 + 0.85 * clamped)
+        let opacity = 0.32 + 0.68 * clamped
+
+        let rect = CGRect(x: center.x - radius,
+                          y: center.y - radius,
+                          width: radius * 2,
+                          height: radius * 2)
+
+        // Soft glow under bright dots for a tactile pegboard feel.
+        if clamped > 0.55 {
+            let glowR = radius * 2.1
+            let glowRect = CGRect(x: center.x - glowR,
+                                  y: center.y - glowR,
+                                  width: glowR * 2,
+                                  height: glowR * 2)
+            let glow = color.opacity(0.18 * Double(clamped))
+            context.fill(Path(ellipseIn: glowRect), with: .color(glow))
+        }
+
+        context.fill(Path(ellipseIn: rect), with: .color(color.opacity(opacity)))
+    }
+
+    // MARK: Energy model
+
+    // Combine the always-on idle wavefront with any decaying tap rings.
+    private func totalEnergy(at point: CGPoint,
+                             now: TimeInterval,
+                             drift: CGPoint) -> CGFloat {
+        var energy = idleEnergy(at: point, now: now, drift: drift)
+        for wave in waves {
+            energy += tapEnergy(at: point, now: now, wave: wave)
+        }
+        return energy
+    }
+
+    // Continuous distance-delayed sine radiating from the drifting origin.
+    private func idleEnergy(at point: CGPoint,
+                            now: TimeInterval,
+                            drift: CGPoint) -> CGFloat {
+        let dist = distance(point, drift)
+        let k: Double = 0.045            // distance -> phase delay
+        let speed: Double = 3.4          // radians/sec of the base oscillation
+        let phase = now * speed - Double(dist) * k
+        let raw = (sin(phase) + 1.0) * 0.5            // 0...1
+        // Attenuate with distance so it reads as a wavefront, not a uniform pulse.
+        let falloff = 1.0 / (1.0 + Double(dist) * 0.012)
+        return CGFloat(raw * falloff * 0.85)
+    }
+
+    // A finite ring that expands from the tap and dies within its lifetime.
+    private func tapEnergy(at point: CGPoint,
+                           now: TimeInterval,
+                           wave: DotGridWaveView_TapWave) -> CGFloat {
+        let age = now - wave.birth
+        if age < 0 || age > DotGridWaveView_TapWave.lifetime { return 0 }
+
+        let dist = Double(distance(point, wave.origin))
+        let ringRadius = age * DotGridWaveView_TapWave.ringSpeed
+        // Gaussian band centred on the traveling ring radius.
+        let band = dist - ringRadius
+        let sigma: Double = 26.0
+        let ring = exp(-(band * band) / (2.0 * sigma * sigma))
+        // Fade the whole ring out over its lifetime (ease-out).
+        let lifeFrac = age / DotGridWaveView_TapWave.lifetime
+        let decay = pow(1.0 - lifeFrac, 1.6)
+        return CGFloat(ring * decay)
+    }
+
+    // MARK: Drifting origin
+
+    private func driftOrigin(in size: CGSize, now: TimeInterval) -> CGPoint {
+        // Lissajous drift keeps the auto wavefront origin roaming the tile.
+        let period: Double = 7.0
+        let t = (now.truncatingRemainder(dividingBy: period)) / period * (.pi * 2.0)
+        let cx = Double(size.width) * 0.5
+        let cy = Double(size.height) * 0.5
+        let ax = Double(size.width) * 0.32
+        let ay = Double(size.height) * 0.32
+        let x = cx + ax * sin(t * 1.0)
+        let y = cy + ay * sin(t * 1.4 + .pi / 3.0)
+        return CGPoint(x: x, y: y)
+    }
+
+    private func dotColor() -> Color {
+        // Cool aqua-cyan that reads on the dark tint.
+        Color(red: 0.42, green: 0.86, blue: 0.96)
+    }
+
+    private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let dx = a.x - b.x
+        let dy = a.y - b.y
+        return CGFloat((Double(dx * dx) + Double(dy * dy)).squareRoot())
+    }
+}
+
+// MARK: - Grid layout derived from geometry
+
+private struct DotGridWaveView_GridLayout {
+    let columns: Int
+    let rows: Int
+    let spacing: CGFloat
+    let originX: CGFloat
+    let originY: CGFloat
+    let baseRadius: CGFloat
+
+    init(size: CGSize) {
+        let minSide = max(1.0, min(size.width, size.height))
+        // Derive a count from width, clamp so both the 120pt tile and a large
+        // detail view stay legible and Canvas cost stays bounded.
+        let targetSpacing: CGFloat = max(14.0, minSide / 9.0)
+        let cols = max(5, min(13, Int((size.width / targetSpacing).rounded())))
+        let rws = max(5, min(13, Int((size.height / targetSpacing).rounded())))
+
+        // Spacing that actually fits, then centre the grid.
+        let spacingX = cols > 1 ? size.width / CGFloat(cols) : size.width
+        let spacingY = rws > 1 ? size.height / CGFloat(rws) : size.height
+        let sp = max(8.0, min(spacingX, spacingY))
+
+        self.columns = cols
+        self.rows = rws
+        self.spacing = sp
+        let gridW = sp * CGFloat(cols - 1)
+        let gridH = sp * CGFloat(rws - 1)
+        self.originX = (size.width - gridW) / 2.0
+        self.originY = (size.height - gridH) / 2.0
+        self.baseRadius = max(1.5, sp * 0.16)
+    }
+
+    func point(col: Int, row: Int) -> CGPoint {
+        CGPoint(x: originX + CGFloat(col) * spacing,
+                y: originY + CGFloat(row) * spacing)
+    }
+}
+
+// MARK: - Tap wave model
+
+private struct DotGridWaveView_TapWave: Identifiable {
+    let id = UUID()
+    let origin: CGPoint
+    let birth: TimeInterval
+
+    static let lifetime: Double = 1.8       // seconds a ring stays alive
+    static let ringSpeed: Double = 170.0    // points/sec the wavefront expands
+}
+
+// MARK: - Conditional tap gesture (interactive mode only)
+
+private struct DotGridWaveView_TapWaveModifier: ViewModifier {
+    let enabled: Bool
+    let onTap: (CGPoint, TimeInterval) -> Void
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.gesture(
+                SpatialTapGesture(coordinateSpace: .local)
+                    .onEnded { value in
+                        onTap(value.location, Date().timeIntervalSinceReferenceDate)
+                    }
+            )
+        } else {
+            content
+        }
+    }
+}
+"""###,
         "mi-bubble-wrap-pop": ###"""
 import SwiftUI
 
@@ -46434,6 +47569,3327 @@ private struct ElasticPopView_KeyframePopCharacter: View {
     }
 }
 """###,
+        "tx-elastic-rope": ###"""
+import SwiftUI
+
+// MARK: - Elastic Rope Text
+// Drag anywhere on the line to pluck the nearest glyphs toward your finger on
+// damped springs; release and a traveling recoil wave snaps everything back.
+// Idle, a virtual touch point sweeps the line so the rope ripples on its own.
+
+public struct ElasticRopeView: View {
+    public var demo: Bool = false
+
+    public init(demo: Bool = false) {
+        self.demo = demo
+    }
+
+    private let phrase: String = "ELASTIC"
+
+    public var body: some View {
+        GeometryReader { proxy in
+            content(in: proxy.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        let amplitude = ElasticRopeView_ElasticRopeMath.amplitude(for: size)
+        let fontSize = ElasticRopeView_ElasticRopeMath.fontSize(for: size, charCount: phrase.count)
+
+        ElasticRopeView_ElasticRopeStage(
+            phrase: phrase,
+            demo: demo,
+            size: size,
+            amplitude: amplitude,
+            fontSize: fontSize
+        )
+    }
+}
+
+// MARK: - Shared math (single source of truth for displacement)
+
+private enum ElasticRopeView_ElasticRopeMath {
+
+    static func amplitude(for size: CGSize) -> CGFloat {
+        // Clamp pull strength to the tile so glyphs never fly off / clip.
+        let base = min(size.width, size.height) * 0.42
+        return max(8, min(base, 80))
+    }
+
+    static func fontSize(for size: CGSize, charCount: Int) -> CGFloat {
+        let byWidth = size.width / (CGFloat(max(charCount, 1)) * 0.72)
+        let byHeight = size.height * 0.42
+        return max(13, min(min(byWidth, byHeight), 64))
+    }
+
+    /// Falloff weight in fraction-space (0...1 along the line).
+    /// Nearest glyph to the touch fraction gets the strongest pull.
+    static func weight(glyphFraction: CGFloat, touchFraction: CGFloat) -> CGFloat {
+        let d = abs(glyphFraction - touchFraction)
+        let sigma: CGFloat = 0.18
+        let x = d / sigma
+        return CGFloat(exp(Double(-x * x)))      // Gaussian bell, peak 1 at the finger
+    }
+
+    /// Pure displacement for one glyph given its position along the line and the
+    /// current touch state. Returns an (dx, dy) offset in points.
+    /// `touchFraction`/`touchY` describe where the finger (or virtual sweep) is.
+    /// `pull` is 0...1 active grip strength; `recoil` carries the snap-back wave.
+    static func displacement(
+        glyphFraction: CGFloat,
+        touchFraction: CGFloat,
+        touchY: CGFloat,
+        pull: CGFloat,
+        recoil: ElasticRopeView_RecoilState,
+        amplitude: CGFloat,
+        index: Int,
+        count: Int
+    ) -> CGSize {
+
+        // 1. Active grip: glyphs near the finger are tugged toward it.
+        let w = weight(glyphFraction: glyphFraction, touchFraction: touchFraction)
+        let dir = touchFraction - glyphFraction
+        let gripX = dir * amplitude * w * pull
+        let gripY = touchY * amplitude * 0.55 * w * pull
+
+        // 2. Recoil: after release, a damped spring wave travels down the line.
+        var recoilX: CGFloat = 0
+        var recoilY: CGFloat = 0
+        if recoil.active {
+            // Per-index delay so the snap-back ripples along the rope.
+            let travel = CGFloat(index) / CGFloat(max(count - 1, 1))
+            let delayed = recoil.elapsed - travel * 0.28
+            if delayed > 0 {
+                let decay = CGFloat(exp(Double(-delayed * 6.5)))
+                let osc = CGFloat(sin(Double(delayed * 34)))
+                let releaseWeight = weight(
+                    glyphFraction: glyphFraction,
+                    touchFraction: recoil.fraction
+                )
+                let energy = recoil.strength * releaseWeight * decay
+                recoilX = (recoil.fraction - glyphFraction) * amplitude * 0.9 * osc * energy
+                recoilY = recoil.y * amplitude * 0.5 * osc * energy
+            }
+        }
+
+        return CGSize(width: gripX + recoilX, height: gripY + recoilY)
+    }
+}
+
+/// Snapshot of the release-recoil wave.
+private struct ElasticRopeView_RecoilState {
+    var active: Bool = false
+    var fraction: CGFloat = 0.5   // where the finger let go (0...1)
+    var y: CGFloat = 0            // vertical pull at release (normalized)
+    var strength: CGFloat = 0     // 0...1 captured grip strength
+    var elapsed: Double = 0       // seconds since release
+}
+
+// MARK: - Stage: one always-on TimelineView drives both modes
+
+private struct ElasticRopeView_ElasticRopeStage: View {
+    let phrase: String
+    let demo: Bool
+    let size: CGSize
+    let amplitude: CGFloat
+    let fontSize: CGFloat
+
+    // Live drag state (interactive mode only).
+    @State private var isDragging: Bool = false
+    @State private var dragFraction: CGFloat = 0.5
+    @State private var dragY: CGFloat = 0
+
+    // Release info, captured the instant the finger lifts.
+    @State private var releaseDate: Date? = nil
+    @State private var releaseFraction: CGFloat = 0.5
+    @State private var releaseY: CGFloat = 0
+    @State private var releaseStrength: CGFloat = 0
+
+    private var characters: [Character] { Array(phrase) }
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let now = timeline.date
+            let t = now.timeIntervalSinceReferenceDate
+            let state = resolveTouch(now: now, t: t)
+
+            ZStack {
+                background
+                ropeContent(state: state)
+            }
+            .contentShape(Rectangle())
+            .gesture(dragGesture, including: demo ? .none : .all)
+        }
+    }
+
+    // MARK: Touch resolution
+
+    struct TouchState {
+        var fraction: CGFloat
+        var y: CGFloat
+        var pull: CGFloat
+        var recoil: ElasticRopeView_RecoilState
+    }
+
+    private func resolveTouch(now: Date, t: TimeInterval) -> TouchState {
+        if !demo && isDragging {
+            // Live grip.
+            return TouchState(
+                fraction: dragFraction,
+                y: dragY,
+                pull: 1.0,
+                recoil: ElasticRopeView_RecoilState(active: false)
+            )
+        }
+
+        // Build any active recoil wave from the last release.
+        var recoil = ElasticRopeView_RecoilState(active: false)
+        if let release = releaseDate {
+            let elapsed = now.timeIntervalSince(release)
+            if elapsed < 1.4 {
+                recoil = ElasticRopeView_RecoilState(
+                    active: true,
+                    fraction: releaseFraction,
+                    y: releaseY,
+                    strength: releaseStrength,
+                    elapsed: elapsed
+                )
+            }
+        }
+
+        if demo {
+            // Virtual sweep travels the line on a ~3.2s loop, always visible.
+            let period: Double = 3.2
+            let phase = (t.truncatingRemainder(dividingBy: period)) / period
+            let frac = 0.5 + 0.46 * CGFloat(sin(phase * 2 * .pi))
+            let yWobble = 0.5 * CGFloat(sin(phase * 4 * .pi))
+            // Pull eases in/out so the rope breathes rather than snapping.
+            let pull = 0.55 + 0.45 * CGFloat(0.5 - 0.5 * cos(phase * 4 * .pi))
+            return TouchState(fraction: frac, y: yWobble, pull: pull, recoil: recoil)
+        }
+
+        // Interactive, idle (not dragging): gentle auto sine so the tile stays alive.
+        let period: Double = 3.6
+        let phase = (t.truncatingRemainder(dividingBy: period)) / period
+        let frac = 0.5 + 0.30 * CGFloat(sin(phase * 2 * .pi))
+        let idlePull: CGFloat = recoil.active ? 0 : 0.28
+        return TouchState(fraction: frac, y: 0, pull: idlePull, recoil: recoil)
+    }
+
+    // MARK: Content (iOS 18 TextRenderer, with iOS 17 fallback)
+
+    @ViewBuilder
+    private func ropeContent(state: TouchState) -> some View {
+        if #available(iOS 18.0, *) {
+            renderedText(state: state)
+        } else {
+            fallbackText(state: state)
+        }
+    }
+
+    @available(iOS 18.0, *)
+    @ViewBuilder
+    private func renderedText(state: TouchState) -> some View {
+        let renderer = ElasticRopeView_ElasticRopeRenderer(
+            touchFraction: state.fraction,
+            touchY: state.y,
+            pull: state.pull,
+            recoil: state.recoil,
+            amplitude: amplitude,
+            count: characters.count
+        )
+        styledText
+            .textRenderer(renderer)
+    }
+
+    // iOS 17 fallback: per-character offset HStack sharing the same math.
+    @ViewBuilder
+    private func fallbackText(state: TouchState) -> some View {
+        HStack(spacing: 0) {
+            ForEach(Array(characters.enumerated()), id: \.offset) { idx, ch in
+                let frac = characters.count <= 1
+                    ? 0.5
+                    : CGFloat(idx) / CGFloat(characters.count - 1)
+                let offset = ElasticRopeView_ElasticRopeMath.displacement(
+                    glyphFraction: frac,
+                    touchFraction: state.fraction,
+                    touchY: state.y,
+                    pull: state.pull,
+                    recoil: state.recoil,
+                    amplitude: amplitude,
+                    index: idx,
+                    count: characters.count
+                )
+                Text(String(ch))
+                    .font(.system(size: fontSize, weight: .heavy, design: .rounded))
+                    .kerning(1.5)
+                    .foregroundStyle(glyphStyle)
+                    .offset(x: offset.width, y: offset.height)
+            }
+        }
+    }
+
+    private var styledText: some View {
+        Text(phrase)
+            .font(.system(size: fontSize, weight: .heavy, design: .rounded))
+            .kerning(2)
+            .foregroundStyle(glyphStyle)
+    }
+
+    private var glyphStyle: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.62, green: 0.86, blue: 1.00),
+                Color(red: 0.46, green: 0.62, blue: 0.98),
+                Color(red: 0.78, green: 0.58, blue: 0.99)
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    private var background: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.015, green: 0.020, blue: 0.040),
+                Color(red: 0.040, green: 0.050, blue: 0.090)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    // MARK: Gesture
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                isDragging = true
+                releaseDate = nil
+                let f = size.width > 0 ? value.location.x / size.width : 0.5
+                dragFraction = min(max(f, 0), 1)
+                // Vertical pull normalized about the line center.
+                let center = size.height / 2
+                let dy = size.height > 0 ? (value.location.y - center) / (size.height / 2) : 0
+                dragY = min(max(dy, -1), 1)
+            }
+            .onEnded { value in
+                isDragging = false
+                let f = size.width > 0 ? value.location.x / size.width : 0.5
+                releaseFraction = min(max(f, 0), 1)
+                releaseY = dragY
+                releaseStrength = 1.0
+                releaseDate = Date()
+            }
+    }
+}
+
+// MARK: - iOS 18 TextRenderer
+
+@available(iOS 18.0, *)
+private struct ElasticRopeView_ElasticRopeRenderer: TextRenderer {
+    let touchFraction: CGFloat
+    let touchY: CGFloat
+    let pull: CGFloat
+    let recoil: ElasticRopeView_RecoilState
+    let amplitude: CGFloat
+    let count: Int
+
+    func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        // Collect every glyph slice in reading order so we can index them
+        // for the per-glyph traveling recoil wave.
+        var slices: [Text.Layout.RunSlice] = []
+        for line in layout {
+            for run in line {
+                for slice in run {
+                    slices.append(slice)
+                }
+            }
+        }
+
+        let total = max(slices.count, 1)
+        for (idx, slice) in slices.enumerated() {
+            let glyphFraction = total <= 1
+                ? 0.5
+                : CGFloat(idx) / CGFloat(total - 1)
+
+            let offset = ElasticRopeView_ElasticRopeMath.displacement(
+                glyphFraction: glyphFraction,
+                touchFraction: touchFraction,
+                touchY: touchY,
+                pull: pull,
+                recoil: recoil,
+                amplitude: amplitude,
+                index: idx,
+                count: count
+            )
+
+            var copy = context
+            copy.translateBy(x: offset.width, y: offset.height)
+            copy.draw(slice)
+        }
+    }
+}
+"""###,
+        "tx-fold-origami": ###"""
+import SwiftUI
+
+/// Origami Letter Unfold — each glyph unfolds from a flat folded triangle,
+/// hinging open across two creases with 3D rotation and a gradient fold-shadow
+/// that resolves to a flat face, staggered like a paper fan opening.
+///
+/// - demo == true  : self-driving PhaseAnimator-style loop (via TimelineView)
+///                   folds the word shut then open on a ~2.8s loop.
+/// - demo == false : tap to replay the staggered unfold from folded triangles
+///                   to flat faces.
+struct FoldOrigamiView: View {
+    var demo: Bool = false
+
+    // The short word keeps the per-letter fan legible inside a ~120pt tile.
+    private let word: [Character] = Array("FOLD")
+
+    // Loop timing for the auto-driving preview.
+    private let loopDuration: Double = 2.8
+
+    // How much of the loop each successive letter is delayed (paper-fan stagger).
+    private let stagger: Double = 0.16
+    // The window over which a single letter completes its unfold.
+    private let foldWindow: Double = 0.55
+
+    @State private var tapProgress: Double = 1.0
+    @State private var loopStart: Date = .now
+
+    var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        if demo {
+            autoDriven(in: size)
+        } else {
+            interactive(in: size)
+        }
+    }
+
+    // MARK: - Auto-driving preview
+
+    private func autoDriven(in size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSince(loopStart)
+            let global = loopProgress(t)
+            letterRow(in: size, globalProgress: global)
+        }
+    }
+
+    // Maps elapsed time to a 0→1→0 triangle wave so the fan opens then folds shut.
+    private func loopProgress(_ elapsed: Double) -> Double {
+        let phase = (elapsed / loopDuration).truncatingRemainder(dividingBy: 1.0)
+        // Ease the ramp so the open/close feels paper-soft, not linear.
+        let ramp = phase < 0.5 ? phase * 2.0 : (1.0 - phase) * 2.0
+        return easeInOut(ramp)
+    }
+
+    // MARK: - Interactive (tap to replay)
+
+    private func interactive(in size: CGSize) -> some View {
+        letterRow(in: size, globalProgress: tapProgress)
+            .onTapGesture {
+                replayUnfold()
+            }
+    }
+
+    private func replayUnfold() {
+        // Snap shut instantly, then unfold open with a staggered spring-ish ramp.
+        tapProgress = 0.0
+        withAnimation(.timingCurve(0.22, 0.9, 0.3, 1.0, duration: 1.5)) {
+            tapProgress = 1.0
+        }
+    }
+
+    // MARK: - Shared layout
+
+    private func letterRow(in size: CGSize, globalProgress: Double) -> some View {
+        let metrics = layoutMetrics(for: size)
+        return HStack(spacing: metrics.spacing) {
+            ForEach(Array(word.enumerated()), id: \.offset) { index, char in
+                FoldOrigamiView_FoldingLetter(
+                    character: char,
+                    fontSize: metrics.fontSize,
+                    progress: letterProgress(globalProgress, index: index)
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // Per-letter progress: stagger the start, then complete over a fixed window.
+    private func letterProgress(_ global: Double, index: Int) -> Double {
+        let start = Double(index) * stagger
+        let local = (global - start) / foldWindow
+        return clamp01(local)
+    }
+
+    // MARK: - Metrics
+
+    struct Metrics {
+        let fontSize: CGFloat
+        let spacing: CGFloat
+    }
+
+    private func layoutMetrics(for size: CGSize) -> Metrics {
+        let count = CGFloat(max(word.count, 1))
+        // Reserve some breathing room; size the type to the smaller axis budget.
+        let widthBudget: CGFloat = size.width * 0.82
+        let perLetterWidth = widthBudget / count
+        // Glyph aspect heuristic: width ≈ 0.66 * fontSize for this caps word.
+        let byWidth = perLetterWidth / 0.78
+        let byHeight = size.height * 0.5
+        let raw = min(byWidth, byHeight)
+        let fontSize = max(14.0, min(raw, 120.0))
+        let spacing = max(1.0, fontSize * 0.06)
+        return Metrics(fontSize: fontSize, spacing: spacing)
+    }
+
+    // MARK: - Math helpers
+
+    private func clamp01(_ v: Double) -> Double {
+        min(1.0, max(0.0, v))
+    }
+
+    private func easeInOut(_ x: Double) -> Double {
+        // Smoothstep.
+        let c = min(1.0, max(0.0, x))
+        return c * c * (3.0 - 2.0 * c)
+    }
+}
+
+// MARK: - FoldOrigamiView_FoldingLetter
+
+/// One glyph rendered as two half-faces hinging open along a central crease.
+/// progress == 0 → folded shut (a foreshortened triangle, still legible),
+/// progress == 1 → flat, the two halves recomposing into the whole glyph.
+private struct FoldOrigamiView_FoldingLetter: View {
+    let character: Character
+    let fontSize: CGFloat
+    let progress: Double   // 0 folded ... 1 flat
+
+    // Clamp the maximum fold so the "shut" extreme is a legible foreshortened
+    // triangle rather than an invisible edge-on line (never-blank guarantee).
+    private let maxFold: Double = 74.0
+
+    // Paper tints.
+    private let paper = Color(red: 0.97, green: 0.96, blue: 0.93)
+    private let ink = Color(red: 0.07, green: 0.08, blue: 0.11)
+
+    var body: some View {
+        ZStack {
+            topHalf
+            bottomHalf
+        }
+        .frame(width: glyphWidth, height: glyphHeight)
+        // A faint cast shadow that grows when folded for a touch of depth.
+        .background(castShadow)
+        .compositingGroup()
+        .opacity(faceOpacity)
+    }
+
+    // MARK: - Halves
+
+    private var topHalf: some View {
+        glyphFace
+            .mask(halfMask(top: true))
+            .overlay(creaseShadow(top: true).mask(halfMask(top: true)))
+            .rotation3DEffect(
+                .degrees(foldAngle),
+                axis: (x: 1.0, y: 0.22, z: 0.0),
+                anchor: .bottom,
+                perspective: 0.55
+            )
+    }
+
+    private var bottomHalf: some View {
+        glyphFace
+            .mask(halfMask(top: false))
+            .overlay(creaseShadow(top: false).mask(halfMask(top: false)))
+            .rotation3DEffect(
+                .degrees(-foldAngle),
+                axis: (x: 1.0, y: -0.22, z: 0.0),
+                anchor: .top,
+                perspective: 0.55
+            )
+    }
+
+    // The actual letter face — identical frame for both copies so the flat
+    // state recomposes seamlessly with no seam between halves.
+    private var glyphFace: some View {
+        Text(String(character))
+            .font(.system(size: fontSize, weight: .heavy, design: .rounded))
+            .foregroundStyle(ink)
+            .frame(width: glyphWidth, height: glyphHeight)
+    }
+
+    // MARK: - Masks
+
+    private func halfMask(top: Bool) -> some View {
+        VStack(spacing: 0) {
+            if top {
+                Rectangle().fill(.black)
+                Rectangle().fill(.clear)
+            } else {
+                Rectangle().fill(.clear)
+                Rectangle().fill(.black)
+            }
+        }
+        .frame(width: glyphWidth, height: glyphHeight)
+    }
+
+    // MARK: - Crease shadow
+
+    // A gradient that darkens toward the crease and fades as the face opens flat.
+    private func creaseShadow(top: Bool) -> some View {
+        let start: UnitPoint = top ? .bottom : .top
+        let end: UnitPoint = top ? .top : .bottom
+        return LinearGradient(
+            colors: [
+                Color.black.opacity(creaseOpacity),
+                Color.black.opacity(creaseOpacity * 0.18),
+                Color.clear
+            ],
+            startPoint: start,
+            endPoint: end
+        )
+        .blendMode(.multiply)
+    }
+
+    // MARK: - Cast shadow under the folded paper
+
+    private var castShadow: some View {
+        Ellipse()
+            .fill(Color.black.opacity(0.10 + 0.10 * (1.0 - clampedProgress)))
+            .frame(width: glyphWidth * 0.82, height: glyphHeight * 0.16)
+            .blur(radius: 3)
+            .offset(y: glyphHeight * 0.46)
+    }
+
+    // MARK: - Derived values
+
+    private var clampedProgress: Double {
+        min(1.0, max(0.0, progress))
+    }
+
+    // Fold angle: full clamped fold when shut, 0 when flat/open.
+    private var foldAngle: Double {
+        maxFold * (1.0 - clampedProgress)
+    }
+
+    // Crease shadow strongest when folded, fading to nothing when flat.
+    private var creaseOpacity: Double {
+        0.55 * (1.0 - clampedProgress)
+    }
+
+    // Keep the glyph fully visible; only nudge opacity at the very start so a
+    // freshly-snapped-shut letter still reads.
+    private var faceOpacity: Double {
+        0.55 + 0.45 * clampedProgress
+    }
+
+    private var glyphWidth: CGFloat {
+        fontSize * 0.78
+    }
+
+    private var glyphHeight: CGFloat {
+        fontSize * 1.12
+    }
+}
+"""###,
+        "tx-gooey-merge": ###"""
+import SwiftUI
+
+// MARK: - Gooey Letter Merge
+//
+// Characters slide together and their soft blurred-threshold edges fuse into
+// gooey metaball blobs, then crisp apart into clean letters, looping the
+// melt-and-resolve via a blur + alpha-threshold mask drawn in a Canvas.
+//
+// Mechanism (pure Canvas, no Metal):
+//   * All glyphs are drawn inside ONE drawLayer so their blur halos can overlap
+//     and bridge into metaballs.
+//   * Filter order matters: SwiftUI applies the LAST-added filter innermost, so
+//     to get  content -> blur -> alphaThreshold  the threshold is added FIRST
+//     and the blur SECOND.
+//   * A single sine phase drives BOTH inter-letter spacing and blur radius so the
+//     merge (spacing closed, blur high) and the resolve (spacing open, blur ~0)
+//     stay perfectly locked together.
+//   * The thresholded blobs are drawn in white and used as the alpha mask for a
+//     warm gradient, which supplies the color.
+//
+// interaction == "auto": both demo branches run the same self-driving loop.
+struct GooeyMergeView: View {
+    var demo: Bool = false
+
+    private let word = "GOO"
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let phase = self.phase(at: t)
+                content(size: size, phase: phase)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Phase
+
+    // A smooth 0...1 melt-and-resolve cycle on a ~3s loop.
+    // 0 == fully resolved (crisp, spread). 1 == fully merged (gooey, tight).
+    private func phase(at t: TimeInterval) -> CGFloat {
+        let period: TimeInterval = 3.0
+        let raw = (sin(t / period * 2.0 * .pi) + 1.0) / 2.0 // continuous, no seam
+        return CGFloat(raw)
+    }
+
+    // MARK: - Composition
+
+    @ViewBuilder
+    private func content(size: CGSize, phase: CGFloat) -> some View {
+        let dims = GooeyMergeView_Dimensions(size: size)
+
+        ZStack {
+            backdrop(dims: dims)
+
+            // The gradient is the visible fill; the white thresholded blobs are
+            // the alpha. Canvas background stays clear so the mask is shaped.
+            gooGradient(phase: phase)
+                .mask {
+                    gooCanvas(dims: dims, phase: phase)
+                }
+                .shadow(color: shadowColor(phase: phase),
+                        radius: dims.glow * phase,
+                        x: 0, y: 0)
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    private func backdrop(dims: GooeyMergeView_Dimensions) -> some View {
+        RoundedRectangle(cornerRadius: dims.corner, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.015, green: 0.020, blue: 0.040),
+                        Color(red: 0.040, green: 0.030, blue: 0.070)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+    }
+
+    // MARK: - The metaball Canvas
+    //
+    // Draws the word's glyphs into a single thresholded+blurred layer so adjacent
+    // letters fuse. All output is WHITE; color is supplied by the gradient mask.
+    private func gooCanvas(dims: GooeyMergeView_Dimensions, phase: CGFloat) -> some View {
+        Canvas { context, canvasSize in
+            // Blur shrinks toward ~0 as the word resolves (phase -> 0), giving
+            // genuinely crisp letters at rest and gooey blobs at full merge.
+            let blurRadius = dims.maxBlur * phase + dims.minBlur
+
+            // FILTER ORDER (critical):
+            //   alphaThreshold added FIRST  -> outermost  (runs last)
+            //   blur            added SECOND -> innermost  (runs first)
+            // Effective pipeline: glyphs -> blur -> alphaThreshold == metaballs.
+            context.addFilter(.alphaThreshold(min: 0.5, color: .white))
+            context.addFilter(.blur(radius: blurRadius))
+
+            // ONE drawLayer enclosing every glyph so their halos can bridge.
+            context.drawLayer { layer in
+                self.drawGlyphs(in: layer,
+                                canvasSize: canvasSize,
+                                dims: dims,
+                                phase: phase)
+            }
+        }
+    }
+
+    private func drawGlyphs(in layer: GraphicsContext,
+                            canvasSize: CGSize,
+                            dims: GooeyMergeView_Dimensions,
+                            phase: CGFloat) {
+        let chars = Array(word)
+        guard !chars.isEmpty else { return }
+
+        // Resolve each glyph once.
+        let resolved: [GraphicsContext.ResolvedText] = chars.map { ch in
+            let text = Text(String(ch))
+                .font(.system(size: dims.fontSize, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+            return layer.resolve(text)
+        }
+
+        let glyphSizes = resolved.map { $0.measure(in: canvasSize) }
+        let totalGlyphWidth = glyphSizes.reduce(CGFloat(0)) { $0 + $1.width }
+
+        // Spacing interpolates between spread (resolved) and tight/overlapping
+        // (merged). At full merge the gap goes slightly negative so blur halos
+        // overlap and bridge.
+        let gap = dims.spreadGap + (dims.mergeGap - dims.spreadGap) * phase
+        let count = CGFloat(chars.count)
+        let totalWidth = totalGlyphWidth + gap * (count - 1)
+
+        var cursorX = (canvasSize.width - totalWidth) / 2.0
+        let centerY = canvasSize.height / 2.0
+
+        for index in resolved.indices {
+            let glyphSize = glyphSizes[index]
+            let point = CGPoint(x: cursorX + glyphSize.width / 2.0, y: centerY)
+            layer.draw(resolved[index], at: point, anchor: .center)
+            cursorX += glyphSize.width + gap
+        }
+    }
+
+    // MARK: - Color & glow
+
+    private func gooGradient(phase: CGFloat) -> LinearGradient {
+        // Palette stored as raw RGB components (no Color/UIColor round-trip),
+        // so the in-file mix is self-contained and SwiftUI-only.
+        let warm: RGB = (0.99, 0.62, 0.30)
+        let pink: RGB = (0.98, 0.32, 0.55)
+        let violet: RGB = (0.55, 0.35, 0.98)
+        let cool: RGB = (0.30, 0.78, 0.98)
+
+        // Hue warms slightly as the letters merge for extra life.
+        let topRGB = mix(cool, warm, t: phase)
+        let midRGB = mix(pink, warm, t: phase)
+        let bottomRGB = mix(violet, pink, t: phase)
+
+        let topColor = color(topRGB)
+        let midColor = color(midRGB)
+        let bottomColor = color(bottomRGB)
+
+        return LinearGradient(
+            colors: [topColor, midColor, bottomColor],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private func shadowColor(phase: CGFloat) -> Color {
+        Color(red: 0.98, green: 0.38, blue: 0.60).opacity(0.55 * phase + 0.10)
+    }
+
+    // MARK: - Pure RGB interpolation helpers (no UIKit, no Color round-trip)
+
+    private typealias RGB = (r: Double, g: Double, b: Double)
+
+    private func mix(_ a: RGB, _ b: RGB, t: CGFloat) -> RGB {
+        let ta = Double(max(0, min(1, t)))
+        return (
+            r: a.r + (b.r - a.r) * ta,
+            g: a.g + (b.g - a.g) * ta,
+            b: a.b + (b.b - a.b) * ta
+        )
+    }
+
+    private func color(_ c: RGB) -> Color {
+        Color(red: c.r, green: c.g, blue: c.b)
+    }
+}
+
+// MARK: - Geometry, all derived from the tile / detail size
+
+private struct GooeyMergeView_Dimensions {
+    let fontSize: CGFloat
+    let spreadGap: CGFloat
+    let mergeGap: CGFloat
+    let maxBlur: CGFloat
+    let minBlur: CGFloat
+    let glow: CGFloat
+    let corner: CGFloat
+
+    init(size: CGSize) {
+        let minSide = max(1, min(size.width, size.height))
+
+        // Scale the heavy glyphs to the available space; bold + large so strokes
+        // survive blur + threshold and never vanish.
+        self.fontSize = minSide * 0.46
+
+        // Positive spread when resolved; negative when merged so halos overlap.
+        self.spreadGap = minSide * 0.06
+        self.mergeGap = -fontSize * 0.34
+
+        // Blur scales with geometry so bridges form identically at 120pt and at
+        // a large detail size. Min blur keeps a soft tactile edge even at rest.
+        self.maxBlur = fontSize * 0.22
+        self.minBlur = max(0.6, fontSize * 0.015)
+
+        self.glow = minSide * 0.10
+        self.corner = minSide * 0.18
+    }
+}
+"""###,
+        "tx-gradient-flow": ###"""
+import SwiftUI
+
+/// Liquid Gradient Flow — a flowing multi-stop gradient travels through a text
+/// mask with the colors warping along a sine path, so hues appear to pour and
+/// swirl inside the glyphs rather than sweeping in a flat straight line.
+///
+/// - `demo == true`  : self-driving TimelineView loop (never blank, always legible).
+/// - `demo == false` : same continuous flow (spec interaction is "auto"), with an
+///                     optional, non-gating drag that nudges flow direction/phase.
+struct GradientFlowView: View {
+    var demo: Bool = false
+
+    // Optional, non-gating interactive nudge. The TimelineView animates with or
+    // without touch; the drag only adds a bias to the flow phase + direction.
+    @State private var dragBias: CGFloat = 0
+    @State private var directionBias: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            content(in: size)
+                .frame(width: size.width, height: size.height)
+                .contentShape(Rectangle())
+                // Keep the gesture always attached; gate recognition with a mask.
+                // A bare `demo ? nil : gesture` ternary would unify to
+                // `Optional<Gesture>`, which does not conform to `Gesture`.
+                .gesture(flowDrag(in: size), including: demo ? .none : .all)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Content
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let phase = flowPhase(at: timeline.date)
+            ZStack {
+                background(in: size)
+                flowText(phase: phase, size: size)
+            }
+        }
+    }
+
+    private func background(in size: CGSize) -> some View {
+        // Near-black tint from the spec (#04050a). A faint vignette adds depth
+        // without ever competing with the bright glyph flow.
+        let endRadius: CGFloat = Swift.max(size.width, size.height) * 0.7 + 1
+        return ZStack {
+            Color(red: 0.016, green: 0.020, blue: 0.039)
+            RadialGradient(
+                colors: [
+                    Color(red: 0.06, green: 0.07, blue: 0.12).opacity(0.9),
+                    Color(red: 0.016, green: 0.020, blue: 0.039)
+                ],
+                center: .center,
+                startRadius: 0,
+                endRadius: endRadius
+            )
+            .opacity(0.6)
+        }
+        .ignoresSafeArea()
+    }
+
+    // MARK: - Flowing, sine-warped color masked by the word
+
+    @ViewBuilder
+    private func flowText(phase: Double, size: CGSize) -> some View {
+        let fontSize = glyphFontSize(for: size)
+
+        ZStack {
+            // A faint constant base so even the dimmest flow frame stays legible
+            // against the near-black background.
+            wordText(fontSize: fontSize)
+                .foregroundStyle(Color(red: 0.30, green: 0.34, blue: 0.46).opacity(0.55))
+
+            // The warped, pouring color, clipped to the glyph shapes.
+            warpedFlowCanvas(phase: phase, size: size)
+                .mask {
+                    wordText(fontSize: fontSize)
+                }
+                .overlay {
+                    // A soft meniscus-like sheen riding the flow for extra liquidity.
+                    sheenCanvas(phase: phase, size: size)
+                        .mask { wordText(fontSize: fontSize) }
+                        .blendMode(.plusLighter)
+                }
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    private func wordText(fontSize: CGFloat) -> some View {
+        Text(Self.word)
+            .font(.system(size: fontSize, weight: .heavy, design: .rounded))
+            .kerning(fontSize * 0.02)
+            .lineLimit(1)
+            .minimumScaleFactor(0.4)
+            .multilineTextAlignment(.center)
+    }
+
+    // MARK: - Canvas: per-column vertical sine displacement = literal warp
+
+    private func warpedFlowCanvas(phase: Double, size: CGSize) -> some View {
+        Canvas { context, canvasSize in
+            drawFlowBands(in: &context, size: canvasSize, phase: phase)
+        }
+        .drawingGroup()
+    }
+
+    /// Draws several angled, phase-shifted gradient bands whose columns are
+    /// pushed up/down by a traveling sine, so the superposition reads as
+    /// swirling liquid currents rather than a flat linear sweep.
+    private func drawFlowBands(in context: inout GraphicsContext, size: CGSize, phase: Double) {
+        let columns = 56
+        let safeWidth = Swift.max(size.width, 1)
+        let safeHeight = Swift.max(size.height, 1)
+        let columnWidth = safeWidth / CGFloat(columns)
+        let amplitude = safeHeight * 0.22
+
+        for index in 0..<columns {
+            let x = CGFloat(index) * columnWidth
+            let normalizedX = Double(index) / Double(columns)
+
+            // Two superimposed sine waves at different spatial frequencies give a
+            // curved, non-repeating-looking flow front.
+            let waveA = sin((normalizedX * 6.2) + phase + Double(directionBias))
+            let waveB = sin((normalizedX * 3.1) - (phase * 0.7))
+            let yOffset = amplitude * CGFloat((waveA * 0.6) + (waveB * 0.4))
+
+            // The color sampled for this column scrolls through the palette,
+            // sine-warped so hues pour and curve along the glyphs.
+            let colorPhase = normalizedX + (Double(yOffset) / Double(safeHeight)) + (phase * 0.16)
+            let color = flowColor(at: colorPhase)
+
+            let columnRect = CGRect(
+                x: x - 0.5,
+                y: (safeHeight * 0.5) + yOffset - (safeHeight * 0.9),
+                width: columnWidth + 1.0,
+                height: safeHeight * 1.8
+            )
+            context.fill(Path(columnRect), with: .color(color))
+        }
+    }
+
+    /// A thin bright sheen band that travels across the flow, adding a liquid
+    /// highlight without ever darkening any frame.
+    private func sheenCanvas(phase: Double, size: CGSize) -> some View {
+        Canvas { context, canvasSize in
+            let center = (sin(phase * 0.8) * 0.5 + 0.5) * Double(canvasSize.width)
+            let bandWidth = canvasSize.width * 0.28
+            let rect = CGRect(
+                x: CGFloat(center) - bandWidth / 2,
+                y: 0,
+                width: bandWidth,
+                height: canvasSize.height
+            )
+            let gradient = Gradient(stops: [
+                .init(color: .white.opacity(0.0), location: 0.0),
+                .init(color: .white.opacity(0.45), location: 0.5),
+                .init(color: .white.opacity(0.0), location: 1.0)
+            ])
+            context.fill(
+                Path(rect),
+                with: .linearGradient(
+                    gradient,
+                    startPoint: CGPoint(x: rect.minX, y: 0),
+                    endPoint: CGPoint(x: rect.maxX, y: 0)
+                )
+            )
+        }
+        .drawingGroup()
+    }
+
+    // MARK: - Palette
+
+    /// A wide, looping, bright multi-stop palette. Always saturated so glyphs
+    /// never blend into the near-black background on any frame. The phase wraps
+    /// through the stops; first and last hue match for a seamless cycle.
+    private func flowColor(at rawPhase: Double) -> Color {
+        let stops = Self.paletteStops
+        let count = stops.count
+        let safe = rawPhase.isFinite ? rawPhase : 0
+        let wrapped = safe - floor(safe) // 0..<1
+        let scaled = wrapped * Double(count - 1)
+        let lowerIndex = Int(floor(scaled))
+        let upperIndex = min(lowerIndex + 1, count - 1)
+        let t = scaled - Double(lowerIndex)
+
+        let lower = stops[lowerIndex]
+        let upper = stops[upperIndex]
+        return lerp(lower, upper, CGFloat(t))
+    }
+
+    private func lerp(_ a: RGB, _ b: RGB, _ t: CGFloat) -> Color {
+        Color(
+            red: Double(a.r + (b.r - a.r) * t),
+            green: Double(a.g + (b.g - a.g) * t),
+            blue: Double(a.b + (b.b - a.b) * t)
+        )
+    }
+
+    // MARK: - Phase & sizing
+
+    /// Maps wall-clock time to a continuous flow phase, biased by any drag.
+    /// Targets a calm, liquid pace; the sine inside the Canvas keeps the loop seamless.
+    private func flowPhase(at date: Date) -> Double {
+        let t = date.timeIntervalSinceReferenceDate
+        let speed = 0.95 // radians per second of base scroll
+        return (t * speed) + Double(dragBias)
+    }
+
+    private func glyphFontSize(for size: CGSize) -> CGFloat {
+        let basis = min(size.width, size.height)
+        // Scale to fit a short heavy word in both a ~120pt tile and a large area.
+        return Swift.max(18, basis * 0.42)
+    }
+
+    // MARK: - Optional non-gating interaction
+
+    private func flowDrag(in size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let dx = value.translation.width / Swift.max(size.width, 1)
+                let dy = value.translation.height / Swift.max(size.height, 1)
+                withAnimation(.interactiveSpring(response: 0.35, dampingFraction: 0.8)) {
+                    dragBias = CGFloat(dx) * 3.0
+                    directionBias = CGFloat(dy) * 2.2
+                }
+            }
+            .onEnded { _ in
+                withAnimation(.spring(response: 1.2, dampingFraction: 0.9)) {
+                    dragBias = 0
+                    directionBias = 0
+                }
+            }
+    }
+
+    // MARK: - Constants
+
+    private static let word = "FLOW"
+
+    struct RGB { let r: CGFloat; let g: CGFloat; let b: CGFloat }
+
+    /// Bright, saturated liquid palette. Index 0 == last index for a seamless wrap.
+    private static let paletteStops: [RGB] = [
+        RGB(r: 0.31, g: 0.78, b: 0.98), // cyan
+        RGB(r: 0.45, g: 0.55, b: 0.99), // periwinkle
+        RGB(r: 0.74, g: 0.45, b: 0.98), // violet
+        RGB(r: 0.99, g: 0.43, b: 0.74), // pink
+        RGB(r: 0.99, g: 0.62, b: 0.40), // coral
+        RGB(r: 0.98, g: 0.86, b: 0.40), // gold
+        RGB(r: 0.42, g: 0.93, b: 0.74), // mint
+        RGB(r: 0.31, g: 0.78, b: 0.98)  // cyan (== first, seamless)
+    ]
+}
+"""###,
+        "tx-handwriting": ###"""
+import SwiftUI
+
+// MARK: - Handwriting Stroke
+// A script headline draws itself stroke by stroke as if written by an invisible
+// pen: a trimmed Path reveal with a small ink-nib dot that leads the line and
+// lifts off between letters. Both demo and interactive modes are the same
+// self-driving draw-on loop (interactiveSpec: "auto — same as previewLoop"),
+// so everything is driven from a single TimelineView(.animation) progress value
+// to keep the stroke reveal and the nib position perfectly locked.
+
+public struct HandwritingView: View {
+    public var demo: Bool = false
+
+    public init(demo: Bool = false) {
+        self.demo = demo
+    }
+
+    public var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+                .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        // ~3.4s loop: draw, brief hold at full, gentle fade of the bright ink,
+        // then restart. The ghost guideline is always visible so no frame is
+        // ever blank.
+        let period: Double = 3.4
+        ZStack {
+            backdrop(in: size)
+            TimelineView(.animation) { timeline in
+                let t: Double = timeline.date.timeIntervalSinceReferenceDate
+                let loop: Double = t.truncatingRemainder(dividingBy: period) / period
+                let progress: CGFloat = drawProgress(for: loop)
+                let inkOpacity: Double = inkFade(for: loop)
+                HandwritingView_HandwritingCanvas(
+                    progress: progress,
+                    inkOpacity: inkOpacity,
+                    canvasSize: size
+                )
+            }
+        }
+    }
+
+    // MARK: Static backdrop
+
+    private func backdrop(in size: CGSize) -> some View {
+        let dim: CGFloat = min(size.width, size.height)
+        return ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.05, green: 0.06, blue: 0.10),
+                    Color(red: 0.02, green: 0.02, blue: 0.05)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            // faint ruled baseline so the script reads as written on paper
+            HandwritingView_RuledLine()
+                .stroke(
+                    Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.05),
+                    style: StrokeStyle(lineWidth: max(0.6, dim * 0.006))
+                )
+        }
+    }
+
+    // MARK: Progress shaping
+
+    // Maps the raw 0..1 loop into a draw curve that:
+    //  - eases the pen across the page (ease-in-out),
+    //  - holds at full for a short beat,
+    //  - never returns a degenerate 0 (clamped to a small floor).
+    private func drawProgress(for loop: Double) -> CGFloat {
+        let drawPortion: Double = 0.78   // fraction of the loop spent drawing
+        if loop >= drawPortion {
+            return 1.0                   // hold + fade phase: stay fully drawn
+        }
+        let x: Double = loop / drawPortion
+        let eased: Double = x * x * (3.0 - 2.0 * x) // smoothstep
+        return CGFloat(max(0.02, eased))
+    }
+
+    // The bright ink layer gently fades out at the very end of the loop, so the
+    // restart is a soft dissolve rather than a hard blank cut.
+    private func inkFade(for loop: Double) -> Double {
+        let fadeStart: Double = 0.9
+        if loop < fadeStart { return 1.0 }
+        let x: Double = (loop - fadeStart) / (1.0 - fadeStart)
+        return max(0.0, 1.0 - x)
+    }
+}
+
+// MARK: - Handwriting canvas
+
+private struct HandwritingView_HandwritingCanvas: View {
+    let progress: CGFloat
+    let inkOpacity: Double
+    let canvasSize: CGSize
+
+    var body: some View {
+        let dim: CGFloat = min(canvasSize.width, canvasSize.height)
+        let lineWidth: CGFloat = max(2.0, dim * 0.022)
+        let path: Path = HandwritingView_ScriptSignature.path(in: canvasSize)
+        let nib: CGPoint = nibPoint(in: path)
+
+        ZStack {
+            ghostLayer(path: path, lineWidth: lineWidth)
+            inkLayer(path: path, lineWidth: lineWidth)
+            nibDot(at: nib, lineWidth: lineWidth)
+        }
+        .frame(width: canvasSize.width, height: canvasSize.height)
+    }
+
+    // MARK: Layers
+
+    // Always-visible faint full stroke: the guideline the pen "follows".
+    private func ghostLayer(path: Path, lineWidth: CGFloat) -> some View {
+        path.stroke(
+            Color(red: 0.55, green: 0.62, blue: 0.85).opacity(0.14),
+            style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
+        )
+    }
+
+    // The bright drawn-so-far ink, with a soft glow.
+    private func inkLayer(path: Path, lineWidth: CGFloat) -> some View {
+        let ink: Color = Color(red: 0.75, green: 0.88, blue: 1.0)
+        return path
+            .trimmedPath(from: 0, to: progress)
+            .stroke(
+                ink,
+                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
+            )
+            .shadow(color: ink.opacity(0.55), radius: lineWidth * 0.8)
+            .opacity(inkOpacity)
+    }
+
+    // The traveling ink-nib dot at the current tip of the stroke.
+    private func nibDot(at point: CGPoint, lineWidth: CGFloat) -> some View {
+        let r: CGFloat = lineWidth * 0.9
+        let core: Color = Color(red: 0.95, green: 0.98, blue: 1.0)
+        let halo: Color = Color(red: 0.65, green: 0.82, blue: 1.0)
+        return ZStack {
+            Circle()
+                .fill(halo.opacity(0.45))
+                .frame(width: r * 2.6, height: r * 2.6)
+                .blur(radius: r * 0.6)
+            Circle()
+                .fill(core)
+                .frame(width: r * 1.4, height: r * 1.4)
+                .shadow(color: halo.opacity(0.8), radius: r)
+        }
+        .position(point)
+        .opacity(inkOpacity)
+    }
+
+    // MARK: Nib position
+
+    // The tip of the drawn stroke. trimmedPath(...).currentPoint is nil at
+    // progress ≈ 0 and across subpath "pen lifts", so fall back to a real
+    // on-path point (the path's first move) to keep the nib on screen on
+    // every frame rather than the path's end.
+    private func nibPoint(in path: Path) -> CGPoint {
+        if let p = path.trimmedPath(from: 0, to: progress).currentPoint {
+            return p
+        }
+        if let first = path.boundingRect.isNull ? nil : Optional(path.boundingRect.origin) {
+            return first
+        }
+        return path.cgPath.currentPoint
+    }
+}
+
+// MARK: - Ruled baseline (decorative paper line)
+
+private struct HandwritingView_RuledLine: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let y: CGFloat = rect.midY + rect.height * 0.20
+        p.move(to: CGPoint(x: rect.minX + rect.width * 0.06, y: y))
+        p.addLine(to: CGPoint(x: rect.maxX - rect.width * 0.06, y: y))
+        return p
+    }
+}
+
+// MARK: - Script signature path
+
+// A stylized cursive "hello" flourish built from normalized 0..1 control points
+// scaled to the canvas. Multiple subpaths (move(to:) between letters) create the
+// natural "lifts off at each letter's end" — the nib jumps between strokes.
+private enum HandwritingView_ScriptSignature {
+
+    // Control points are expressed in a normalized space and mapped into a
+    // centered, aspect-aware box so the script stays legible in a 120pt tile
+    // and a large detail area alike.
+    static func path(in size: CGSize) -> Path {
+        let dim: CGFloat = min(size.width, size.height)
+        // A wide writing box centered in the available space.
+        let boxW: CGFloat = min(size.width * 0.84, dim * 2.6)
+        let boxH: CGFloat = boxW * 0.42
+        let originX: CGFloat = (size.width - boxW) / 2.0
+        let originY: CGFloat = (size.height - boxH) / 2.0
+
+        func pt(_ nx: CGFloat, _ ny: CGFloat) -> CGPoint {
+            CGPoint(x: originX + nx * boxW, y: originY + ny * boxH)
+        }
+
+        var path = Path()
+        appendH(to: &path, pt: pt)
+        appendE(to: &path, pt: pt)
+        appendDoubleL(to: &path, pt: pt)
+        appendO(to: &path, pt: pt)
+        appendFlourish(to: &path, pt: pt)
+        return path
+    }
+
+    private typealias Mapper = (CGFloat, CGFloat) -> CGPoint
+
+    // h: a tall ascender looping down into a hump.
+    private static func appendH(to path: inout Path, pt: Mapper) {
+        path.move(to: pt(0.04, 0.30))
+        path.addCurve(
+            to: pt(0.08, 0.80),
+            control1: pt(0.10, 0.02),
+            control2: pt(0.10, 0.55)
+        )
+        path.addCurve(
+            to: pt(0.16, 0.50),
+            control1: pt(0.07, 0.95),
+            control2: pt(0.12, 0.40)
+        )
+        path.addCurve(
+            to: pt(0.20, 0.80),
+            control1: pt(0.20, 0.58),
+            control2: pt(0.21, 0.95)
+        )
+    }
+
+    // e: a small closed loop.
+    private static func appendE(to path: inout Path, pt: Mapper) {
+        path.move(to: pt(0.23, 0.62))
+        path.addCurve(
+            to: pt(0.30, 0.55),
+            control1: pt(0.25, 0.48),
+            control2: pt(0.32, 0.46)
+        )
+        path.addCurve(
+            to: pt(0.27, 0.82),
+            control1: pt(0.29, 0.66),
+            control2: pt(0.22, 0.78)
+        )
+        path.addQuadCurve(
+            to: pt(0.34, 0.74),
+            control: pt(0.32, 0.86)
+        )
+    }
+
+    // ll: two ascender loops.
+    private static func appendDoubleL(to path: inout Path, pt: Mapper) {
+        path.move(to: pt(0.37, 0.80))
+        path.addCurve(
+            to: pt(0.40, 0.18),
+            control1: pt(0.33, 0.45),
+            control2: pt(0.36, 0.20)
+        )
+        path.addCurve(
+            to: pt(0.42, 0.80),
+            control1: pt(0.44, 0.16),
+            control2: pt(0.41, 0.55)
+        )
+
+        path.move(to: pt(0.45, 0.80))
+        path.addCurve(
+            to: pt(0.48, 0.18),
+            control1: pt(0.41, 0.45),
+            control2: pt(0.44, 0.20)
+        )
+        path.addCurve(
+            to: pt(0.50, 0.80),
+            control1: pt(0.52, 0.16),
+            control2: pt(0.49, 0.55)
+        )
+    }
+
+    // o: a round closed loop.
+    private static func appendO(to path: inout Path, pt: Mapper) {
+        path.move(to: pt(0.55, 0.60))
+        path.addCurve(
+            to: pt(0.62, 0.62),
+            control1: pt(0.55, 0.46),
+            control2: pt(0.63, 0.46)
+        )
+        path.addCurve(
+            to: pt(0.56, 0.66),
+            control1: pt(0.61, 0.80),
+            control2: pt(0.54, 0.80)
+        )
+        path.addQuadCurve(
+            to: pt(0.60, 0.58),
+            control: pt(0.56, 0.55)
+        )
+    }
+
+    // Trailing underline flourish — the signature swoosh.
+    private static func appendFlourish(to path: inout Path, pt: Mapper) {
+        path.move(to: pt(0.60, 0.58))
+        path.addCurve(
+            to: pt(0.92, 0.74),
+            control1: pt(0.74, 0.40),
+            control2: pt(0.82, 0.92)
+        )
+        path.addQuadCurve(
+            to: pt(0.66, 0.88),
+            control: pt(0.99, 0.62)
+        )
+    }
+}
+"""###,
+        "tx-liquid-fill": ###"""
+import SwiftUI
+
+// MARK: - Liquid Fill Letters
+//
+// Each glyph is masked by a rising liquid level with a wobbling sine surface
+// and a couple of buoyant bubbles, filling from an empty outline to full
+// color, with a subtle meniscus highlight at the waterline.
+//
+// The load-bearing masking is `.mask { Text }`, which clips identically on
+// iOS 17 and 18, so no version split touches the core effect. The "empty"
+// glyph state is a dim translucent fill with a thin lighter overlay so the
+// letters always read as hollow vessels waiting to be filled.
+
+struct LiquidFillView: View {
+    var demo: Bool = false
+
+    private let word: String = "LIQUID"
+
+    var body: some View {
+        GeometryReader { geo in
+            let size: CGSize = geo.size
+            let fs: CGFloat = fontSize(for: size)
+
+            TimelineView(.animation) { timeline in
+                let t: Double = timeline.date.timeIntervalSinceReferenceDate
+                let level: CGFloat = fillLevel(at: t)
+
+                ZStack {
+                    // Empty letters — always legible so the tile is never blank.
+                    emptyGlyphs(fontSize: fs)
+
+                    // Rising liquid, clipped to the exact glyph shapes.
+                    liquidLayer(level: level, time: t)
+                        .mask { glyphText(fontSize: fs) }
+                }
+                .frame(width: size.width, height: size.height)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Fill progression (fill up, hold, drain — no hard reset flash)
+
+    private func fillLevel(at time: Double) -> CGFloat {
+        let period: Double = 3.4
+        let phase: Double = time.truncatingRemainder(dividingBy: period) / period
+        let raw: Double
+        if phase < 0.5 {
+            raw = eased(phase / 0.5)           // 0 -> 1 fill
+        } else if phase < 0.62 {
+            raw = 1.0                           // brief full hold
+        } else {
+            raw = 1.0 - eased((phase - 0.62) / 0.38)  // 1 -> 0 drain
+        }
+        // Never fully empty: keep a sliver of liquid so motion always reads.
+        return CGFloat(0.06 + raw * 0.94)
+    }
+
+    private func eased(_ x: Double) -> Double {
+        let c: Double = min(max(x, 0), 1)
+        return c * c * (3 - 2 * c)             // smoothstep
+    }
+
+    // MARK: Glyph layers
+
+    private func glyphText(fontSize fs: CGFloat) -> some View {
+        Text(word)
+            .font(.system(size: fs, weight: .heavy, design: .rounded))
+            .tracking(fs * 0.04)
+            .lineLimit(1)
+            .minimumScaleFactor(0.3)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func emptyGlyphs(fontSize fs: CGFloat) -> some View {
+        ZStack {
+            // Dim translucent body — the "empty" vessel.
+            glyphText(fontSize: fs)
+                .foregroundStyle(emptyFillColor)
+            // Thin lighter edge to suggest a hollow outline.
+            glyphText(fontSize: fs)
+                .foregroundStyle(outlineColor)
+                .blendMode(.screen)
+                .opacity(0.5)
+        }
+    }
+
+    // MARK: Liquid
+
+    private func liquidLayer(level: CGFloat, time: Double) -> some View {
+        Canvas { ctx, canvasSize in
+            let band: ClosedRange<CGFloat> = glyphBand(in: canvasSize)
+            let waterY: CGFloat = band.upperBound - level * (band.upperBound - band.lowerBound)
+
+            drawBody(ctx: ctx, size: canvasSize, waterY: waterY, time: time)
+            drawBubbles(ctx: ctx, size: canvasSize, waterY: waterY, time: time)
+            drawMeniscus(ctx: ctx, size: canvasSize, waterY: waterY, time: time)
+        }
+    }
+
+    // The vertical band the glyphs roughly occupy (centered cap-height region).
+    private func glyphBand(in size: CGSize) -> ClosedRange<CGFloat> {
+        let fs: CGFloat = fontSize(for: size)
+        let capHeight: CGFloat = fs * 0.72
+        let center: CGFloat = size.height / 2
+        let top: CGFloat = center - capHeight / 2
+        let bottom: CGFloat = center + capHeight / 2
+        return top...bottom
+    }
+
+    // MARK: Surface geometry
+
+    private func surfaceY(_ x: CGFloat, size: CGSize, waterY: CGFloat, time: Double) -> CGFloat {
+        let amp: CGFloat = max(size.height * 0.012, 1.5)
+        let k1: CGFloat = 2.4 * .pi / max(size.width, 1)
+        let k2: CGFloat = 5.1 * .pi / max(size.width, 1)
+        let p1: CGFloat = CGFloat(time * 1.6)
+        let p2: CGFloat = CGFloat(time * 2.7)
+        let wobble: CGFloat = sin(x * k1 + p1) * amp + sin(x * k2 + p2) * (amp * 0.45)
+        return waterY + wobble
+    }
+
+    private func surfacePath(size: CGSize, waterY: CGFloat, time: Double) -> Path {
+        var path = Path()
+        let step: CGFloat = max(size.width / 48, 2)
+        path.move(to: CGPoint(x: 0, y: size.height))
+        path.addLine(to: CGPoint(x: 0, y: surfaceY(0, size: size, waterY: waterY, time: time)))
+        var x: CGFloat = step
+        while x <= size.width {
+            path.addLine(to: CGPoint(x: x, y: surfaceY(x, size: size, waterY: waterY, time: time)))
+            x += step
+        }
+        path.addLine(to: CGPoint(x: size.width, y: size.height))
+        path.closeSubpath()
+        return path
+    }
+
+    private func drawBody(ctx: GraphicsContext, size: CGSize, waterY: CGFloat, time: Double) {
+        let body: Path = surfacePath(size: size, waterY: waterY, time: time)
+        let gradient = Gradient(stops: [
+            .init(color: liquidTop, location: 0.0),
+            .init(color: liquidMid, location: 0.45),
+            .init(color: liquidDeep, location: 1.0)
+        ])
+        ctx.fill(
+            body,
+            with: .linearGradient(
+                gradient,
+                startPoint: CGPoint(x: size.width / 2, y: waterY),
+                endPoint: CGPoint(x: size.width / 2, y: size.height)
+            )
+        )
+    }
+
+    private func drawMeniscus(ctx: GraphicsContext, size: CGSize, waterY: CGFloat, time: Double) {
+        var line = Path()
+        let step: CGFloat = max(size.width / 48, 2)
+        line.move(to: CGPoint(x: 0, y: surfaceY(0, size: size, waterY: waterY, time: time)))
+        var x: CGFloat = step
+        while x <= size.width {
+            line.addLine(to: CGPoint(x: x, y: surfaceY(x, size: size, waterY: waterY, time: time)))
+            x += step
+        }
+        ctx.stroke(
+            line,
+            with: .color(meniscusColor),
+            style: StrokeStyle(lineWidth: max(size.height * 0.01, 1.4), lineCap: .round)
+        )
+    }
+
+    private func drawBubbles(ctx: GraphicsContext, size: CGSize, waterY: CGFloat, time: Double) {
+        for seed in bubbleSeeds {
+            let cycle: Double = time / seed.duration + seed.offset
+            let prog: Double = cycle.truncatingRemainder(dividingBy: 1.0)
+
+            // Bubble rises from near the bottom up toward the waterline.
+            let bottom: CGFloat = size.height * 0.96
+            let target: CGFloat = waterY + size.height * 0.04
+            let by: CGFloat = bottom - CGFloat(prog) * (bottom - target)
+
+            // Only show bubbles that are submerged (below the wobbling surface).
+            guard by > waterY else { continue }
+
+            let sway: CGFloat = sin(CGFloat(time) * seed.swaySpeed + seed.phase) * size.width * 0.012
+            let bx: CGFloat = size.width * seed.x + sway
+            let r: CGFloat = size.height * seed.radius
+            let rect = CGRect(x: bx - r, y: by - r, width: r * 2, height: r * 2)
+
+            // Fade in near birth, fade out as it nears the surface.
+            let fade: Double = max(min(prog * 5, 1) * min((1 - prog) * 4, 1), 0)
+            ctx.fill(Path(ellipseIn: rect),
+                     with: .color(bubbleColor.opacity(0.55 * fade)))
+
+            // Tiny specular dot on each bubble.
+            let hr: CGFloat = r * 0.4
+            let hrect = CGRect(x: bx - r * 0.3 - hr / 2, y: by - r * 0.3 - hr / 2,
+                               width: hr, height: hr)
+            ctx.fill(Path(ellipseIn: hrect),
+                     with: .color(Color(red: 1, green: 1, blue: 1).opacity(0.5 * fade)))
+        }
+    }
+
+    // MARK: Layout
+
+    private func fontSize(for size: CGSize) -> CGFloat {
+        let byHeight: CGFloat = size.height * 0.5
+        let byWidth: CGFloat = size.width / CGFloat(max(word.count, 1)) * 1.5
+        return min(byHeight, byWidth)
+    }
+
+    // MARK: Palette (literals only — no design-system dependency)
+
+    private var liquidTop: Color { Color(red: 0.38, green: 0.82, blue: 0.98) }
+    private var liquidMid: Color { Color(red: 0.20, green: 0.56, blue: 0.95) }
+    private var liquidDeep: Color { Color(red: 0.10, green: 0.30, blue: 0.78) }
+    private var meniscusColor: Color { Color(red: 0.80, green: 0.95, blue: 1.0).opacity(0.9) }
+    private var bubbleColor: Color { Color(red: 0.85, green: 0.96, blue: 1.0) }
+    private var outlineColor: Color { Color(red: 0.42, green: 0.55, blue: 0.72) }
+    private var emptyFillColor: Color { Color(red: 0.30, green: 0.42, blue: 0.62).opacity(0.40) }
+
+    private var bubbleSeeds: [LiquidFillView_BubbleSeed] {
+        [
+            LiquidFillView_BubbleSeed(x: 0.22, radius: 0.045, duration: 2.6, offset: 0.0,
+                       swaySpeed: 2.1, phase: 0.0),
+            LiquidFillView_BubbleSeed(x: 0.55, radius: 0.032, duration: 3.3, offset: 0.45,
+                       swaySpeed: 2.7, phase: 1.3),
+            LiquidFillView_BubbleSeed(x: 0.80, radius: 0.052, duration: 2.9, offset: 0.78,
+                       swaySpeed: 1.8, phase: 2.6)
+        ]
+    }
+}
+
+// MARK: - Bubble seed
+
+private struct LiquidFillView_BubbleSeed {
+    var x: CGFloat
+    var radius: CGFloat
+    var duration: Double
+    var offset: Double
+    var swaySpeed: CGFloat
+    var phase: CGFloat
+}
+"""###,
+        "tx-magnetic-poetry": ###"""
+import SwiftUI
+
+// MARK: - Magnetic Poetry
+//
+// Word tiles laid out like fridge magnets on a metal door. A drag flings any
+// tile while its neighbors physically nudge aside on a distance-falloff shove,
+// then everything springs back to its baseline slot. In demo mode a virtual
+// "finger" auto-flings one tile after another on a continuous loop so the tile
+// looks alive with no touch.
+//
+// Both modes feed the SAME pure layout function (`tileOffset`) so the neighbor
+// coupling is identical whether driven by a real drag or the demo timeline.
+
+public struct MagneticPoetryView: View {
+    var demo: Bool = false
+
+    // The little poem. Capped well under the ~12-tile budget.
+    private let words: [String] = [
+        "magnet", "words", "drift", "on",
+        "cold", "steel", "quiet", "hum", "shove"
+    ]
+
+    // Interactive drag state.
+    @State private var draggedIndex: Int? = nil
+    @State private var dragTranslation: CGSize = .zero
+    @State private var releasing: Bool = false
+    @State private var settleTick: Int = 0
+
+    public init(demo: Bool = false) {
+        self.demo = demo
+    }
+
+    public var body: some View {
+        GeometryReader { geo in
+            let layout = makeLayout(in: geo.size)
+            ZStack {
+                background
+                if demo {
+                    demoBoard(layout: layout, size: geo.size)
+                } else {
+                    interactiveBoard(layout: layout, size: geo.size)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
+
+    // MARK: Background — brushed metal door.
+
+    private var background: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.10, green: 0.11, blue: 0.13),
+                    Color(red: 0.06, green: 0.07, blue: 0.09)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.05),
+                    Color.clear,
+                    Color.white.opacity(0.03)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+    }
+
+    // MARK: Demo board — virtual finger auto-flings tiles on a loop.
+
+    private func demoBoard(layout: TileLayout, size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let drive = demoDrive(time: t, count: words.count)
+            board(
+                layout: layout,
+                size: size,
+                activeIndex: drive.activeIndex,
+                source: drive.translation,
+                liftAmount: drive.lift
+            )
+        }
+    }
+
+    // MARK: Interactive board — real drag with neighbor shove.
+
+    private func interactiveBoard(layout: TileLayout, size: CGSize) -> some View {
+        board(
+            layout: layout,
+            size: size,
+            activeIndex: draggedIndex,
+            source: dragTranslation,
+            liftAmount: draggedIndex == nil ? 0 : (releasing ? 0 : 1)
+        )
+    }
+
+    // MARK: Shared board renderer.
+
+    private func board(
+        layout: TileLayout,
+        size: CGSize,
+        activeIndex: Int?,
+        source: CGSize,
+        liftAmount: CGFloat
+    ) -> some View {
+        ZStack {
+            ForEach(words.indices, id: \.self) { index in
+                tileView(
+                    index: index,
+                    layout: layout,
+                    activeIndex: activeIndex,
+                    source: source,
+                    liftAmount: liftAmount
+                )
+            }
+        }
+        .sensoryFeedbackCompat(trigger: settleTick)
+    }
+
+    // MARK: One positioned tile (factored to keep type-checking cheap).
+
+    @ViewBuilder
+    private func tileView(
+        index: Int,
+        layout: TileLayout,
+        activeIndex: Int?,
+        source: CGSize,
+        liftAmount: CGFloat
+    ) -> some View {
+        let slot = layout.slots[index]
+        let shove = tileOffset(
+            index: index,
+            activeIndex: activeIndex,
+            source: source,
+            layout: layout
+        )
+        let isActive = (index == activeIndex)
+        tile(
+            word: words[index],
+            fontSize: layout.fontSize,
+            isActive: isActive,
+            lift: isActive ? liftAmount : 0
+        )
+        .position(x: slot.x, y: slot.y)
+        .offset(shove)
+        .zIndex(isActive ? 100 : Double(index))
+        .gesture(dragGesture(for: index), including: demo ? .none : .all)
+    }
+
+    // MARK: A single magnet tile.
+
+    private func tile(word: String, fontSize: CGFloat, isActive: Bool, lift: CGFloat) -> some View {
+        let safeLift = max(0, lift)
+        return Text(word)
+            .font(.system(size: fontSize, weight: .heavy, design: .serif))
+            .minimumScaleFactor(0.5)
+            .lineLimit(1)
+            .foregroundStyle(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.16, green: 0.17, blue: 0.20),
+                        Color(red: 0.05, green: 0.05, blue: 0.07)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .padding(.horizontal, fontSize * 0.5)
+            .padding(.vertical, fontSize * 0.32)
+            .background(tileBackground(fontSize: fontSize))
+            .scaleEffect(1 + safeLift * 0.06)
+            .shadow(
+                color: Color.black.opacity(0.35 + safeLift * 0.25),
+                radius: 3 + safeLift * 7,
+                x: 0,
+                y: 2 + safeLift * 5
+            )
+    }
+
+    private func tileBackground(fontSize: CGFloat) -> some View {
+        let radius = fontSize * 0.28
+        return ZStack {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.96, green: 0.95, blue: 0.92),
+                            Color(red: 0.86, green: 0.85, blue: 0.82)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.7), lineWidth: 0.75)
+        }
+    }
+
+    // MARK: - Pure physics: one function, two drivers.
+
+    /// Returns the live offset for a tile given which tile is "active" (grabbed
+    /// or virtually flung) and that active tile's current translation. The
+    /// active tile follows `source`; every other tile is shoved away from the
+    /// active tile's *displaced* position with a smooth distance falloff.
+    private func tileOffset(
+        index: Int,
+        activeIndex: Int?,
+        source: CGSize,
+        layout: TileLayout
+    ) -> CGSize {
+        guard let active = activeIndex else { return .zero }
+        if index == active { return source }
+
+        let slot = layout.slots[index]
+        let activeSlot = layout.slots[active]
+        // Active tile's live centre.
+        let activeNow = CGPoint(x: activeSlot.x + source.width,
+                                y: activeSlot.y + source.height)
+
+        let dx = slot.x - activeNow.x
+        let dy = slot.y - activeNow.y
+        let dist = max(sqrt(dx * dx + dy * dy), 0.0001)
+
+        // Smooth falloff: full strength when overlapping, zero past `reach`.
+        let reach = layout.reach
+        let falloff = max(0, 1 - dist / reach)
+        let strength = falloff * falloff  // ease so distant tiles barely move
+        let push = layout.maxShove * strength
+
+        let nx = dx / dist
+        let ny = dy / dist
+        return CGSize(width: nx * push, height: ny * push)
+    }
+
+    // MARK: - Demo drive: virtual finger.
+
+    struct DemoDrive {
+        var activeIndex: Int
+        var translation: CGSize
+        var lift: CGFloat
+    }
+
+    /// Cycles one tile at a time: fling out, then a damped spring back to rest,
+    /// then the next tile. One fling-and-settle cycle lasts ~3.2s.
+    private func demoDrive(time: Double, count: Int) -> DemoDrive {
+        let safeCount = max(count, 1)
+        let cycle: Double = 3.2
+        let phase = time.truncatingRemainder(dividingBy: cycle) / cycle  // 0..1
+        let cycleNumber = Int(floor(time / cycle))
+        let active = ((cycleNumber % safeCount) + safeCount) % safeCount
+
+        // A wandering fling direction so each cycle differs.
+        let dirAngle = Double(cycleNumber) * 2.39996  // golden-ish angle
+        let dirX = CGFloat(cos(dirAngle))
+        let dirY = CGFloat(sin(dirAngle))
+
+        // Magnitude: rises quickly (fling out) then a damped spring recoil to 0.
+        let magnitude = flingMagnitude(phase: phase)
+        let amp = demoReach()
+        let translation = CGSize(width: dirX * amp * magnitude,
+                                 height: dirY * amp * magnitude)
+        let lift = CGFloat(min(1, max(0, magnitude) * 1.4))
+        return DemoDrive(activeIndex: active, translation: translation, lift: lift)
+    }
+
+    /// Normalised fling profile over the cycle phase 0...1.
+    /// Fast rise to a peak, then a decaying oscillation back to rest.
+    private func flingMagnitude(phase p: Double) -> CGFloat {
+        if p < 0.18 {
+            // Snappy pull-out.
+            let x = p / 0.18
+            return CGFloat(sin(x * Double.pi / 2))
+        } else {
+            // Damped recoil: e^-kt * cos back to rest.
+            let x = (p - 0.18) / 0.82            // 0..1
+            let decay = exp(-3.4 * x)
+            let wobble = cos(x * Double.pi * 3.0)
+            let value = decay * wobble
+            return CGFloat(value)
+        }
+    }
+
+    private func demoReach() -> CGFloat { 1.0 }  // scaled inside demoDrive via amp
+
+    // MARK: - Drag gesture (interactive only).
+
+    private func dragGesture(for index: Int) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                releasing = false
+                if draggedIndex != index {
+                    draggedIndex = index
+                }
+                dragTranslation = value.translation
+            }
+            .onEnded { _ in
+                // Keep `draggedIndex` set through the spring so the active tile
+                // AND its shoved neighbours spring back together; only release
+                // control once the recoil completes. Without this the offset
+                // would snap to .zero the instant activeIndex went nil.
+                settleTick &+= 1
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.45)) {
+                    releasing = true
+                    dragTranslation = .zero
+                } completion: {
+                    // Only clear if no new tile was grabbed mid-recoil; a fresh
+                    // `onChanged` sets `releasing = false`, so this guard avoids
+                    // clobbering an in-progress second drag.
+                    if releasing {
+                        draggedIndex = nil
+                        releasing = false
+                    }
+                }
+            }
+    }
+
+    // MARK: - Layout: slot positions + physics scale, all from geometry.
+
+    struct TileLayout {
+        var slots: [CGPoint]
+        var fontSize: CGFloat
+        var maxShove: CGFloat
+        var reach: CGFloat
+    }
+
+    /// A simple flowing wrap: tiles fill left-to-right, wrapping to new rows,
+    /// centred vertically. Everything scales off `size` so it reads in a 120pt
+    /// tile and a large detail area alike.
+    private func makeLayout(in size: CGSize) -> TileLayout {
+        let count = words.count
+        let safeWidth = max(size.width, 1)
+        let safeHeight = max(size.height, 1)
+        let minSide = min(safeWidth, safeHeight)
+
+        // Pick a row count that keeps tiles legible across sizes.
+        let rows = max(rowCount(for: count, size: size), 1)
+        let perRow = max(Int(ceil(Double(count) / Double(rows))), 1)
+
+        let fontSize = max(8, min(safeHeight / CGFloat(rows) * 0.34,
+                                  safeWidth / CGFloat(perRow) * 0.30))
+
+        let rowHeight = safeHeight / CGFloat(rows + 1)
+        var slots: [CGPoint] = []
+        slots.reserveCapacity(count)
+
+        for r in 0..<rows {
+            let start = r * perRow
+            let end = min(start + perRow, count)
+            if start >= end { continue }
+            let n = end - start
+            let colWidth = safeWidth / CGFloat(n + 1)
+            let y = rowHeight * CGFloat(r + 1)
+                + (safeHeight - rowHeight * CGFloat(rows + 1)) / 2
+                + rowHeight / 2
+            for c in 0..<n {
+                let x = colWidth * CGFloat(c + 1)
+                slots.append(CGPoint(x: x, y: y))
+            }
+        }
+        // Safety: ensure we always have a slot per word.
+        while slots.count < count {
+            slots.append(CGPoint(x: safeWidth / 2, y: safeHeight / 2))
+        }
+
+        let maxShove = minSide * 0.16
+        let reach = max(minSide * 0.55, 1)
+        return TileLayout(slots: slots, fontSize: fontSize, maxShove: maxShove, reach: reach)
+    }
+
+    private func rowCount(for count: Int, size: CGSize) -> Int {
+        let aspect = size.width / max(size.height, 1)
+        if aspect > 1.6 { return 2 }        // wide detail area
+        if size.height < 200 { return 3 }   // small grid tile
+        return 4
+    }
+}
+
+// MARK: - sensoryFeedback compatibility shim.
+
+private extension View {
+    @ViewBuilder
+    func sensoryFeedbackCompat(trigger: Int) -> some View {
+        if #available(iOS 17.0, *) {
+            self.sensoryFeedback(.impact(flexibility: .soft), trigger: trigger)
+        } else {
+            self
+        }
+    }
+}
+"""###,
+        "tx-marquee-3d": ###"""
+import SwiftUI
+
+/// 3D Cylinder Marquee
+///
+/// A scrolling ticker of words wraps around an invisible vertical-axis drum.
+/// Words curl away with perspective at the left/right rim, shrinking, fading
+/// and blurring as they rotate off one edge and arrive on the other.
+///
+/// - `demo == true`  : a self-driving constant-rate spin (no touch needed).
+/// - `demo == false` : a real `DragGesture` scrubs/flicks the drum; on release
+///                     the spin coasts to a stop via closed-form friction decay.
+///
+/// Curl direction note: the curl/perspective sign is governed by `perspective`
+/// in `wordRotation(...)` together with the angle->degrees mapping. If the drum
+/// reads inside-out on device, negate the degrees in `wordRotation` (single spot).
+struct Marquee3dView: View {
+    var demo: Bool = false
+
+    // The ticker tokens. Kept short so they stay legible inside a ~120pt tile.
+    private let words: [String] = [
+        "INSPIRE", "CREATE", "DREAM", "BUILD",
+        "DESIGN", "SHIP", "MAKE", "FLOW"
+    ]
+
+    // MARK: - Interactive drum state (only mutated in gesture callbacks)
+
+    /// Phase committed from finished drags (radians).
+    @State private var committedPhase: Double = 0
+    /// Live phase contribution from the in-flight drag (radians).
+    @State private var liveDragPhase: Double = 0
+    /// Release velocity in radians/sec, seeded on `.onEnded`.
+    @State private var releaseVelocity: Double = 0
+    /// Timestamp of the last release; coast is measured from here.
+    @State private var releaseDate: Date = .distantPast
+    /// Whether a finger is currently down (pauses the coast).
+    @State private var isDragging: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let content = TimelineView(.animation) { timeline in
+                drum(in: geo.size, now: timeline.date)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .background(backdrop)
+            .clipShape(RoundedRectangle(cornerRadius: geo.size.width * 0.06,
+                                        style: .continuous))
+
+            if demo {
+                content
+            } else {
+                content.gesture(drumGesture(width: geo.size.width))
+            }
+        }
+    }
+
+    // MARK: - Backdrop
+
+    private var backdrop: some View {
+        // Deep neutral panel with a soft vertical light gradient so the drum
+        // reads as recessed. Never fully black so the tile is always legible.
+        LinearGradient(
+            colors: [
+                Color(red: 0.05, green: 0.06, blue: 0.10),
+                Color(red: 0.02, green: 0.02, blue: 0.05)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    // MARK: - The rotating drum
+
+    private func drum(in size: CGSize, now: Date) -> some View {
+        let phase = currentPhase(now: now)
+        let radius = drumRadius(for: size)
+        let fontSize = wordFontSize(for: size)
+        let count = words.count
+
+        return ZStack {
+            // Faint center guide line so the band of the ticker reads as a slot.
+            slotHighlight(size: size)
+
+            ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                let angle = wordAngle(index: index, count: count, phase: phase)
+                wordTile(word: word,
+                         angle: angle,
+                         radius: radius,
+                         fontSize: fontSize)
+            }
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    private func slotHighlight(size: CGSize) -> some View {
+        RoundedRectangle(cornerRadius: size.height * 0.18, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 1, green: 1, blue: 1).opacity(0.06),
+                        Color(red: 1, green: 1, blue: 1).opacity(0.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: size.width * 0.9, height: size.height * 0.42)
+    }
+
+    // MARK: - Single word tile
+
+    @ViewBuilder
+    private func wordTile(word: String,
+                          angle: Double,
+                          radius: CGFloat,
+                          fontSize: CGFloat) -> some View {
+        let depth = cos(angle)                 // +1 = front center, -1 = far back
+        let xOffset = xPosition(angle: angle, radius: radius)
+        let scale = wordScale(depth: depth)
+        let opacity = wordOpacity(depth: depth)
+        let blur = wordBlur(depth: depth, fontSize: fontSize)
+
+        // Cull words on the far hemisphere: invisible AND behind, so they never
+        // clutter the front. There is always >= 1 word near center at full
+        // opacity, so the tile is never blank.
+        if depth > -0.15 {
+            Text(word)
+                .font(.system(size: fontSize, weight: .heavy, design: .rounded))
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .foregroundStyle(wordFill(depth: depth))
+                .fixedSize()
+                .scaleEffect(scale)
+                .rotation3DEffect(
+                    wordRotation(angle: angle),
+                    axis: (x: 0, y: 1, z: 0),
+                    anchor: .center,
+                    perspective: 0.55
+                )
+                .offset(x: xOffset)
+                .blur(radius: blur)
+                .opacity(opacity)
+                .zIndex(depth)
+        }
+    }
+
+    private func wordFill(depth: Double) -> LinearGradient {
+        // Front words get a warm bright face; rim words desaturate toward steel.
+        let frontness = max(0, depth)
+        let r = 0.78 + 0.20 * frontness
+        let g = 0.80 + 0.18 * frontness
+        let b = 0.86 + 0.14 * frontness
+        return LinearGradient(
+            colors: [
+                Color(red: min(r, 1), green: min(g, 1), blue: min(b, 1)),
+                Color(red: 0.55 + 0.25 * frontness,
+                      green: 0.58 + 0.25 * frontness,
+                      blue: 0.70 + 0.20 * frontness)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    // MARK: - Per-word math (small, type-annotated helpers)
+
+    /// Base evenly-spaced angle for a word plus the running phase.
+    private func wordAngle(index: Int, count: Int, phase: Double) -> Double {
+        let base = Double(index) * (2 * .pi) / Double(count)
+        return base + phase
+    }
+
+    /// Horizontal screen position from the angle on the drum.
+    private func xPosition(angle: Double, radius: CGFloat) -> CGFloat {
+        radius * CGFloat(sin(angle))
+    }
+
+    /// Front words are larger; rim words shrink toward the back.
+    private func wordScale(depth: Double) -> CGFloat {
+        let s: Double = 0.58 + 0.42 * ((depth + 1) / 2)
+        return CGFloat(s)
+    }
+
+    /// Fade out toward and past the rim; clamp so center stays fully legible.
+    private func wordOpacity(depth: Double) -> Double {
+        let raw = (depth + 0.4) / 1.4   // ~0 at the rim, 1 at the front
+        return min(1, max(0, raw))
+    }
+
+    /// Rim blur grows as words rotate edge-on. Scaled to the type size.
+    private func wordBlur(depth: Double, fontSize: CGFloat) -> CGFloat {
+        let amount = (1 - depth) / 2      // 0 at front, 1 at back
+        let maxBlur = fontSize * 0.08
+        return maxBlur * CGFloat(amount)
+    }
+
+    /// 3D y-axis rotation. Negate the degrees here to reverse the curl.
+    private func wordRotation(angle: Double) -> Angle {
+        .degrees(angle * 180 / .pi)
+    }
+
+    // MARK: - Layout sizing (relative to the geometry)
+
+    private func drumRadius(for size: CGSize) -> CGFloat {
+        size.width * 0.40
+    }
+
+    private func wordFontSize(for size: CGSize) -> CGFloat {
+        // Scale to the smaller side so it fits both a 120pt tile and a big
+        // detail area; cap so detail mode doesn't explode the type.
+        let base = min(size.width, size.height)
+        return min(base * 0.16, 40)
+    }
+
+    // MARK: - Phase composition
+
+    /// Pure function of time: committed + live drag + coast. No state mutation.
+    private func currentPhase(now: Date) -> Double {
+        if demo {
+            return autoPhase(now: now)
+        }
+        return committedPhase + liveDragPhase + coastPhase(now: now)
+    }
+
+    /// Self-driving constant-rate spin for the preview tile (~one lap / 4.5s).
+    private func autoPhase(now: Date) -> Double {
+        let speed: Double = (2 * .pi) / 4.5
+        let t = now.timeIntervalSinceReferenceDate
+        return t * speed
+    }
+
+    /// Closed-form exponential friction decay of the release flick.
+    /// coast(t) = (v0 / k) * (1 - exp(-k * t)) - bounded, settles on its own.
+    private func coastPhase(now: Date) -> Double {
+        guard !isDragging, releaseVelocity != 0 else { return 0 }
+        let friction: Double = 2.4
+        let elapsed = now.timeIntervalSince(releaseDate)
+        guard elapsed > 0 else { return 0 }
+        return (releaseVelocity / friction) * (1 - exp(-friction * elapsed))
+    }
+
+    // MARK: - Interaction
+
+    private func drumGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if !isDragging {
+                    // First frame of a new drag: fold any in-progress coast into
+                    // the committed phase before killing it, so grabbing the drum
+                    // mid-flick is continuous (no backward jump).
+                    committedPhase += coastPhase(now: Date())
+                    releaseDate = .distantPast
+                }
+                isDragging = true
+                releaseVelocity = 0
+                // Map horizontal drag distance to drum rotation.
+                liveDragPhase = dragToPhase(translationX: value.translation.width,
+                                            width: width)
+            }
+            .onEnded { value in
+                // Fold the live drag into the committed phase.
+                committedPhase += dragToPhase(translationX: value.translation.width,
+                                              width: width)
+                liveDragPhase = 0
+                // Seed the coast from the release velocity (pts/s -> rad/s).
+                releaseVelocity = velocityToPhaseRate(velocityX: value.velocity.width,
+                                                      width: width)
+                releaseDate = Date()
+                isDragging = false
+            }
+    }
+
+    /// A full drum width of horizontal travel ~ half a revolution.
+    private func dragToPhase(translationX: CGFloat, width: CGFloat) -> Double {
+        let span = max(width, 1)
+        return Double(translationX / span) * .pi
+    }
+
+    private func velocityToPhaseRate(velocityX: CGFloat, width: CGFloat) -> Double {
+        let span = max(width, 1)
+        return Double(velocityX / span) * .pi
+    }
+}
+"""###,
+        "tx-neon-flicker": ###"""
+import SwiftUI
+
+// MARK: - Neon Sign Flicker
+//
+// A glowing neon-tube headline that buzzes to life with a realistic startup
+// flicker. One stubborn letter stutters on and off a few times before it
+// catches, then the whole sign settles into a steady warm-glow hum with a
+// faintly pulsing halo.
+//
+// - demo == true:  self-driving ~3.4s loop (dark-ish → stutter → catch → hum).
+// - demo == false: lit & humming at rest; a tap replays the buzz-to-life.
+//
+// Single always-running TimelineView(.animation) drives everything. A dim
+// unlit tube of every glyph is ALWAYS visible underneath the lit layer, so no
+// frame is ever blank — exactly how a real neon sign reads when "off".
+//
+// iOS 17. Pure SwiftUI, no shaders, no external dependencies.
+
+struct NeonFlickerView: View {
+    var demo: Bool = false
+
+    // The headline. The character at `stutterIndex` is the misbehaving one.
+    private let word: String = "NEON"
+    private let stutterIndex: Int = 1   // the "E" stutters on its way to life
+
+    // Full buzz-to-life duration before the steady hum takes over.
+    private let flickerDuration: Double = 1.45
+    // Total demo loop length (buzz-to-life + a stretch of steady hum).
+    private let loopDuration: Double = 3.4
+
+    // Neon tube hue — a warm bar-window magenta/pink.
+    private var tubeColor: Color { Color(red: 1.0, green: 0.27, blue: 0.62) }
+    private var tubeCore: Color { Color(red: 1.0, green: 0.82, blue: 0.92) }
+
+    // Interactive replay anchor (tap date). nil → resting hum.
+    @State private var tapDate: Date? = nil
+    @State private var appearDate: Date = .now
+
+    var body: some View {
+        GeometryReader { geo in
+            TimelineView(.animation) { timeline in
+                let metrics = Metrics(size: geo.size)
+                content(now: timeline.date, metrics: metrics)
+                    .frame(width: geo.size.width, height: geo.size.height)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(backgroundWall)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // Replay the startup flicker from "dark".
+            tapDate = .now
+        }
+        .onAppear { appearDate = .now }
+    }
+
+    // MARK: Layout metrics derived from the tile/detail size
+
+    struct Metrics {
+        let fontSize: CGFloat
+        let spacing: CGFloat
+        let haloRadius: CGFloat
+
+        init(size: CGSize) {
+            let minSide = min(size.width, size.height)
+            // Scale font to fit the word horizontally with comfortable margin.
+            let byWidth = size.width / 4.6
+            let byHeight = minSide * 0.42
+            let f = max(20, min(byWidth, byHeight))
+            fontSize = f
+            spacing = f * 0.06
+            haloRadius = f * 0.5
+        }
+    }
+
+    // MARK: Background — a dark wall the tubes glow against
+
+    private var backgroundWall: some View {
+        let base = Color(red: 0.016, green: 0.020, blue: 0.039) // #04050a
+        return RadialGradient(
+            colors: [
+                Color(red: 0.10, green: 0.04, blue: 0.10),
+                base
+            ],
+            center: .center,
+            startRadius: 0,
+            endRadius: 320
+        )
+    }
+
+    // MARK: Composed lit headline
+
+    private func content(now: Date, metrics: Metrics) -> some View {
+        // Elapsed time since the flicker anchor.
+        let elapsed = flickerElapsed(now: now)
+        // Sine phase for the steady-hum halo breathe.
+        let hum = humPhase(now: now)
+        // Index over the glyphs; keyed on index so duplicate letters (the two
+        // N's in "NEON") stay distinct identities.
+        let letters = Array(word)
+
+        return HStack(spacing: metrics.spacing) {
+            ForEach(letters.indices, id: \.self) { index in
+                NeonFlickerView_NeonLetter(
+                    character: String(letters[index]),
+                    fontSize: metrics.fontSize,
+                    haloRadius: metrics.haloRadius,
+                    tubeColor: tubeColor,
+                    coreColor: tubeCore,
+                    litOpacity: litOpacity(for: index, elapsed: elapsed),
+                    haloIntensity: haloIntensity(for: index, elapsed: elapsed, hum: hum)
+                )
+            }
+        }
+    }
+
+    // MARK: Timing
+
+    /// Seconds elapsed within the current buzz-to-life cycle.
+    private func flickerElapsed(now: Date) -> Double {
+        if demo {
+            // Self-driving: loop the whole sequence forever.
+            let t = now.timeIntervalSince(appearDate)
+            return t.truncatingRemainder(dividingBy: loopDuration)
+        } else if let tap = tapDate {
+            // Interactive: count up from the tap; past flickerDuration we hold lit.
+            return now.timeIntervalSince(tap)
+        } else {
+            // At rest before any tap: already fully lit & humming.
+            return flickerDuration + 1.0
+        }
+    }
+
+    /// Continuous phase for the steady hum (independent of flicker anchor).
+    private func humPhase(now: Date) -> Double {
+        let t = now.timeIntervalSince(appearDate)
+        return t
+    }
+
+    // MARK: Per-letter lit opacity (the electrical flicker track)
+
+    /// The lit-glow opacity for a glyph, 0 (tube dark) ... 1 (full glow).
+    /// The dim unlit tube is drawn separately and never disappears.
+    private func litOpacity(for index: Int, elapsed: Double) -> Double {
+        // After the buzz-to-life window everything is solidly lit.
+        if elapsed >= flickerDuration { return 1.0 }
+        if elapsed < 0 { return 1.0 }
+
+        if index == stutterIndex {
+            return stutterTrack(elapsed: elapsed)
+        } else {
+            return normalCatchTrack(elapsed: elapsed)
+        }
+    }
+
+    /// Well-behaved letters: a couple of quick electrical blinks, then steady.
+    private func normalCatchTrack(elapsed: Double) -> Double {
+        // Irregular on/off keyframes (start dim, snap on, brief drop, hold).
+        // Times are within [0, flickerDuration].
+        switch elapsed {
+        case ..<0.08:  return 0.0   // initial dark
+        case ..<0.14:  return 0.9   // first strike
+        case ..<0.20:  return 0.15  // brief dropout
+        case ..<0.26:  return 1.0   // catches
+        case ..<0.30:  return 0.45  // tiny flutter
+        default:       return 1.0   // steady on
+        }
+    }
+
+    /// The stubborn stutter letter: stutters on/off several times before catching.
+    private func stutterTrack(elapsed: Double) -> Double {
+        switch elapsed {
+        case ..<0.10:  return 0.0
+        case ..<0.16:  return 0.85
+        case ..<0.24:  return 0.0
+        case ..<0.30:  return 0.7
+        case ..<0.40:  return 0.05
+        case ..<0.46:  return 0.95
+        case ..<0.58:  return 0.0   // stubborn dropout
+        case ..<0.66:  return 0.6
+        case ..<0.78:  return 0.1
+        case ..<0.86:  return 1.0   // nearly there
+        case ..<0.96:  return 0.3   // final flutter
+        default:       return 1.0   // finally catches & holds
+        }
+    }
+
+    // MARK: Per-letter halo intensity (glow radius/strength multiplier)
+
+    /// Combines the flicker-driven litness with the steady-hum sine pulse.
+    private func haloIntensity(for index: Int, elapsed: Double, hum: Double) -> Double {
+        let lit = litOpacity(for: index, elapsed: elapsed)
+
+        // Steady-hum breathe: low-amplitude sine, slight per-letter phase offset.
+        let phase = hum * 2.4 + Double(index) * 0.5
+        let breathe = 0.85 + 0.15 * (sin(phase) * 0.5 + 0.5)
+
+        // While catching, the halo follows the lit track tightly; once settled,
+        // it gently hums.
+        if elapsed >= flickerDuration {
+            return breathe
+        }
+        return lit * breathe
+    }
+}
+
+// MARK: - A single neon glyph
+
+private struct NeonFlickerView_NeonLetter: View {
+    let character: String
+    let fontSize: CGFloat
+    let haloRadius: CGFloat
+    let tubeColor: Color
+    let coreColor: Color
+    /// 0 = lit glow off (only dim tube shows), 1 = full glow.
+    let litOpacity: Double
+    /// Multiplier on the halo strength/spread for the steady hum.
+    let haloIntensity: Double
+
+    var body: some View {
+        ZStack {
+            // 1) The ALWAYS-VISIBLE dim unlit tube. Never disappears, so the
+            //    sign reads as a real (currently-off) neon shape, not blank.
+            glyph
+                .foregroundStyle(unlitTube)
+                .opacity(0.42)
+
+            // 2) The lit tube body with stacked shadow halos for the glow.
+            glyph
+                .foregroundStyle(litBody)
+                .shadow(color: tubeColor.opacity(0.95 * haloIntensity),
+                        radius: haloRadius * 0.30 * clampedIntensity)
+                .shadow(color: tubeColor.opacity(0.70 * haloIntensity),
+                        radius: haloRadius * 0.62 * clampedIntensity)
+                .shadow(color: tubeColor.opacity(0.45 * haloIntensity),
+                        radius: haloRadius * 1.05 * clampedIntensity)
+                .shadow(color: tubeColor.opacity(0.25 * haloIntensity),
+                        radius: haloRadius * 1.6 * clampedIntensity)
+                .opacity(litOpacity)
+
+            // 3) Bright hot core for the lit tube so it reads as glass + gas.
+            glyph
+                .foregroundStyle(coreColor)
+                .blur(radius: max(0.4, fontSize * 0.012))
+                .opacity(litOpacity * 0.9)
+        }
+        .animation(.linear(duration: 0.04), value: litOpacity)
+    }
+
+    private var clampedIntensity: CGFloat {
+        CGFloat(max(0.2, min(1.4, haloIntensity)))
+    }
+
+    private var glyph: some View {
+        Text(character)
+            .font(.system(size: fontSize, weight: .bold, design: .rounded))
+            .kerning(fontSize * 0.04)
+    }
+
+    private var unlitTube: Color {
+        // Desaturated dark version of the tube — the glass with the gas off.
+        Color(red: 0.34, green: 0.12, blue: 0.24)
+    }
+
+    private var litBody: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 1.0, green: 0.55, blue: 0.80),
+                tubeColor
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+}
+"""###,
+        "tx-odometer-blur": ###"""
+import SwiftUI
+
+// Odometer Blur — a numeric value that rolls like a mechanical odometer.
+// Each digit sits on a vertical drum; the fastest-moving wheels (the low-
+// order digits) pick up motion blur and a slight vertical stretch, while a
+// top/bottom curvature gradient fakes the cylinder shading. Everything is
+// driven deterministically from elapsed time so per-wheel velocity (and thus
+// blur) is analytic rather than guessed.
+//
+// The spec interaction is "auto": both demo states run the same self-driving
+// loop, where the value auto-increments (+137 on a ~1.2s cadence) so the
+// drums keep spinning and re-settling with velocity-proportional blur.
+struct OdometerBlurView: View {
+
+    var demo: Bool = false
+
+    // How many digit wheels to show. Fixed so layout never reflows.
+    private let digitCount: Int = 5
+
+    // Auto-roll choreography.
+    private let increment: Double = 137
+    private let cadence: Double = 1.2      // seconds between increments
+    private let rollDuration: Double = 0.7 // seconds the roll itself takes
+
+    var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(backgroundFill)
+        }
+    }
+
+    // MARK: - Layout
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        let metrics = layoutMetrics(for: size)
+
+        TimelineView(.animation) { timeline in
+            let elapsed = timeline.date.timeIntervalSinceReferenceDate
+            let state = autoState(at: elapsed)
+
+            drum(state: state, metrics: metrics)
+                .frame(width: metrics.totalWidth, height: metrics.windowHeight)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func drum(state: DrumState, metrics: LayoutMetrics) -> some View {
+        HStack(spacing: metrics.wheelSpacing) {
+            ForEach(0..<digitCount, id: \.self) { index in
+                // place value: leftmost wheel is the highest power.
+                let power = digitCount - 1 - index
+                let wheel = wheelInfo(value: state.value,
+                                      velocity: state.velocity,
+                                      power: power)
+                OdometerBlurView_DigitWheel(digit: wheel.digit,
+                           frac: wheel.frac,
+                           blur: wheel.blur,
+                           stretch: wheel.stretch,
+                           digitHeight: metrics.digitHeight,
+                           fontSize: metrics.fontSize,
+                           color: digitColor)
+                    .frame(width: metrics.wheelWidth, height: metrics.windowHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: metrics.wheelCorner,
+                                                style: .continuous))
+                    .overlay(curvatureOverlay(corner: metrics.wheelCorner))
+                    .overlay(wheelBorder(corner: metrics.wheelCorner))
+            }
+        }
+    }
+
+    // MARK: - Engine (deterministic, time-driven)
+
+    struct DrumState {
+        var value: Double
+        var velocity: Double // units per second, on the value scale
+    }
+
+    private func autoState(at elapsed: TimeInterval) -> DrumState {
+        let step = floor(elapsed / cadence)
+        let local = elapsed - step * cadence
+        let t = min(max(local / rollDuration, 0), 1)
+        let eased = easeOut(t)
+        let value = increment * step + increment * eased
+        // Analytic velocity: d/dt of (increment * easeOut(local/rollDuration)).
+        var velocity: Double = 0
+        if local < rollDuration {
+            velocity = increment * easeOutDerivative(t) / rollDuration
+        }
+        return DrumState(value: value, velocity: velocity)
+    }
+
+    // Easing: a cubic ease-out so the roll launches fast and settles soft.
+    private func easeOut(_ t: Double) -> Double {
+        let inv = 1 - t
+        return 1 - inv * inv * inv
+    }
+
+    private func easeOutDerivative(_ t: Double) -> Double {
+        let inv = 1 - t
+        return 3 * inv * inv
+    }
+
+    // MARK: - Per-wheel resolution
+
+    struct WheelInfo {
+        var digit: Int
+        var frac: Double
+        var blur: CGFloat
+        var stretch: CGFloat
+    }
+
+    private func wheelInfo(value: Double, velocity: Double, power: Int) -> WheelInfo {
+        let scale = pow(10.0, Double(power))
+        let modulus = pow(10.0, Double(digitCount))
+        // Keep the displayed value within the fixed digit window.
+        let wrapped = positiveMod(value, modulus)
+        let wheelPos = wrapped / scale
+        let base = floor(wheelPos)
+        let frac = wheelPos - base
+        let digit = positiveModInt(Int(base), 10)
+
+        // This wheel's spin rate in digits/sec.
+        let wheelVelocity = abs(velocity) / scale
+        let blur = blurAmount(forWheelVelocity: wheelVelocity)
+        let stretch = stretchAmount(forWheelVelocity: wheelVelocity)
+        return WheelInfo(digit: digit, frac: frac, blur: blur, stretch: stretch)
+    }
+
+    private func blurAmount(forWheelVelocity v: Double) -> CGFloat {
+        // v is in digits/second. A wheel doing a few digits/sec reads as a
+        // fast cylinder; cap so it never dissolves entirely.
+        let normalized = min(v / 22.0, 1.0)
+        return CGFloat(normalized) * 5.0
+    }
+
+    private func stretchAmount(forWheelVelocity v: Double) -> CGFloat {
+        let normalized = min(v / 22.0, 1.0)
+        return 1.0 + CGFloat(normalized) * 0.14
+    }
+
+    private func positiveMod(_ a: Double, _ n: Double) -> Double {
+        let r = a.truncatingRemainder(dividingBy: n)
+        return r < 0 ? r + n : r
+    }
+
+    private func positiveModInt(_ a: Int, _ n: Int) -> Int {
+        let r = a % n
+        return r < 0 ? r + n : r
+    }
+
+    // MARK: - Decoration
+
+    private func curvatureOverlay(corner: CGFloat) -> some View {
+        // Top + bottom shading fades to clear at the centre to fake the
+        // cylinder's curvature, using the dark catalogue tint.
+        let dark = Color(red: 0.016, green: 0.020, blue: 0.039)
+        return LinearGradient(
+            stops: [
+                .init(color: dark.opacity(0.95), location: 0.0),
+                .init(color: dark.opacity(0.30), location: 0.22),
+                .init(color: .clear, location: 0.46),
+                .init(color: .clear, location: 0.54),
+                .init(color: dark.opacity(0.30), location: 0.78),
+                .init(color: dark.opacity(0.95), location: 1.0)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+        .allowsHitTesting(false)
+    }
+
+    private func wheelBorder(corner: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .strokeBorder(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.16), Color.white.opacity(0.02)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ),
+                lineWidth: 0.75
+            )
+            .allowsHitTesting(false)
+    }
+
+    private var backgroundFill: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.05, green: 0.06, blue: 0.10),
+                Color(red: 0.02, green: 0.03, blue: 0.05)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var digitColor: Color {
+        Color(red: 0.94, green: 0.96, blue: 0.99)
+    }
+
+    // MARK: - Metrics
+
+    struct LayoutMetrics {
+        var fontSize: CGFloat
+        var digitHeight: CGFloat
+        var windowHeight: CGFloat
+        var wheelWidth: CGFloat
+        var wheelSpacing: CGFloat
+        var wheelCorner: CGFloat
+        var totalWidth: CGFloat
+    }
+
+    private func layoutMetrics(for size: CGSize) -> LayoutMetrics {
+        let minSide = min(size.width, size.height)
+        // Wheel sizing scales with the smaller dimension so it works in both a
+        // ~120pt tile and a large detail area.
+        let spacingGuess: CGFloat = max(2, minSide * 0.03)
+        let available = size.width - spacingGuess * CGFloat(digitCount - 1)
+        let widthPerWheel = available / CGFloat(digitCount)
+        let wheelWidth = max(8, min(widthPerWheel, minSide * 0.42))
+        let fontSize = min(wheelWidth * 1.08, size.height * 0.62)
+        let digitHeight = max(1, fontSize * 1.18)
+        let windowHeight = digitHeight
+        let corner = max(2, wheelWidth * 0.18)
+        let total = wheelWidth * CGFloat(digitCount)
+                    + spacingGuess * CGFloat(digitCount - 1)
+        return LayoutMetrics(
+            fontSize: fontSize,
+            digitHeight: digitHeight,
+            windowHeight: windowHeight,
+            wheelWidth: wheelWidth,
+            wheelSpacing: spacingGuess,
+            wheelCorner: corner,
+            totalWidth: total
+        )
+    }
+}
+
+// MARK: - OdometerBlurView_DigitWheel
+
+// A single odometer wheel rendered as a 2-digit window: the current digit and
+// the next one stacked above it, slid up by `frac` of a digit's height so 9
+// wraps cleanly to 0. Velocity-driven blur + vertical stretch sell the spin.
+private struct OdometerBlurView_DigitWheel: View {
+
+    let digit: Int
+    let frac: Double
+    let blur: CGFloat
+    let stretch: CGFloat
+    let digitHeight: CGFloat
+    let fontSize: CGFloat
+    let color: Color
+
+    var body: some View {
+        let nextDigit = (digit + 1) % 10
+        let offset = -CGFloat(frac) * digitHeight
+
+        ZStack {
+            wheelBackground
+            VStack(spacing: 0) {
+                glyph(digit)
+                glyph(nextDigit)
+            }
+            .offset(y: offset)
+            .scaleEffect(x: 1.0, y: stretch, anchor: .center)
+            .blur(radius: blur)
+        }
+    }
+
+    private func glyph(_ value: Int) -> some View {
+        Text("\(value)")
+            .font(.system(size: fontSize, weight: .semibold, design: .monospaced))
+            .monospacedDigit()
+            .foregroundStyle(color)
+            .frame(height: digitHeight)
+            .frame(maxWidth: .infinity)
+            // A soft inner glow so the lit digit reads against the dark drum.
+            .shadow(color: Color.white.opacity(0.18), radius: 0.6)
+    }
+
+    private var wheelBackground: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.10, green: 0.12, blue: 0.17),
+                Color(red: 0.04, green: 0.05, blue: 0.08),
+                Color(red: 0.10, green: 0.12, blue: 0.17)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+}
+"""###,
+        "tx-ransom-note": ###"""
+import SwiftUI
+
+/// Ransom Note Assembly — letters slap onto the page as mismatched cut-out
+/// clippings, each with a random typeface, tilt, torn-paper background and
+/// drop shadow, entering with a quick scale-overshoot stamp.
+///
+/// - `demo == true`  : a self-driving TimelineView re-rolls the collage and
+///   replays the staggered slap-in on a ~2.6s loop. The word stays fully
+///   assembled and legible at every frame (letters re-stamp in place, they
+///   never clear to empty).
+/// - `demo == false` : tapping anywhere re-seeds the randomness and replays
+///   the staggered scale-overshoot slap-in.
+struct RansomNoteView: View {
+    var demo: Bool = false
+
+    // The shared driver. Bumping it re-rolls every letter's attributes and
+    // restarts the stamp-in stagger. In demo mode a TimelineView bumps it;
+    // interactively a tap bumps it.
+    @State private var generation: Int = 1
+    @State private var reseedTime: Date = .now
+
+    private let phrase: [Character] = Array("RANSOM")
+    private let cycle: Double = 2.6
+
+    var body: some View {
+        GeometryReader { proxy in
+            let metrics = RansomNoteView_Metrics(size: proxy.size, count: phrase.count)
+            ZStack {
+                background
+                content(metrics: metrics)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Content (driven vs. interactive)
+
+    @ViewBuilder
+    private func content(metrics: RansomNoteView_Metrics) -> some View {
+        if demo {
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let gen = Int(t / cycle) + 1
+                let phase = (t.truncatingRemainder(dividingBy: cycle)) / cycle
+                collage(metrics: metrics, generation: gen, cyclePhase: phase)
+            }
+        } else {
+            TimelineView(.animation) { timeline in
+                let elapsed = timeline.date.timeIntervalSince(reseedTime)
+                let phase = min(max(elapsed / cycle, 0), 1)
+                collage(metrics: metrics, generation: generation, cyclePhase: phase)
+            }
+            // Expand the hit area to fill the whole tile so a tap ANYWHERE
+            // (including the margins) re-seeds, per the behavior contract.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                generation += 1
+                reseedTime = .now
+            }
+        }
+    }
+
+    // MARK: - Collage
+
+    private func collage(metrics: RansomNoteView_Metrics, generation gen: Int, cyclePhase: Double) -> some View {
+        HStack(spacing: metrics.spacing) {
+            ForEach(Array(phrase.enumerated()), id: \.offset) { index, character in
+                let attrs = RansomNoteView_LetterAttributes(generation: gen, index: index, baseSize: metrics.fontSize)
+                let stamp = stampPhase(cyclePhase: cyclePhase, index: index)
+                RansomNoteView_LetterClipping(character: character, attrs: attrs, stamp: stamp)
+            }
+        }
+        .padding(.horizontal, metrics.spacing)
+    }
+
+    // MARK: - Stagger timing
+
+    /// Returns a per-letter "stamp phase" in [0, 1] describing where this letter
+    /// is in its own slap-in window. Letters rest (phase 0) before their slice,
+    /// run 0→1 across their slice (one-by-one), then rest (phase 1) after. The
+    /// RansomNoteView_LetterClipping turns 0 and 1 into the SAME settled look (scale 1.0), with
+    /// the overshoot happening in between — so a letter is legible at every
+    /// frame, including the cycle boundary, yet still slaps in sequentially.
+    private func stampPhase(cyclePhase: Double, index: Int) -> Double {
+        let count = max(phrase.count, 1)
+        // Slap-in cascade occupies the first ~72% of the cycle, leaving a short
+        // settled beat before the collage re-rolls.
+        let window = 0.72
+        let perLetter = window / Double(count)
+        let start = perLetter * Double(index)
+        // Each letter's own pop runs slightly longer than its slot for overlap.
+        let span = perLetter * 1.35
+        let local = (cyclePhase - start) / max(span, 0.0001)
+        return min(max(local, 0), 1)
+    }
+
+    // MARK: - Background (paper-ish base)
+
+    private var background: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.09, green: 0.10, blue: 0.13),
+                    Color(red: 0.05, green: 0.05, blue: 0.07)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            // Faint vignette so the bright clippings pop.
+            RadialGradient(
+                colors: [Color.white.opacity(0.04), Color.clear],
+                center: .center,
+                startRadius: 0,
+                endRadius: 220
+            )
+        }
+    }
+}
+
+// MARK: - Layout metrics
+
+private struct RansomNoteView_Metrics {
+    let fontSize: CGFloat
+    let spacing: CGFloat
+
+    init(size: CGSize, count: Int) {
+        let w = max(size.width, 1)
+        let h = max(size.height, 1)
+        let n = CGFloat(max(count, 1))
+        // Per-letter footprint at rest ≈ 0.94 × fontSize (glyph + padding).
+        // Budget the 1.4× scale-overshoot and ±13° tilt plus an outer margin
+        // so the whole word stays inside the tile even at peak pop.
+        let footprintPerLetter: CGFloat = 0.94
+        let overshootBudget: CGFloat = 1.45
+        let marginFactor: CGFloat = 0.86
+        let byWidth = (w * marginFactor) / (n * footprintPerLetter * overshootBudget)
+        let byHeight = h * 0.30
+        let raw = min(byWidth, byHeight)
+        fontSize = max(min(raw, 96), 9)
+        spacing = max(fontSize * 0.03, 1)
+    }
+}
+
+// MARK: - Per-letter randomized attributes
+
+/// Pure function of (generation, index) — deterministic so it is stable across
+/// the many body re-evaluations a TimelineView triggers per second. Randomness
+/// only changes when `generation` changes.
+private struct RansomNoteView_LetterAttributes {
+    let design: Font.Design
+    let weight: Font.Weight
+    let italic: Bool
+    let size: CGFloat
+    let rotation: Double
+    let yOffset: CGFloat
+    let paper: Color
+    let ink: Color
+    let tornInset: CGFloat
+    let tornSeed: UInt64
+
+    init(generation: Int, index: Int, baseSize: CGFloat) {
+        let seedValue = UInt64(bitPattern: Int64(generation &* 1_000 &+ index &+ 7))
+        tornSeed = seedValue &* 0x2545F4914F6CDD1D | 1
+        var rng = RansomNoteView_SeededGenerator(seed: seedValue)
+
+        let designs: [Font.Design] = [.default, .serif, .rounded, .monospaced]
+        design = designs[Int(rng.next() % UInt64(designs.count))]
+
+        let weights: [Font.Weight] = [.regular, .medium, .semibold, .bold, .heavy, .black]
+        weight = weights[Int(rng.next() % UInt64(weights.count))]
+
+        italic = (rng.next() % 4 == 0)
+
+        // Size jitter so clippings look cut at different scales.
+        let sizeJitter = 0.82 + rng.unit() * 0.4
+        size = baseSize * CGFloat(sizeJitter)
+
+        // Tilt: mismatched paste angles.
+        rotation = (rng.unit() * 2 - 1) * 13
+
+        // Slight vertical scatter along the baseline.
+        yOffset = CGFloat((rng.unit() * 2 - 1)) * baseSize * 0.10
+
+        // Paper tints — newsprint / magazine clipping palette.
+        paper = RansomNoteView_LetterAttributes.paperColor(&rng)
+        ink = RansomNoteView_LetterAttributes.inkColor(&rng)
+
+        tornInset = CGFloat(0.10 + rng.unit() * 0.08)
+    }
+
+    private static func paperColor(_ rng: inout RansomNoteView_SeededGenerator) -> Color {
+        let palette: [(Double, Double, Double)] = [
+            (0.96, 0.94, 0.88),   // cream newsprint
+            (0.98, 0.97, 0.95),   // bright white
+            (0.92, 0.86, 0.70),   // aged tan
+            (0.86, 0.90, 0.94),   // cool grey
+            (0.99, 0.84, 0.36),   // highlighter yellow
+            (0.95, 0.55, 0.42),   // warm coral scrap
+            (0.62, 0.82, 0.74)    // mint scrap
+        ]
+        let c = palette[Int(rng.next() % UInt64(palette.count))]
+        return Color(red: c.0, green: c.1, blue: c.2)
+    }
+
+    private static func inkColor(_ rng: inout RansomNoteView_SeededGenerator) -> Color {
+        let palette: [(Double, Double, Double)] = [
+            (0.07, 0.07, 0.09),   // near-black ink
+            (0.10, 0.10, 0.12),
+            (0.55, 0.08, 0.10),   // red ink
+            (0.10, 0.18, 0.45)    // blue ballpoint
+        ]
+        let c = palette[Int(rng.next() % UInt64(palette.count))]
+        return Color(red: c.0, green: c.1, blue: c.2)
+    }
+
+    var font: Font {
+        let base = Font.system(size: size, weight: weight, design: design)
+        return italic ? base.italic() : base
+    }
+}
+
+// MARK: - A single torn-paper letter clipping
+
+private struct RansomNoteView_LetterClipping: View {
+    let character: Character
+    let attrs: RansomNoteView_LetterAttributes
+    /// 0 = resting (not yet stamped or fully settled), runs 0→1 across the
+    /// letter's slap-in slice with an overshoot in the middle.
+    let stamp: Double
+
+    var body: some View {
+        let scale = stampScale(stamp)
+        let activity = popActivity(stamp)          // 0 at rest, ~1 mid-pop
+        let settleRotation = attrs.rotation * (1.0 + activity * 0.55)
+        let isActive = stamp > 0.001 && stamp < 0.999
+
+        clipping
+            .rotationEffect(.degrees(settleRotation))
+            .offset(y: attrs.yOffset - CGFloat(activity) * attrs.size * 0.12)
+            .scaleEffect(scale)
+            .opacity(stampOpacity(stamp))
+            .zIndex(isActive ? 1 : 0)
+    }
+
+    private var clipping: some View {
+        Text(String(character))
+            .font(attrs.font)
+            .foregroundStyle(attrs.ink)
+            .padding(.horizontal, attrs.size * 0.16)
+            .padding(.vertical, attrs.size * 0.10)
+            .background {
+                RansomNoteView_TornPaper(inset: attrs.tornInset, seed: attrs.tornSeed)
+                    .fill(attrs.paper)
+                    .overlay {
+                        RansomNoteView_TornPaper(inset: attrs.tornInset, seed: attrs.tornSeed)
+                            .stroke(Color.black.opacity(0.13), lineWidth: 0.6)
+                    }
+                    .shadow(color: Color.black.opacity(0.45),
+                            radius: attrs.size * 0.10,
+                            x: attrs.size * 0.04,
+                            y: attrs.size * 0.06)
+            }
+    }
+
+    // Pop-in-place: rests at 1.0, punches up to ~1.4 at the slice midpoint,
+    // then settles back to 1.0. Because both ends are 1.0 the cycle boundary
+    // is seamless and the letter is never small or blank.
+    private func stampScale(_ p: Double) -> CGFloat {
+        if p <= 0 || p >= 1 { return 1.0 }
+        // Rise quickly, settle with a damped tail.
+        let rise = sin(min(p / 0.30, 1.0) * Double.pi / 2)   // 0→1 fast
+        let fall = 1 - pow(max((p - 0.30) / 0.70, 0), 2)      // 1→0 slow
+        let amplitude = p < 0.30 ? rise : fall
+        let value = 1.0 + 0.40 * max(min(amplitude, 1), 0)
+        return CGFloat(value)
+    }
+
+    // How "mid-pop" the letter is (drives the lift and extra tilt).
+    private func popActivity(_ p: Double) -> Double {
+        if p <= 0 || p >= 1 { return 0 }
+        return sin(p * Double.pi)
+    }
+
+    // Opacity floored at 0.78 so the word is always legible. It dips only very
+    // slightly at the start of a pop to read as a fresh slap, never near blank.
+    private func stampOpacity(_ p: Double) -> Double {
+        if p <= 0 || p >= 1 { return 1.0 }
+        let dip = 0.22 * (1 - sin(min(p / 0.18, 1.0) * Double.pi / 2))
+        return 1.0 - dip
+    }
+}
+
+// MARK: - Torn-paper edge shape
+
+/// A rectangle whose edges are nibbled with small irregular notches to suggest
+/// a hand-torn clipping. Deterministic per `seed` so it is stable across frames
+/// yet varies per letter and per re-roll.
+private struct RansomNoteView_TornPaper: Shape {
+    let inset: CGFloat
+    let seed: UInt64
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let teeth = 9
+        let amp = min(rect.width, rect.height) * inset * 0.4
+
+        var rng = RansomNoteView_SeededGenerator(seed: seed)
+
+        // Walk the perimeter producing a jagged torn outline.
+        let points = perimeterPoints(rect: rect, teeth: teeth, amp: amp, rng: &rng)
+        guard let first = points.first else { return path }
+        path.move(to: first)
+        for p in points.dropFirst() {
+            path.addLine(to: p)
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    private func perimeterPoints(rect: CGRect, teeth: Int, amp: CGFloat, rng: inout RansomNoteView_SeededGenerator) -> [CGPoint] {
+        var pts: [CGPoint] = []
+        let edges: [(CGPoint, CGPoint)] = [
+            (CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY)),
+            (CGPoint(x: rect.maxX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.maxY)),
+            (CGPoint(x: rect.maxX, y: rect.maxY), CGPoint(x: rect.minX, y: rect.maxY)),
+            (CGPoint(x: rect.minX, y: rect.maxY), CGPoint(x: rect.minX, y: rect.minY))
+        ]
+        for (a, b) in edges {
+            for i in 0..<teeth {
+                let f = CGFloat(i) / CGFloat(teeth)
+                let x = a.x + (b.x - a.x) * f
+                let y = a.y + (b.y - a.y) * f
+                // Offset perpendicular-ish by a small jitter to nibble the edge.
+                let jitter = (CGFloat(rng.unit()) * 2 - 1) * amp
+                let isHorizontal = abs(b.y - a.y) < abs(b.x - a.x)
+                let px = isHorizontal ? x : x + jitter
+                let py = isHorizontal ? y + jitter : y
+                pts.append(CGPoint(x: px, y: py))
+            }
+        }
+        return pts
+    }
+}
+
+// MARK: - Deterministic RNG
+
+/// SplitMix64 — a tiny, fast, fully deterministic generator so per-letter
+/// attributes are a pure function of their seed (never re-rolled per frame).
+private struct RansomNoteView_SeededGenerator: RandomNumberGenerator {
+    private var state: UInt64
+
+    init(seed: UInt64) {
+        // Avoid a zero state.
+        state = seed == 0 ? 0x9E3779B97F4A7C15 : seed
+    }
+
+    mutating func next() -> UInt64 {
+        state = state &+ 0x9E3779B97F4A7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        return z ^ (z >> 31)
+    }
+
+    /// A Double in [0, 1).
+    mutating func unit() -> Double {
+        Double(next() >> 11) * (1.0 / 9007199254740992.0)
+    }
+}
+"""###,
         "tx-shatter-glass": ###"""
 //
 //  GlassShatterSettleView.swift
@@ -46553,6 +51009,1354 @@ struct ShatterTextRenderer: TextRenderer {
                 }
             }
         }
+    }
+}
+"""###,
+        "tx-split-flap": ###"""
+import SwiftUI
+
+// MARK: - Split-Flap Departure
+// A mechanical airport split-flap board. Each character rolls through a
+// clatter of random glyphs and locks onto a target letter via a double-hinge
+// 3D fold (two stacked half-glyph flaps, each rotating only 90 deg so there is
+// no back-face / mirror handling). Tiles cascade left-to-right with a per-tile
+// delay. demo == true cycles through words on a self-driving ~3.2s loop;
+// demo == false re-fires the cascade to a new word on tap.
+
+public struct SplitFlapView: View {
+    public var demo: Bool = false
+
+    public init(demo: Bool = false) {
+        self.demo = demo
+    }
+
+    public var body: some View {
+        GeometryReader { geo in
+            SplitFlapView_SplitFlapBoard(demo: demo, size: geo.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Board
+
+private struct SplitFlapView_SplitFlapBoard: View {
+    let demo: Bool
+    let size: CGSize
+
+    // Short words (3-6 chars) so the board stays legible inside a ~120pt tile.
+    private static let words: [String] = ["FLY", "GATE", "BOARD", "DEPART", "CLEAR", "JAZZ"]
+
+    // Timing budget. With charCount intermediate flips at flipDur each, plus the
+    // cascade stagger, the last tile must finish comfortably before `period`.
+    private let period: Double = 3.2
+    private let flipDur: Double = 0.13
+    private let stagger: Double = 0.14
+    private let intermediateCount: Int = 5
+
+    // Interactive state (demo == false). Time-derived from `cycleStart`.
+    @State private var cycleStart: Date = .now
+    @State private var tapIndex: Int = 0
+
+    private var columns: Int {
+        Self.words.map(\.count).max() ?? 6
+    }
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let layout = layout(for: timeline.date)
+            board(layout: layout)
+        }
+        // Tap re-fires the cascade to the next word (faithful to interactiveSpec).
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !demo else { return }
+            tapIndex += 1
+            cycleStart = .now
+        }
+    }
+
+    // MARK: Layout metrics derived from available size
+
+    struct Metrics {
+        var cardW: CGFloat
+        var cardH: CGFloat
+        var fontSize: CGFloat
+        var spacing: CGFloat
+    }
+
+    private func metrics() -> Metrics {
+        let cols = CGFloat(columns)
+        let spacing: CGFloat = max(2, min(size.width, size.height) * 0.025)
+        // Fit `cols` cards plus inter-card spacing across the width, leaving margin.
+        let usableW = size.width * 0.92
+        let cardW = max(8, (usableW - spacing * (cols - 1)) / cols)
+        // Split-flap cards are tall; cap by height too.
+        let cardH = min(cardW * 1.5, size.height * 0.62)
+        let fontSize = min(cardH * 0.72, cardW * 1.05)
+        return Metrics(cardW: cardW, cardH: cardH, fontSize: fontSize, spacing: spacing)
+    }
+
+    // MARK: Time -> word + local time
+
+    struct BoardLayout {
+        var oldWord: String
+        var newWord: String
+        var localT: Double
+        var cycleIndex: Int
+    }
+
+    private func layout(for date: Date) -> BoardLayout {
+        let n = Self.words.count
+        if demo {
+            // Self-driving: derive everything purely from elapsed time.
+            let t = date.timeIntervalSinceReferenceDate
+            let cycleIndex = Int(floor(t / period))
+            let localT = t - Double(cycleIndex) * period
+            let newWord = Self.words[((cycleIndex % n) + n) % n]
+            let oldWord = Self.words[(((cycleIndex - 1) % n) + n) % n]
+            return BoardLayout(oldWord: oldWord, newWord: newWord, localT: localT, cycleIndex: cycleIndex)
+        } else {
+            // Interactive: time since the last tap drives the same render path.
+            let localT = max(0, date.timeIntervalSince(cycleStart))
+            let newWord = Self.words[((tapIndex % n) + n) % n]
+            let oldWord = Self.words[(((tapIndex - 1) % n) + n) % n]
+            return BoardLayout(oldWord: oldWord, newWord: newWord, localT: localT, cycleIndex: tapIndex)
+        }
+    }
+
+    // MARK: Views
+
+    private func board(layout: BoardLayout) -> some View {
+        let m = metrics()
+        return HStack(spacing: m.spacing) {
+            ForEach(0..<columns, id: \.self) { col in
+                SplitFlapView_FlapTile(
+                    oldChar: char(layout.oldWord, at: col),
+                    targetChar: char(layout.newWord, at: col),
+                    localT: layout.localT,
+                    tileIndex: col,
+                    cycleIndex: layout.cycleIndex,
+                    flipDur: flipDur,
+                    stagger: stagger,
+                    intermediateCount: intermediateCount,
+                    metrics: m
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, m.spacing)
+    }
+
+    // Pad shorter words with blanks so every word uses the same column count.
+    private func char(_ word: String, at index: Int) -> Character {
+        let chars = Array(word)
+        return index < chars.count ? chars[index] : " "
+    }
+}
+
+// MARK: - Single flap tile
+
+private struct SplitFlapView_FlapTile: View {
+    let oldChar: Character
+    let targetChar: Character
+    let localT: Double
+    let tileIndex: Int
+    let cycleIndex: Int
+    let flipDur: Double
+    let stagger: Double
+    let intermediateCount: Int
+    let metrics: SplitFlapView_SplitFlapBoard.Metrics
+
+    private static let alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ")
+
+    // Deterministic pseudo-random glyph from a seed (stable across frames).
+    private func glyph(step: Int) -> Character {
+        var h = UInt64(bitPattern: Int64(cycleIndex &* 92821 &+ tileIndex &* 6151 &+ step &* 2654435761))
+        h ^= h >> 33
+        h = h &* 0xff51afd7ed558ccd
+        h ^= h >> 33
+        let idx = Int(h % UInt64(Self.alphabet.count))
+        return Self.alphabet[idx]
+    }
+
+    // The full clatter sequence: old -> N random glyphs -> target.
+    private var sequence: [Character] {
+        var chars: [Character] = [oldChar]
+        for s in 0..<intermediateCount {
+            chars.append(glyph(step: s))
+        }
+        chars.append(targetChar)
+        return chars
+    }
+
+    var body: some View {
+        let chars = sequence
+        let localTile = localT - Double(tileIndex) * stagger
+        let lastStart = Double(chars.count - 1) * flipDur
+
+        Group {
+            if localTile <= 0 {
+                // Before this tile starts: hold the old glyph fully formed.
+                SplitFlapView_StaticCard(char: oldChar, metrics: metrics)
+            } else if localTile >= lastStart {
+                // Settled on the target glyph.
+                SplitFlapView_StaticCard(char: targetChar, metrics: metrics)
+            } else {
+                let flipIdx = min(Int(localTile / flipDur), chars.count - 2)
+                let p = (localTile - Double(flipIdx) * flipDur) / flipDur
+                SplitFlapView_FlippingCard(
+                    from: chars[flipIdx],
+                    to: chars[flipIdx + 1],
+                    progress: min(max(p, 0), 1),
+                    metrics: metrics
+                )
+            }
+        }
+        .frame(width: metrics.cardW, height: metrics.cardH)
+    }
+}
+
+// MARK: - Card chrome (shared)
+
+private func cardFace() -> some View {
+    RoundedRectangle(cornerRadius: 3, style: .continuous)
+        .fill(
+            LinearGradient(
+                colors: [
+                    Color(red: 0.11, green: 0.12, blue: 0.15),
+                    Color(red: 0.05, green: 0.05, blue: 0.07)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+}
+
+private let glyphColor = Color(red: 0.96, green: 0.96, blue: 0.93)
+
+// One half (top or bottom) of a glyph card. The glyph is rendered centered in
+// the FULL card height, then cropped to a half — so the glyph's vertical center
+// lands exactly on the seam (cardH / 2).
+private struct SplitFlapView_HalfCard: View {
+    let char: Character
+    let top: Bool
+    let metrics: SplitFlapView_SplitFlapBoard.Metrics
+
+    var body: some View {
+        let w = metrics.cardW
+        let h = metrics.cardH
+        ZStack {
+            cardFace()
+            Text(String(char))
+                .font(.system(size: metrics.fontSize, weight: .bold, design: .monospaced))
+                .foregroundStyle(glyphColor)
+                .frame(width: w, height: h)
+        }
+        // Crop the (full-height) content to the requested half BEFORE any rotation.
+        .frame(width: w, height: h, alignment: .center)
+        .frame(height: h / 2, alignment: top ? .top : .bottom)
+        .clipped()
+        // The dark seam line across the middle of the board.
+        .overlay(alignment: top ? .bottom : .top) {
+            Rectangle()
+                .fill(Color(red: 0.0, green: 0.0, blue: 0.0).opacity(0.55))
+                .frame(height: 1.2)
+        }
+    }
+}
+
+// A fully-formed (non-flipping) card: top half + bottom half stacked.
+private struct SplitFlapView_StaticCard: View {
+    let char: Character
+    let metrics: SplitFlapView_SplitFlapBoard.Metrics
+
+    var body: some View {
+        VStack(spacing: 0) {
+            SplitFlapView_HalfCard(char: char, top: true, metrics: metrics)
+            SplitFlapView_HalfCard(char: char, top: false, metrics: metrics)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .strokeBorder(Color.black.opacity(0.35), lineWidth: 0.75)
+        )
+        .shadow(color: Color.black.opacity(0.35), radius: 1.5, x: 0, y: 1)
+    }
+}
+
+// MARK: - The flipping card (double-hinge)
+
+private struct SplitFlapView_FlippingCard: View {
+    let from: Character
+    let to: Character
+    let progress: Double // 0...1 for a single old->new flip
+    let metrics: SplitFlapView_SplitFlapBoard.Metrics
+
+    private let perspective: CGFloat = 0.55
+
+    var body: some View {
+        let p = progress
+        let h = metrics.cardH
+
+        ZStack {
+            // 1. Static background: new top half is revealed as the old top falls away.
+            VStack(spacing: 0) {
+                SplitFlapView_HalfCard(char: to, top: true, metrics: metrics)
+                // 2. Static bottom: old bottom stays until the new bottom flap covers it.
+                SplitFlapView_HalfCard(char: from, top: false, metrics: metrics)
+            }
+
+            // 3. Falling top flap: old TOP hinges down from the seam (0 -> -90deg).
+            if p < 0.5 {
+                let topP = p / 0.5 // 0...1
+                SplitFlapView_HalfCard(char: from, top: true, metrics: metrics)
+                    .frame(height: h / 2, alignment: .top)
+                    .offset(y: -h / 4)
+                    .rotation3DEffect(
+                        .degrees(-90 * topP),
+                        axis: (x: 1, y: 0, z: 0),
+                        anchor: .bottom,
+                        anchorZ: 0,
+                        perspective: perspective
+                    )
+                    .brightness(-0.18 * topP)
+                    .blur(radius: blurAmount(for: topP))
+            } else {
+                // 4. Falling bottom flap: new BOTTOM swings up to the seam (+90 -> 0).
+                let botP = (p - 0.5) / 0.5 // 0...1
+                SplitFlapView_HalfCard(char: to, top: false, metrics: metrics)
+                    .frame(height: h / 2, alignment: .bottom)
+                    .offset(y: h / 4)
+                    .rotation3DEffect(
+                        .degrees(90 * (1 - botP)),
+                        axis: (x: 1, y: 0, z: 0),
+                        anchor: .top,
+                        anchorZ: 0,
+                        perspective: perspective
+                    )
+                    .brightness(-0.18 * (1 - botP))
+                    .blur(radius: blurAmount(for: 1 - botP))
+            }
+        }
+        .frame(width: metrics.cardW, height: metrics.cardH)
+        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .strokeBorder(Color.black.opacity(0.35), lineWidth: 0.75)
+        )
+        .shadow(color: Color.black.opacity(0.4), radius: 2, x: 0, y: 1.5)
+    }
+
+    // Motion blur peaks mid-swing (fastest angular speed) for the clatter feel.
+    private func blurAmount(for t: Double) -> CGFloat {
+        let v = sin(t * .pi) // 0 at ends, 1 mid-swing
+        return CGFloat(v) * 0.7
+    }
+}
+"""###,
+        "tx-spotlight-sweep": ###"""
+import SwiftUI
+
+/// Spotlight Reveal — a soft radial spotlight glides across a dim embossed
+/// headline, brightening and lifting only the characters it currently
+/// illuminates, leaving a warm candlelight afterglow trail behind it.
+///
+/// - `demo == true`  → a self-driving TimelineView sweeps the spotlight
+///   left → right → back on a ~3s loop, so the tile is always alive.
+/// - `demo == false` → an idle auto-sweep that a `DragGesture` can grab:
+///   your finger's x sets the spotlight center; releasing hands control
+///   back to the gentle sweep, resuming from where you let go.
+struct SpotlightSweepTextView: View {
+    var demo: Bool = false
+
+    private let phrase: String = "INSPIRE"
+
+    // Interactive state (demo == false)
+    @State private var dragX: CGFloat? = nil          // live finger x while dragging
+    @State private var idlePhase: Double = 0           // 0...1 sweep position used at rest
+    @State private var trailX: CGFloat = 0             // eased, lagged spotlight x for the wake
+    @State private var lastSpotX: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            ZStack {
+                background
+                if demo {
+                    demoDriver(size: size)
+                } else {
+                    interactiveDriver(size: size)
+                }
+            }
+            .frame(width: size.width, height: size.height)
+            .contentShape(Rectangle())
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Backdrop
+
+    private var background: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.04, green: 0.05, blue: 0.10),
+                Color(red: 0.02, green: 0.03, blue: 0.06)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+
+    // MARK: - Drivers
+
+    /// Self-driving loop for the grid tile.
+    private func demoDriver(size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let metrics = layout(for: size)
+            // Smooth left↔right↔left sweep on a ~3s period.
+            let phase = sweepPhase(time: t, period: 3.0)
+            let spotX = spotlightX(phase: phase, metrics: metrics)
+            // Trail = where the light was a small time-delta earlier, so the
+            // wake flips direction correctly on the return pass.
+            let trailPhase = sweepPhase(time: t - 0.28, period: 3.0)
+            let trail = spotlightX(phase: trailPhase, metrics: metrics)
+            headline(spotX: spotX, trailX: trail, metrics: metrics)
+        }
+    }
+
+    /// Idle auto-sweep that a drag can grab and override.
+    private func interactiveDriver(size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let metrics = layout(for: size)
+            let idleSpot = spotlightX(phase: sweepPhase(time: t, period: 3.0),
+                                      metrics: metrics)
+            // Finger wins when present; otherwise drift with the idle sweep.
+            let spotX = dragX ?? idleSpot
+            renderInteractive(spotX: spotX, metrics: metrics)
+        }
+        .gesture(dragGesture(size: size))
+    }
+
+    private func renderInteractive(spotX: CGFloat, metrics: Metrics) -> some View {
+        // Ease the trailing afterglow toward the live spotlight so the wake
+        // lags behind motion in either direction.
+        let eased = trailX + (spotX - trailX) * 0.16
+        DispatchQueue.main.async {
+            trailX = eased
+            lastSpotX = spotX
+        }
+        return headline(spotX: spotX, trailX: trailX, metrics: metrics)
+    }
+
+    private func dragGesture(size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                dragX = clampX(value.location.x, width: size.width)
+            }
+            .onEnded { _ in
+                dragX = nil
+            }
+    }
+
+    // MARK: - The single shared renderer
+
+    private func headline(spotX: CGFloat, trailX: CGFloat, metrics: Metrics) -> some View {
+        let chars = Array(phrase)
+        return ZStack {
+            // Dim embossed base — ALWAYS legible, never blank.
+            embossedBase(chars: chars, metrics: metrics, spotX: spotX, trailX: trailX)
+
+            // Warm afterglow blob trailing the light.
+            afterglow(x: trailX, metrics: metrics)
+
+            // Bright lit copy, additively layered, masked by the moving light.
+            litWord(chars: chars, metrics: metrics, spotX: spotX)
+                .mask(spotlightMask(x: spotX, metrics: metrics))
+        }
+        .frame(width: metrics.size.width, height: metrics.size.height)
+    }
+
+    // MARK: - Layers
+
+    private func embossedBase(chars: [Character], metrics: Metrics,
+                              spotX: CGFloat, trailX: CGFloat) -> some View {
+        HStack(spacing: metrics.spacing) {
+            ForEach(Array(chars.enumerated()), id: \.offset) { idx, ch in
+                let cx = charCenterX(index: idx, metrics: metrics)
+                let intensity = intensityFor(charX: cx, spotX: spotX, sigma: metrics.sigma)
+                SpotlightSweepTextView_CharCell(character: ch,
+                         fontSize: metrics.fontSize,
+                         intensity: intensity)
+            }
+        }
+        .frame(width: metrics.size.width, height: metrics.size.height)
+    }
+
+    private func litWord(chars: [Character], metrics: Metrics, spotX: CGFloat) -> some View {
+        HStack(spacing: metrics.spacing) {
+            ForEach(Array(chars.enumerated()), id: \.offset) { idx, ch in
+                let cx = charCenterX(index: idx, metrics: metrics)
+                let intensity = intensityFor(charX: cx, spotX: spotX, sigma: metrics.sigma)
+                SpotlightSweepTextView_LitCharCell(character: ch,
+                            fontSize: metrics.fontSize,
+                            intensity: intensity)
+            }
+        }
+        .frame(width: metrics.size.width, height: metrics.size.height)
+    }
+
+    private func spotlightMask(x: CGFloat, metrics: Metrics) -> some View {
+        let r: CGFloat = metrics.spotRadius
+        return RadialGradient(
+            gradient: Gradient(stops: [
+                .init(color: .white, location: 0.0),
+                .init(color: .white.opacity(0.9), location: 0.45),
+                .init(color: .white.opacity(0.25), location: 0.78),
+                .init(color: .clear, location: 1.0)
+            ]),
+            center: .center,
+            startRadius: 0,
+            endRadius: r
+        )
+        .frame(width: r * 2, height: r * 2)
+        .position(x: x, y: metrics.size.height / 2)
+        .frame(width: metrics.size.width, height: metrics.size.height)
+    }
+
+    private func afterglow(x: CGFloat, metrics: Metrics) -> some View {
+        let r: CGFloat = metrics.spotRadius * 1.15
+        return RadialGradient(
+            gradient: Gradient(colors: [
+                Color(red: 1.0, green: 0.66, blue: 0.30).opacity(0.34),
+                Color(red: 0.95, green: 0.50, blue: 0.18).opacity(0.10),
+                Color.clear
+            ]),
+            center: .center,
+            startRadius: 0,
+            endRadius: r
+        )
+        .frame(width: r * 2, height: r * 2)
+        .position(x: x, y: metrics.size.height / 2)
+        .frame(width: metrics.size.width, height: metrics.size.height)
+        .blendMode(.screen)
+        .allowsHitTesting(false)
+    }
+
+    // MARK: - Math helpers
+
+    /// Triangle/sine sweep position in 0...1 (eased), ping-ponging.
+    private func sweepPhase(time: Double, period: Double) -> Double {
+        let p = (time.truncatingRemainder(dividingBy: period)) / period
+        // 0→1→0 via cosine for soft turnarounds.
+        return (1 - cos(p * 2 * .pi)) / 2
+    }
+
+    private func spotlightX(phase: Double, metrics: Metrics) -> CGFloat {
+        let pad = metrics.fontSize * 0.4
+        let lo = pad
+        let hi = metrics.size.width - pad
+        return lo + (hi - lo) * CGFloat(phase)
+    }
+
+    private func charCenterX(index: Int, metrics: Metrics) -> CGFloat {
+        let n = max(metrics.count, 1)
+        let usable = metrics.size.width
+        let step = usable / CGFloat(n)
+        return step * (CGFloat(index) + 0.5)
+    }
+
+    /// Gaussian falloff of brightness vs. distance to the spotlight x.
+    private func intensityFor(charX: CGFloat, spotX: CGFloat, sigma: CGFloat) -> Double {
+        let dx = Double(charX - spotX)
+        let s = Double(sigma)
+        let v = exp(-(dx * dx) / (2 * s * s))
+        return min(max(v, 0), 1)
+    }
+
+    private func clampX(_ x: CGFloat, width: CGFloat) -> CGFloat {
+        min(max(x, 0), width)
+    }
+
+    // MARK: - Layout metrics
+
+    struct Metrics {
+        var size: CGSize
+        var count: Int
+        var fontSize: CGFloat
+        var spacing: CGFloat
+        var sigma: CGFloat
+        var spotRadius: CGFloat
+    }
+
+    private func layout(for size: CGSize) -> Metrics {
+        let count = max(phrase.count, 1)
+        // Size the type to the geometry so it fits a 120pt tile and a big detail.
+        let byWidth = size.width / CGFloat(count) * 1.18
+        let byHeight = size.height * 0.42
+        let fontSize = min(byWidth, byHeight)
+        let sigma = max(size.width * 0.16, fontSize * 1.1)
+        let spotRadius = max(size.width * 0.30, fontSize * 1.8)
+        return Metrics(
+            size: size,
+            count: count,
+            fontSize: fontSize,
+            spacing: fontSize * 0.04,
+            sigma: sigma,
+            spotRadius: spotRadius
+        )
+    }
+}
+
+// MARK: - Character cells
+
+/// The dim, embossed resting glyph. Stays legible on every frame; the
+/// spotlight only nudges its scale/shadow so it lifts subtly into the light.
+private struct SpotlightSweepTextView_CharCell: View {
+    let character: Character
+    let fontSize: CGFloat
+    let intensity: Double
+
+    var body: some View {
+        let lift = CGFloat(intensity) * 6
+        let scale = 1 + 0.16 * intensity
+        Text(String(character))
+            .font(.system(size: fontSize, weight: .heavy, design: .rounded))
+            .kerning(fontSize * 0.02)
+            // Cool dim base — readable floor, brightened a touch by the light.
+            .foregroundStyle(baseColor)
+            // Embossed feel: dark drop below, faint light above.
+            .shadow(color: .black.opacity(0.55),
+                    radius: 1, x: 0, y: 1.5)
+            .shadow(color: .white.opacity(0.06 + 0.10 * intensity),
+                    radius: 0.5, x: 0, y: -0.5)
+            // Warm cast + lift only where illuminated.
+            .shadow(color: Color(red: 1.0, green: 0.62, blue: 0.28)
+                        .opacity(0.55 * intensity),
+                    radius: 8 * CGFloat(intensity), x: 0, y: 0)
+            .scaleEffect(scale)
+            .offset(y: -lift)
+            .lineLimit(1)
+            .minimumScaleFactor(0.4)
+    }
+
+    private var baseColor: Color {
+        // Dim slate at rest, easing toward a paler tone under the light.
+        let lo = 0.30, hi = 0.55
+        let v = lo + (hi - lo) * intensity
+        return Color(red: v * 0.92, green: v * 0.96, blue: v)
+    }
+}
+
+/// The bright "lit" copy. This whole layer is masked by the radial spotlight,
+/// so it only shows through where the light is. Per-char intensity boosts the
+/// warmth and glow of the letter currently under the beam.
+private struct SpotlightSweepTextView_LitCharCell: View {
+    let character: Character
+    let fontSize: CGFloat
+    let intensity: Double
+
+    var body: some View {
+        let scale = 1 + 0.16 * intensity
+        let lift = CGFloat(intensity) * 6
+        Text(String(character))
+            .font(.system(size: fontSize, weight: .heavy, design: .rounded))
+            .kerning(fontSize * 0.02)
+            .foregroundStyle(warm)
+            .shadow(color: Color(red: 1.0, green: 0.72, blue: 0.36)
+                        .opacity(0.9), radius: 6, x: 0, y: 0)
+            .shadow(color: Color(red: 1.0, green: 0.55, blue: 0.18)
+                        .opacity(0.7), radius: 14, x: 0, y: 0)
+            .scaleEffect(scale)
+            .offset(y: -lift)
+            .lineLimit(1)
+            .minimumScaleFactor(0.4)
+    }
+
+    private var warm: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 1.0, green: 0.96, blue: 0.86),
+                Color(red: 1.0, green: 0.82, blue: 0.50)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+}
+"""###,
+        "tx-stamp-ink": ###"""
+import SwiftUI
+
+// MARK: - Rubber Stamp Slam
+// The word slams down as an over-rotated ink stamp that overshoots in scale,
+// kicks up a faint dust ring, and leaves a textured uneven-ink imprint with
+// slightly heavier edges and a tiny settle wobble.
+//
+// demo == true  -> self-driving PhaseAnimator loop (~3s, rest-dominant)
+// demo == false -> tap to replay the KeyframeAnimator slam
+
+struct StampInkView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            let side = min(size.width, size.height)
+
+            ZStack {
+                StampInkView_StampBackdrop(side: side)
+
+                if demo {
+                    StampInkView_DemoStamp(side: side)
+                } else {
+                    StampInkView_InteractiveStamp(side: side)
+                }
+            }
+            .frame(width: size.width, height: size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Animatable pose shared by both drivers
+
+private struct StampInkView_StampPose {
+    var scale: CGFloat = 1.0
+    var rotation: Double = -8.0   // resting over-rotated tilt (degrees)
+    var inkOpacity: Double = 1.0  // legibility of the stamped word
+    var dust: CGFloat = 0.0       // 0 = no ring, 1 = fully expanded/faded
+    var press: CGFloat = 0.0      // 0 = lifted, 1 = pressed flat into page
+
+    static let rest = StampInkView_StampPose(scale: 1.0, rotation: -8.0, inkOpacity: 1.0, dust: 0.0, press: 0.0)
+}
+
+// MARK: - Backdrop (paper card)
+
+private struct StampInkView_StampBackdrop: View {
+    let side: CGFloat
+
+    var body: some View {
+        let inset = side * 0.06
+        RoundedRectangle(cornerRadius: side * 0.10, style: .continuous)
+            .fill(paperGradient)
+            .overlay(
+                RoundedRectangle(cornerRadius: side * 0.10, style: .continuous)
+                    .strokeBorder(Color(red: 0.86, green: 0.83, blue: 0.77), lineWidth: 1)
+            )
+            .padding(inset)
+            .shadow(color: Color.black.opacity(0.18), radius: side * 0.04, x: 0, y: side * 0.02)
+    }
+
+    private var paperGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.98, green: 0.97, blue: 0.93),
+                Color(red: 0.94, green: 0.92, blue: 0.86)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+// MARK: - The stamped face (renders from a StampInkView_StampPose)
+
+private struct StampInkView_StampFace: View {
+    let pose: StampInkView_StampPose
+    let side: CGFloat
+
+    private let word = "APPROVED"
+    private let inkColor = Color(red: 0.74, green: 0.13, blue: 0.16)
+
+    var body: some View {
+        ZStack {
+            dustRing
+            stampedWord
+        }
+        .frame(width: side, height: side)
+    }
+
+    // The ink imprint: a textured/uneven word in stamp red.
+    private var stampedWord: some View {
+        let pressLift = 1.0 - Double(pose.press) * 0.12
+
+        return wordText
+            .overlay(StampInkView_GrainOverlay(side: side, ink: inkColor).mask(wordText))
+            .overlay(StampInkView_EdgeBleed(side: side, ink: inkColor).mask(wordText))
+            .opacity(pose.inkOpacity * pressLift)
+            .scaleEffect(pose.scale)
+            .rotationEffect(.degrees(pose.rotation))
+            // soft impact shadow that tightens as it presses flat
+            .shadow(
+                color: inkColor.opacity(0.28 * (1.0 - Double(pose.press) * 0.5)),
+                radius: side * 0.012 * (1.0 + (1.0 - pose.press) * 2.0),
+                x: 0,
+                y: 0
+            )
+    }
+
+    private var wordText: some View {
+        Text(word)
+            .font(.system(size: side * 0.16, weight: .heavy, design: .rounded))
+            .tracking(side * 0.012)
+            .foregroundStyle(inkColor)
+            .lineLimit(1)
+            .minimumScaleFactor(0.4)
+            .padding(.horizontal, side * 0.10)
+            .overlay(
+                RoundedRectangle(cornerRadius: side * 0.04, style: .continuous)
+                    .strokeBorder(inkColor, lineWidth: side * 0.012)
+                    .padding(.horizontal, side * 0.045)
+                    .padding(.vertical, side * 0.02)
+            )
+    }
+
+    // Expanding + fading dust ring kicked up by the slam.
+    private var dustRing: some View {
+        let ringScale = 0.25 + pose.dust * 1.05
+        let ringOpacity = Double(max(0.0, 1.0 - pose.dust)) * 0.5
+
+        return Circle()
+            .strokeBorder(
+                Color(red: 0.55, green: 0.50, blue: 0.42),
+                lineWidth: side * 0.02 * (1.0 - pose.dust * 0.7)
+            )
+            .frame(width: side * 0.46, height: side * 0.46)
+            .scaleEffect(ringScale)
+            .rotationEffect(.degrees(pose.rotation))
+            .opacity(ringOpacity)
+            .blur(radius: side * 0.006)
+    }
+}
+
+// MARK: - Static seeded grain (uneven-ink texture, generated once)
+
+private struct StampInkView_GrainOverlay: View {
+    let side: CGFloat
+    let ink: Color
+
+    var body: some View {
+        Canvas { context, canvasSize in
+            var rng = StampInkView_SeededRandom(seed: 0xA17C_E901)
+            let count = 90
+            for _ in 0..<count {
+                let x = rng.nextUnit() * canvasSize.width
+                let y = rng.nextUnit() * canvasSize.height
+                let r = (0.6 + rng.nextUnit() * 1.8)
+                let hole = rng.nextUnit() < 0.55
+                let rect = CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)
+                // "hole" speckles knock ink OUT (patchy coverage); others add density
+                let alpha = hole ? 0.85 : 0.4
+                let color = hole ? Color(red: 0.98, green: 0.97, blue: 0.93) : ink
+                context.fill(Path(ellipseIn: rect), with: .color(color.opacity(alpha)))
+            }
+        }
+    }
+}
+
+// Slightly heavier ink along edges — a subtle darker vignette inside the glyphs.
+private struct StampInkView_EdgeBleed: View {
+    let side: CGFloat
+    let ink: Color
+
+    var body: some View {
+        RadialGradient(
+            colors: [
+                Color.clear,
+                ink.opacity(0.0),
+                Color(red: 0.50, green: 0.08, blue: 0.10).opacity(0.45)
+            ],
+            center: .center,
+            startRadius: side * 0.05,
+            endRadius: side * 0.42
+        )
+    }
+}
+
+// Tiny deterministic LCG so the grain is stable across redraws.
+private struct StampInkView_SeededRandom {
+    private var state: UInt64
+    init(seed: UInt64) { state = seed == 0 ? 0x9E37_79B9 : seed }
+
+    mutating func nextUnit() -> CGFloat {
+        state = state &* 6364136223846793005 &+ 1442695040888963407
+        let top = (state >> 33) & 0x7FFF_FFFF
+        return CGFloat(top) / CGFloat(0x7FFF_FFFF)
+    }
+}
+
+// MARK: - Demo driver (self-driving PhaseAnimator, ~3s, rest-dominant)
+
+private struct StampInkView_DemoStamp: View {
+    let side: CGFloat
+
+    var body: some View {
+        // Phases: a quick wind-up + slam, then a long legible rest.
+        PhaseAnimator(StampInkView_StampPhase.allCases) { phase in
+            StampInkView_StampFace(pose: phase.pose, side: side)
+        } animation: { phase in
+            phase.transition
+        }
+    }
+}
+
+private enum StampInkView_StampPhase: CaseIterable {
+    case lifted     // raised, slightly transparent but legible
+    case impact     // slammed past 1, hardest tilt, dust born
+    case settle     // tiny overshoot wobble back
+    case rest       // resting, full ink (dominant slice)
+
+    var pose: StampInkView_StampPose {
+        switch self {
+        case .lifted:
+            return StampInkView_StampPose(scale: 1.42, rotation: -16, inkOpacity: 0.82, dust: 0.0, press: 0.0)
+        case .impact:
+            return StampInkView_StampPose(scale: 0.94, rotation: -3, inkOpacity: 1.0, dust: 1.0, press: 1.0)
+        case .settle:
+            return StampInkView_StampPose(scale: 1.05, rotation: -10, inkOpacity: 1.0, dust: 1.0, press: 0.6)
+        case .rest:
+            return StampInkView_StampPose(scale: 1.0, rotation: -8, inkOpacity: 1.0, dust: 1.0, press: 0.0)
+        }
+    }
+
+    var transition: Animation {
+        switch self {
+        case .lifted:
+            // re-arm: ease back up, hold a beat
+            return .easeInOut(duration: 0.55)
+        case .impact:
+            // the slam — fast and forceful
+            return .spring(response: 0.18, dampingFraction: 0.45)
+        case .settle:
+            // bounce-back wobble
+            return .spring(response: 0.30, dampingFraction: 0.55)
+        case .rest:
+            // long legible dwell so the tile never reads as dead/flickering
+            return .easeOut(duration: 1.6)
+        }
+    }
+}
+
+// MARK: - Interactive driver (tap to slam)
+
+private struct StampInkView_InteractiveStamp: View {
+    let side: CGFloat
+    @State private var tapCount: Int = 0
+
+    var body: some View {
+        KeyframeAnimator(initialValue: StampInkView_StampPose.rest, trigger: tapCount) { pose in
+            StampInkView_StampFace(pose: pose, side: side)
+                .overlay(alignment: .bottom) { hint }
+        } keyframes: { _ in
+            keyframeTrack
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { tapCount += 1 }
+    }
+
+    private var hint: some View {
+        Text(tapCount == 0 ? "tap to stamp" : "")
+            .font(.system(size: side * 0.055, weight: .semibold, design: .rounded))
+            .foregroundStyle(Color(red: 0.45, green: 0.42, blue: 0.36).opacity(0.7))
+            .padding(.bottom, side * 0.05)
+            .allowsHitTesting(false)
+    }
+
+    @KeyframesBuilder<StampInkView_StampPose>
+    private var keyframeTrack: some Keyframes<StampInkView_StampPose> {
+        // Wind up high, slam past 1, wobble, settle to rest.
+        KeyframeTrack(\.scale) {
+            CubicKeyframe(1.55, duration: 0.0)
+            SpringKeyframe(0.92, duration: 0.18, spring: .init(response: 0.18, dampingRatio: 0.42))
+            SpringKeyframe(1.06, duration: 0.16, spring: .init(response: 0.22, dampingRatio: 0.5))
+            SpringKeyframe(1.0, duration: 0.32, spring: .init(response: 0.30, dampingRatio: 0.6))
+        }
+        KeyframeTrack(\.rotation) {
+            CubicKeyframe(-18, duration: 0.0)
+            SpringKeyframe(-2, duration: 0.18, spring: .init(response: 0.18, dampingRatio: 0.42))
+            SpringKeyframe(-11, duration: 0.16, spring: .init(response: 0.22, dampingRatio: 0.5))
+            SpringKeyframe(-8, duration: 0.32, spring: .init(response: 0.30, dampingRatio: 0.6))
+        }
+        KeyframeTrack(\.inkOpacity) {
+            CubicKeyframe(0.82, duration: 0.0)
+            CubicKeyframe(1.0, duration: 0.18)
+            CubicKeyframe(1.0, duration: 0.48)
+        }
+        KeyframeTrack(\.press) {
+            CubicKeyframe(0.0, duration: 0.0)
+            CubicKeyframe(1.0, duration: 0.18)
+            CubicKeyframe(0.5, duration: 0.16)
+            CubicKeyframe(0.0, duration: 0.32)
+        }
+        KeyframeTrack(\.dust) {
+            CubicKeyframe(0.0, duration: 0.0)
+            LinearKeyframe(0.05, duration: 0.16)
+            CubicKeyframe(1.0, duration: 0.7)
+        }
+    }
+}
+"""###,
+        "tx-typewriter-cursor": ###"""
+import SwiftUI
+
+// MARK: - Typewriter Carriage
+// Characters type in one at a time over a prefix of each line with a blinking
+// block cursor and a subtle per-key vertical jitter. When a line finishes, the
+// page feeds up (carriage-return) and the cursor snaps back to the left margin
+// with a soft damped mechanical settle before the next line types. Everything is
+// derived in closed form from a single TimelineView(.animation) clock so it is
+// fully self-driving and never blank. iOS 17.
+
+struct TypewriterCursorView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            TimelineView(.animation) { context in
+                let t = context.date.timeIntervalSince(Self.epoch)
+                content(in: geo.size, elapsed: t)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Self.paper)
+    }
+
+    // Shared monotonic clock so the loop is stable across rebuilds.
+    private static let epoch = Date()
+
+    // Warm off-white "paper" so dark ink reads clearly at any tile size.
+    private static let paper = Color(red: 0.96, green: 0.95, blue: 0.91)
+    private static let ink = Color(red: 0.10, green: 0.10, blue: 0.13)
+
+    // Two short lines so the signature carriage-return shift is always exercised.
+    private var lines: [String] {
+        demo
+            ? ["hello, world.", "type type type."]
+            : ["the quick brown fox", "jumps over it all."]
+    }
+
+    // MARK: - Timing model (all closed-form off `elapsed`)
+
+    private let charInterval: Double = 0.12   // seconds per keystroke
+    private let lineHold: Double = 0.9         // pause after a line completes
+    private let returnTime: Double = 0.55      // carriage-return travel + settle
+
+    private func lineDuration(_ s: String) -> Double {
+        Double(s.count) * charInterval + lineHold + returnTime
+    }
+
+    private var cycleDuration: Double {
+        lines.reduce(0) { $0 + lineDuration($1) } + 0.6 // trailing breath before repeat
+    }
+
+    // Resolve which line is active, how far into it, and how many of the
+    // earlier lines are fully typed (shown above as the page scrolls up).
+    private func phase(at elapsed: Double) -> Phase {
+        let loop = elapsed.truncatingRemainder(dividingBy: cycleDuration)
+        var acc: Double = 0
+        for (i, line) in lines.enumerated() {
+            let dur = lineDuration(line)
+            if loop < acc + dur {
+                return Phase(lineIndex: i, localTime: max(0, loop - acc), line: line)
+            }
+            acc += dur
+        }
+        // Trailing breath: hold the last fully-typed line.
+        let last = max(0, lines.count - 1)
+        return Phase(lineIndex: last, localTime: lineDuration(lines[last]), line: lines[last])
+    }
+
+    struct Phase {
+        let lineIndex: Int
+        let localTime: Double
+        let line: String
+    }
+
+    // MARK: - Body content
+
+    private func content(in size: CGSize, elapsed: Double) -> some View {
+        let p = phase(at: elapsed)
+        let fontSize = max(13.0, min(size.width, size.height) * 0.16)
+        let typed = max(0, min(p.line.count, Int(p.localTime / charInterval)))
+        let lineComplete = typed >= p.line.count
+        let carriage = carriageReturn(phase: p, fontSize: fontSize)
+        let priorCount = max(0, p.lineIndex)
+
+        return VStack(alignment: .leading, spacing: fontSize * 0.42) {
+            // Already-completed lines sit above, fully typed.
+            ForEach(0..<priorCount, id: \.self) { i in
+                lineView(text: lines[i],
+                         visible: lines[i].count,
+                         fontSize: fontSize,
+                         localTime: 999,
+                         showCursor: false,
+                         carriageX: 0)
+            }
+            // Active line with the live cursor + per-key jitter.
+            lineView(text: p.line,
+                     visible: typed,
+                     fontSize: fontSize,
+                     localTime: p.localTime,
+                     showCursor: true,
+                     carriageX: lineComplete ? carriage : 0)
+        }
+        .font(.system(size: fontSize, weight: .medium, design: .monospaced))
+        .foregroundStyle(Self.ink)
+        // Feed the page up so the active line stays roughly centered.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .padding(.horizontal, fontSize * 0.6)
+        .offset(y: feedOffset(lineIndex: p.lineIndex, fontSize: fontSize, viewHeight: size.height))
+        .clipped()
+    }
+
+    // Vertical paper feed: keep the cursor band near the middle of the tile.
+    private func feedOffset(lineIndex: Int, fontSize: CGFloat, viewHeight: CGFloat) -> CGFloat {
+        let lineStep = fontSize * 1.42
+        let totalActive = CGFloat(lineIndex) * lineStep
+        let target = viewHeight * 0.5 - fontSize * 0.6
+        return max(0, target - totalActive)
+    }
+
+    // Damped mechanical settle for the carriage-return slide. The cursor has
+    // just travelled back to the left margin; it overshoots slightly and rings
+    // down via A*exp(-d*t)*cos(w*t).
+    private func carriageReturn(phase p: Phase, fontSize: CGFloat) -> CGFloat {
+        let doneAt = Double(p.line.count) * charInterval + lineHold
+        let dt = p.localTime - doneAt
+        guard dt > 0 else { return 0 }
+        let amp = fontSize * 0.9
+        let decay = 9.0
+        let omega = 22.0
+        let ring = amp * CGFloat(exp(-decay * dt) * cos(omega * dt))
+        return ring
+    }
+
+    // MARK: - Line + cursor
+
+    private func lineView(text: String,
+                          visible: Int,
+                          fontSize: CGFloat,
+                          localTime: Double,
+                          showCursor: Bool,
+                          carriageX: CGFloat) -> some View {
+        let chars = Array(text)
+        let count = max(0, min(visible, chars.count))
+
+        return HStack(alignment: .firstTextBaseline, spacing: 0) {
+            ForEach(0..<count, id: \.self) { i in
+                glyph(String(chars[i]), index: i, localTime: localTime, fontSize: fontSize)
+            }
+            if showCursor {
+                cursor(fontSize: fontSize, localTime: localTime)
+                    .offset(x: carriageX)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading) // left-anchored: no slosh
+    }
+
+    // A single glyph with a brief downward keystroke jitter that auto-settles.
+    private func glyph(_ s: String, index i: Int, localTime: Double, fontSize: CGFloat) -> some View {
+        let appearedAt = Double(i) * charInterval
+        let age = localTime - appearedAt
+        let jitter: CGFloat
+        if age >= 0 && age < 0.5 {
+            jitter = fontSize * 0.14 * CGFloat(exp(-14.0 * age) * cos(40.0 * age))
+        } else {
+            jitter = 0
+        }
+        return Text(s)
+            .offset(y: jitter)
+            .transition(.identity)
+    }
+
+    // Blinking solid block cursor — always rendered so a frame is never blank.
+    private func cursor(fontSize: CGFloat, localTime: Double) -> some View {
+        let blink = localTime.truncatingRemainder(dividingBy: 1.06) < 0.6 ? 1.0 : 0.18
+        return RoundedRectangle(cornerRadius: 1)
+            .fill(Self.ink)
+            .frame(width: fontSize * 0.58, height: fontSize * 0.92)
+            .opacity(blink)
+            .padding(.leading, fontSize * 0.06)
+    }
+}
+"""###,
+        "tx-weight-breathe": ###"""
+import SwiftUI
+import UIKit
+
+/// Variable Weight Breathe
+///
+/// A headline that continuously inhales and exhales by interpolating a font's
+/// weight axis every frame under `TimelineView(.animation)`. Because SwiftUI's
+/// `Font.Weight` is not `Animatable`, the effect bridges through `UIFont`: each
+/// word rebuilds its `Font` per frame from `UIFont.systemFont(ofSize:weight:)`
+/// using a *continuous* `UIFont.Weight(rawValue:)` driven by a sine wave. A
+/// per-word phase offset makes the line breathe like a living organism rather
+/// than pulsing in unison.
+///
+/// `demo == true` and `demo == false` run the identical self-driving loop — the
+/// spec's interaction is "auto", so the "real" component *is* the breathing
+/// animation (no gesture).
+struct WeightBreatheView: View {
+
+    var demo: Bool = false
+
+    // The headline, split into words so each can carry its own phase offset.
+    private let words: [String] = ["Breathe", "in", "out"]
+
+    // Animation tuning.
+    private let breathPeriod: Double = 3.0          // seconds per full inhale/exhale
+    private let perWordPhase: Double = 0.55          // radians of lag per word
+    private let minRaw: CGFloat = -0.05              // lightest weight (still legible)
+    private let weightSwing: CGFloat = 0.46          // amplitude toward heavy
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                content(in: size, time: t)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(background)
+        }
+    }
+
+    // MARK: - Composition
+
+    private func content(in size: CGSize, time: Double) -> some View {
+        let base = min(size.width, size.height)
+        let fontSize = max(13.0, base * 0.26)
+        let avgPhase = averagePhase(time: time)
+
+        return ZStack {
+            // Soft breathing halo behind the type that swells with the average weight.
+            breathHalo(base: base, intensity: avgPhase)
+
+            wordLine(fontSize: fontSize, time: time)
+                .padding(.horizontal, base * 0.08)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func wordLine(fontSize: CGFloat, time: Double) -> some View {
+        HStack(spacing: fontSize * 0.32) {
+            ForEach(Array(words.enumerated()), id: \.offset) { index, word in
+                wordView(word, index: index, fontSize: fontSize, time: time)
+            }
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.4)
+    }
+
+    private func wordView(_ word: String, index: Int, fontSize: CGFloat, time: Double) -> some View {
+        let raw = weightRaw(index: index, time: time)
+        let normalized = normalize(raw: raw)               // 0 (light) ... 1 (heavy)
+        let glow = 0.18 + normalized * 0.45
+
+        return Text(word)
+            .font(weightFont(size: fontSize, raw: raw))
+            .foregroundStyle(textGradient(intensity: normalized))
+            .shadow(color: glowColor.opacity(glow), radius: fontSize * 0.18 * normalized)
+            .kerning(fontSize * 0.01)
+            .animation(nil, value: raw)                     // per-frame value, no implicit anim
+    }
+
+    // MARK: - Weight bridge (the heart of the effect)
+
+    /// Continuous weight via `UIFont.Weight(rawValue:)`. The raw axis is a true
+    /// `CGFloat` (light ≈ -0.4, regular 0, semibold 0.3, bold 0.4, black 0.62),
+    /// and intermediate values interpolate — this is the continuous swell/slim
+    /// that discrete `.bold` steps cannot produce.
+    private func weightFont(size: CGFloat, raw: CGFloat) -> Font {
+        let clamped = min(max(raw, -0.5), 0.85)
+        let uiFont = UIFont.systemFont(ofSize: size, weight: UIFont.Weight(rawValue: clamped))
+        return Font(uiFont)
+    }
+
+    private func weightRaw(index: Int, time: Double) -> CGFloat {
+        let phase = time * (2.0 * .pi / breathPeriod) + Double(index) * perWordPhase
+        let wave = CGFloat(sin(phase))                      // -1 ... 1
+        let unit = (wave + 1.0) / 2.0                        // 0 ... 1
+        return minRaw + unit * weightSwing
+    }
+
+    // MARK: - Helpers
+
+    private func normalize(raw: CGFloat) -> CGFloat {
+        guard weightSwing > 0 else { return 0.5 }
+        let unit = (raw - minRaw) / weightSwing
+        return min(max(unit, 0.0), 1.0)
+    }
+
+    /// Average breathing intensity across all words, for the shared halo.
+    private func averagePhase(time: Double) -> CGFloat {
+        guard !words.isEmpty else { return 0.5 }
+        var sum: CGFloat = 0
+        for index in words.indices {
+            sum += normalize(raw: weightRaw(index: index, time: time))
+        }
+        return sum / CGFloat(words.count)
+    }
+
+    private func textGradient(intensity: CGFloat) -> LinearGradient {
+        // Compile-time-known endpoints, kept as plain RGB tuples so the blend is
+        // fully self-contained (no UIColor round-trip needed).
+        let warm: (Double, Double, Double) = (1.0, 0.96, 0.92)
+        let cool: (Double, Double, Double) = (0.78, 0.84, 0.95)
+        let top = blend(cool, warm, amount: intensity)
+        let bottom = blend(cool, warm, amount: intensity * 0.6)
+        return LinearGradient(
+            colors: [top, bottom],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private func blend(_ a: (Double, Double, Double),
+                       _ b: (Double, Double, Double),
+                       amount: CGFloat) -> Color {
+        let m: Double = Double(min(max(amount, 0.0), 1.0))
+        return Color(
+            red: a.0 + (b.0 - a.0) * m,
+            green: a.1 + (b.1 - a.1) * m,
+            blue: a.2 + (b.2 - a.2) * m
+        )
+    }
+
+    // MARK: - Decorative layers
+
+    private func breathHalo(base: CGFloat, intensity: CGFloat) -> some View {
+        let scale = 0.85 + intensity * 0.35
+        let opacity = 0.10 + Double(intensity) * 0.22
+        return RadialGradient(
+            colors: [glowColor.opacity(opacity), glowColor.opacity(0.0)],
+            center: .center,
+            startRadius: 0,
+            endRadius: base * 0.6
+        )
+        .scaleEffect(scale)
+        .blur(radius: base * 0.04)
+        .allowsHitTesting(false)
+    }
+
+    private var glowColor: Color {
+        Color(red: 0.55, green: 0.70, blue: 1.0)
+    }
+
+    private var background: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.016, green: 0.020, blue: 0.039),
+                Color(red: 0.043, green: 0.055, blue: 0.094)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 }
 """###,

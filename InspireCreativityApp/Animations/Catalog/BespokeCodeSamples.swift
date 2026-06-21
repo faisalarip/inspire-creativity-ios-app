@@ -13,6 +13,1704 @@ enum BespokeCodeSamples {
     static func code(for id: String) -> String { all[id] ?? "" }
 
     static let all: [String: String] = [
+        "bg-conic-prism": ###"""
+import SwiftUI
+
+// MARK: - Conic Prism
+// A full-bleed conic (angular) gradient with HARD discrete color stops spins
+// slowly like a color wheel, while a second counter-rotating banded conic with
+// a different band count and palette is composited via a blend mode to throw off
+// shifting moire pinwheel spokes. Pure SwiftUI gradients + a TimelineView clock.
+//
+// Interaction == "auto": both `demo == true` and `demo == false` resolve to the
+// same self-driving loop. There is no touch wiring for this background.
+//
+// Design notes (corner-gap & blank-frame safe):
+//  * The wheels spin by advancing each AngularGradient's *angle* (startAngle /
+//    endAngle), NOT via rotationEffect on the rectangle — so corners are never
+//    swept into black triangular gaps.
+//  * The two layers are deliberately DIFFERENT (band counts 6 vs 8, distinct
+//    palettes, counter-rotation) so a `.difference` blend can never make the two
+//    globally coincide into a flat black frame.
+//  * An opaque base fill sits behind the pair and the pair is isolated with
+//    `.compositingGroup()`, so the darkest possible frame still reads as legible
+//    crisp spokes — never fully blank or zero-opacity.
+
+struct ConicPrismView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                content(in: geo.size, time: t)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
+
+    // MARK: Composition
+
+    private func content(in size: CGSize, time t: TimeInterval) -> some View {
+        // Counter-rotating angles. The wheels spin at slightly different rates so
+        // the moire beat between them is itself in slow motion.
+        let theta: Double = (t * 14.0).truncatingRemainder(dividingBy: 360.0)
+        let counter: Double = (-t * 9.0).truncatingRemainder(dividingBy: 360.0)
+
+        // A gentle breathing on the blend layer's opacity keeps the spokes alive
+        // and shimmering, and guarantees the top layer never collapses to nothing.
+        let breathe: Double = 0.78 + 0.18 * sin(t * 0.9)
+
+        return ZStack {
+            // Opaque base so the difference blend always has a floor to read against.
+            baseFill
+
+            ZStack {
+                ConicPrismView_PrismWheel(
+                    stops: Self.primaryStops,
+                    angle: theta,
+                    center: Self.lowerCenter
+                )
+
+                ConicPrismView_PrismWheel(
+                    stops: Self.secondaryStops,
+                    angle: counter,
+                    center: Self.upperCenter
+                )
+                .blendMode(.difference)
+                .opacity(breathe)
+            }
+            .compositingGroup()
+
+            // A faint third banded ring, additively screened, sharpens the
+            // pinwheel "vinyl record" identity and adds a moving highlight.
+            ConicPrismView_PrismWheel(
+                stops: Self.accentStops,
+                angle: theta * 0.6 + 45.0,
+                center: Self.center
+            )
+            .blendMode(.screen)
+            .opacity(0.22)
+
+            // Subtle vignette to seat the wheel and lift the center spokes.
+            vignette(in: size)
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    // MARK: Static pieces
+
+    private var baseFill: some View {
+        Color(red: 0.039, green: 0.039, blue: 0.047)
+    }
+
+    // Size-relative vignette so it reads the same in a 120pt tile and a large
+    // detail view (a fixed pixel radius would vanish small / overwhelm large).
+    private func vignette(in size: CGSize) -> some View {
+        let radius: CGFloat = max(size.width, size.height) * 0.75
+        return RadialGradient(
+            gradient: Gradient(colors: [
+                Color(red: 0, green: 0, blue: 0).opacity(0.0),
+                Color(red: 0, green: 0, blue: 0).opacity(0.45)
+            ]),
+            center: .center,
+            startRadius: 0,
+            endRadius: radius
+        )
+        .blendMode(.multiply)
+        .allowsHitTesting(false)
+    }
+
+    // Centers offset a touch so the two wheels' spoke patterns interfere off-axis
+    // (a single shared center reads more like simple rotation than moire).
+    private static let center = UnitPoint(x: 0.5, y: 0.5)
+    private static let lowerCenter = UnitPoint(x: 0.42, y: 0.56)
+    private static let upperCenter = UnitPoint(x: 0.58, y: 0.44)
+
+    // MARK: Hard-stop palettes
+    // Crisp bands come from DUPLICATING each stop's color at the band boundary
+    // (two stops sharing the same location) so the gradient has zero blend ramp.
+
+    /// 6 bands — saturated prism spokes.
+    static let primaryStops: [Gradient.Stop] = hardStops([
+        Color(red: 0.98, green: 0.27, blue: 0.45),
+        Color(red: 0.99, green: 0.66, blue: 0.20),
+        Color(red: 0.96, green: 0.92, blue: 0.30),
+        Color(red: 0.24, green: 0.82, blue: 0.55),
+        Color(red: 0.22, green: 0.55, blue: 0.98),
+        Color(red: 0.62, green: 0.34, blue: 0.95)
+    ])
+
+    /// 8 bands — a different count & palette so the layers can never coincide.
+    static let secondaryStops: [Gradient.Stop] = hardStops([
+        Color(red: 0.10, green: 0.78, blue: 0.86),
+        Color(red: 0.14, green: 0.30, blue: 0.70),
+        Color(red: 0.86, green: 0.20, blue: 0.62),
+        Color(red: 0.97, green: 0.45, blue: 0.18),
+        Color(red: 0.20, green: 0.84, blue: 0.46),
+        Color(red: 0.55, green: 0.18, blue: 0.88),
+        Color(red: 0.93, green: 0.84, blue: 0.22),
+        Color(red: 0.18, green: 0.62, blue: 0.92)
+    ])
+
+    /// 5 narrow accent bands for the screened highlight ring.
+    static let accentStops: [Gradient.Stop] = hardStops([
+        Color(red: 1.00, green: 1.00, blue: 1.00),
+        Color(red: 0.10, green: 0.10, blue: 0.14),
+        Color(red: 0.85, green: 0.90, blue: 1.00),
+        Color(red: 0.08, green: 0.08, blue: 0.10),
+        Color(red: 0.70, green: 0.95, blue: 0.90)
+    ])
+
+    /// Builds crisp, equal-width bands by emitting two stops per color at the
+    /// band's leading and trailing location (no soft blend between bands).
+    private static func hardStops(_ colors: [Color]) -> [Gradient.Stop] {
+        guard !colors.isEmpty else { return [] }
+        let n = colors.count
+        var stops: [Gradient.Stop] = []
+        stops.reserveCapacity(n * 2)
+        for (i, color) in colors.enumerated() {
+            let start = Double(i) / Double(n)
+            let end = Double(i + 1) / Double(n)
+            stops.append(.init(color: color, location: start))
+            stops.append(.init(color: color, location: end))
+        }
+        return stops
+    }
+}
+
+// MARK: - ConicPrismView_PrismWheel
+// A single full-bleed banded conic gradient that "spins" purely by advancing its
+// start/end angle. Because the gradient fills the whole rect (no geometry
+// rotation), corners are always covered — no black gaps as it turns.
+
+private struct ConicPrismView_PrismWheel: View {
+    let stops: [Gradient.Stop]
+    let angle: Double
+    let center: UnitPoint
+
+    var body: some View {
+        Rectangle()
+            .fill(
+                AngularGradient(
+                    gradient: Gradient(stops: stops),
+                    center: center,
+                    startAngle: .degrees(angle),
+                    endAngle: .degrees(angle + 360.0)
+                )
+            )
+            // Overscale slightly so the off-center conic still fully bleeds the
+            // rect from its shifted pivot.
+            .scaleEffect(1.35)
+    }
+}
+"""###,
+        "bg-constellation-mesh": ###"""
+import SwiftUI
+
+// MARK: - Constellation Mesh
+// Free-floating points drift in a Canvas and draw links between any two
+// within a proximity radius (opacity falls off by distance), forming a
+// constantly reforming network graph. A tap drops a bright node the web
+// latches onto. demo == true self-drives by injecting a synthetic node.
+
+struct ConstellationMeshView: View {
+    var demo: Bool = false
+
+    // A single node in the lattice. Positions are derived as a pure function
+    // of elapsed time from these immutable seed values, so no per-frame state
+    // mutation is needed (avoids the "modify state during update" trap and is
+    // frame-rate independent).
+    struct Node: Identifiable {
+        let id: UUID
+        var origin: CGPoint      // unit space 0...1
+        var velocity: CGVector   // unit / second
+        var radius: CGFloat      // unit (fraction of min dimension)
+        var brightness: CGFloat  // 0...1 base glow weight
+        var birth: Date          // for glow fade-in/out on seeded/user nodes
+        var isAccent: Bool       // brighter, latch-on node
+    }
+
+    @State private var start: Date = .init()
+    @State private var baseNodes: [Node] = ConstellationMeshView.makeBaseNodes()
+    @State private var userNodes: [Node] = []
+
+    // Tuning
+    private let proximityUnit: CGFloat = 0.30   // link radius in unit space
+    private let userNodeCap: Int = 12
+    private let demoCycle: Double = 2.2         // seconds per synthetic node
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            GeometryReader { geo in
+                canvas(date: timeline.date, size: geo.size)
+                    .contentShape(Rectangle())
+                    .gesture(tapGesture(in: geo.size))
+            }
+        }
+        .background(Self.backdrop)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
+
+    // MARK: Background
+
+    private static let backdrop = Color(red: 0.039, green: 0.039, blue: 0.047)
+
+    // MARK: Canvas
+
+    private func canvas(date: Date, size: CGSize) -> some View {
+        let t = date.timeIntervalSince(start)
+        let dim = min(size.width, size.height)
+        let proximity = proximityUnit * dim
+
+        // Resolve every node's absolute position + live alpha for this frame.
+        let live = resolvedNodes(date: date, t: t, size: size)
+
+        return Canvas { context, _ in
+            drawLinks(in: &context, nodes: live, proximity: proximity)
+            drawNodes(in: &context, nodes: live, dim: dim)
+        }
+    }
+
+    // A node resolved to screen space for one frame.
+    struct ResolvedNode {
+        var point: CGPoint
+        var radius: CGFloat
+        var alpha: CGFloat
+        var isAccent: Bool
+    }
+
+    private func resolvedNodes(date: Date, t: TimeInterval, size: CGSize) -> [ResolvedNode] {
+        let dim = min(size.width, size.height)
+        var out: [ResolvedNode] = []
+        out.reserveCapacity(baseNodes.count + userNodes.count + 1)
+
+        for node in baseNodes {
+            out.append(resolve(node, date: date, t: t, size: size, dim: dim, fade: false))
+        }
+        for node in userNodes {
+            out.append(resolve(node, date: date, t: t, size: size, dim: dim, fade: true))
+        }
+        if demo, let synthetic = syntheticNode(t: t) {
+            out.append(resolve(synthetic, date: date, t: t, size: size, dim: dim, fade: true))
+        }
+        return out
+    }
+
+    private func resolve(_ node: Node, date: Date, t: TimeInterval, size: CGSize, dim: CGFloat, fade: Bool) -> ResolvedNode {
+        // Base nodes drift on absolute time; user/synthetic nodes drift from
+        // their own birth so a tapped node renders AT the tap point (elapsed≈0)
+        // and the web latches on there, rather than being displaced by global t.
+        let elapsed = fade ? date.timeIntervalSince(node.birth) : t
+        let ux = Self.fold(node.origin.x + node.velocity.dx * CGFloat(elapsed))
+        let uy = Self.fold(node.origin.y + node.velocity.dy * CGFloat(elapsed))
+        let point = CGPoint(x: ux * size.width, y: uy * size.height)
+
+        var alpha = node.brightness
+        if fade {
+            // Glow fades in fast, then eases down over ~5s but never vanishes
+            // entirely for base/user nodes — keeps the tile legible.
+            let age = date.timeIntervalSince(node.birth)
+            let pulse = max(0.0, 1.0 - age / 5.0)
+            alpha = node.brightness * (0.45 + 0.55 * CGFloat(pulse))
+        }
+        return ResolvedNode(point: point,
+                            radius: node.radius * dim,
+                            alpha: min(1.0, max(0.18, alpha)),
+                            isAccent: node.isAccent)
+    }
+
+    // MARK: Drawing
+
+    private func drawLinks(in context: inout GraphicsContext, nodes: [ResolvedNode], proximity: CGFloat) {
+        guard nodes.count > 1 else { return }
+        let prox2 = proximity * proximity
+        for i in 0..<(nodes.count - 1) {
+            let a = nodes[i]
+            for j in (i + 1)..<nodes.count {
+                let b = nodes[j]
+                let dx = a.point.x - b.point.x
+                let dy = a.point.y - b.point.y
+                let d2 = dx * dx + dy * dy
+                guard d2 < prox2, d2 > 0 else { continue }
+                let dist = sqrt(d2)
+                let falloff = 1.0 - dist / proximity            // 0...1
+                let accent = a.isAccent || b.isAccent
+                let alpha = falloff * (accent ? 0.9 : 0.5)
+                strokeLink(in: &context, from: a.point, to: b.point, alpha: alpha, accent: accent)
+            }
+        }
+    }
+
+    private func strokeLink(in context: inout GraphicsContext, from: CGPoint, to: CGPoint, alpha: CGFloat, accent: Bool) {
+        var path = Path()
+        path.move(to: from)
+        path.addLine(to: to)
+        let color = accent ? Self.accentColor : Self.lineColor
+        context.stroke(path, with: .color(color.opacity(Double(alpha))), lineWidth: accent ? 1.3 : 0.8)
+    }
+
+    private func drawNodes(in context: inout GraphicsContext, nodes: [ResolvedNode], dim: CGFloat) {
+        for node in nodes {
+            let r = node.radius
+            let rect = CGRect(x: node.point.x - r, y: node.point.y - r, width: r * 2, height: r * 2)
+            let core = node.isAccent ? Self.accentColor : Self.nodeColor
+
+            // Soft halo
+            let haloR = r * (node.isAccent ? 3.4 : 2.2)
+            let haloRect = CGRect(x: node.point.x - haloR, y: node.point.y - haloR, width: haloR * 2, height: haloR * 2)
+            context.fill(Path(ellipseIn: haloRect),
+                         with: .radialGradient(
+                            Gradient(colors: [core.opacity(Double(node.alpha) * 0.35), core.opacity(0.0)]),
+                            center: node.point, startRadius: 0, endRadius: haloR))
+
+            // Core dot
+            context.fill(Path(ellipseIn: rect), with: .color(core.opacity(Double(node.alpha))))
+        }
+    }
+
+    // MARK: Palette
+
+    private static let lineColor = Color(red: 0.46, green: 0.62, blue: 0.95)
+    private static let nodeColor = Color(red: 0.78, green: 0.86, blue: 1.0)
+    private static let accentColor = Color(red: 0.55, green: 0.95, blue: 0.85)
+
+    // MARK: Interaction
+
+    private func tapGesture(in size: CGSize) -> some Gesture {
+        SpatialTapGesture(coordinateSpace: .local)
+            .onEnded { value in
+                addNode(at: value.location, in: size)
+            }
+    }
+
+    private func addNode(at location: CGPoint, in size: CGSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        let unit = CGPoint(x: location.x / size.width, y: location.y / size.height)
+        let node = Node(id: UUID(),
+                        origin: CGPoint(x: Self.clampUnit(unit.x), y: Self.clampUnit(unit.y)),
+                        velocity: CGVector(dx: CGFloat.random(in: -0.035...0.035),
+                                           dy: CGFloat.random(in: -0.035...0.035)),
+                        radius: 0.018,
+                        brightness: 1.0,
+                        birth: Date(),
+                        isAccent: true)
+        userNodes.append(node)
+        if userNodes.count > userNodeCap {
+            userNodes.removeFirst(userNodes.count - userNodeCap)
+        }
+    }
+
+    // MARK: Demo synthetic node (pure function of time)
+
+    private func syntheticNode(t: TimeInterval) -> Node? {
+        let cycle = demoCycle
+        let index = floor(t / cycle)
+        let phase = t / cycle - index            // 0...1 within current cycle
+        // A fresh location each cycle, walked deterministically around the tile.
+        let seed = index * 1.6180339887
+        let ux = 0.5 + 0.34 * cos(seed)
+        let uy = 0.5 + 0.34 * sin(seed * 1.7)
+        // Birth offset so glow fade is driven by phase within the cycle.
+        let birth = start.addingTimeInterval(index * cycle)
+        _ = phase
+        return Node(id: UUID(),
+                    origin: CGPoint(x: Self.clampUnit(CGFloat(ux)), y: Self.clampUnit(CGFloat(uy))),
+                    velocity: CGVector(dx: 0.02 * cos(seed * 2.3), dy: 0.02 * sin(seed * 1.1)),
+                    radius: 0.02,
+                    brightness: 1.0,
+                    birth: birth,
+                    isAccent: true)
+    }
+
+    // MARK: Math helpers
+
+    // Fold a value into 0...1 with a triangle wave so motion bounces off the
+    // bounds — gives "reflect off edges" for free, deterministically.
+    private static func fold(_ v: CGFloat) -> CGFloat {
+        let m = (v.truncatingRemainder(dividingBy: 2) + 2).truncatingRemainder(dividingBy: 2)
+        return m < 1 ? m : 2 - m
+    }
+
+    private static func clampUnit(_ v: CGFloat) -> CGFloat {
+        min(1.0, max(0.0, v))
+    }
+
+    // MARK: Seeded base lattice
+
+    private static func makeBaseNodes() -> [Node] {
+        var rng = SeededGenerator(seed: 0xC0FFEE)
+        let count = 44
+        var nodes: [Node] = []
+        nodes.reserveCapacity(count)
+        for _ in 0..<count {
+            let ox = CGFloat.random(in: 0.02...0.98, using: &rng)
+            let oy = CGFloat.random(in: 0.02...0.98, using: &rng)
+            let vx = CGFloat.random(in: -0.03...0.03, using: &rng)
+            let vy = CGFloat.random(in: -0.03...0.03, using: &rng)
+            let r = CGFloat.random(in: 0.006...0.013, using: &rng)
+            let b = CGFloat.random(in: 0.55...0.95, using: &rng)
+            nodes.append(Node(id: UUID(),
+                              origin: CGPoint(x: ox, y: oy),
+                              velocity: CGVector(dx: vx, dy: vy),
+                              radius: r,
+                              brightness: b,
+                              birth: Date(timeIntervalSince1970: 0), // no fade
+                              isAccent: false))
+        }
+        return nodes
+    }
+
+    // Small deterministic RNG so the seed lattice is stable across launches.
+    struct SeededGenerator: RandomNumberGenerator {
+        private var state: UInt64
+        init(seed: UInt64) { state = seed != 0 ? seed : 0x9E3779B97F4A7C15 }
+        mutating func next() -> UInt64 {
+            state ^= state << 13
+            state ^= state >> 7
+            state ^= state << 17
+            return state
+        }
+    }
+}
+"""###,
+        "bg-contour-topo": ###"""
+import SwiftUI
+
+/// Contour Topo — stacked topographic ridgelines generated from a sum of
+/// slowly phase-shifting sine waves. Each ridge fills downward with an opaque
+/// dark band and is stroked with a bright edge; ridges are drawn back-to-front
+/// so near ridges occlude far ones, producing real relief depth. The whole map
+/// morphs and scrolls like wind over dunes.
+///
+/// Interaction is "auto": both demo and live modes run the same self-driving
+/// TimelineView loop. No touch required — the relief never sits still.
+struct ContourTopoView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { _ in
+            TimelineView(.animation) { timeline in
+                let t: Double = timeline.date.timeIntervalSinceReferenceDate
+                Canvas { context, size in
+                    drawScene(context: &context, size: size, time: t)
+                }
+                .drawingGroup()
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(groundColor)
+        .clipped()
+    }
+
+    // MARK: - Layout constants
+
+    /// Number of stacked ridgelines (modest count keeps Canvas cheap per spec).
+    private let ridgeCount: Int = 18
+    /// Horizontal sample stride in points (coarse for smoothness).
+    private let sampleStride: CGFloat = 7.0
+
+    // MARK: - Palette (dark topo ground → cyan ridge edges)
+
+    private var groundColor: Color {
+        Color(red: 0.039, green: 0.039, blue: 0.047)
+    }
+
+    private func bandColor(for fraction: Double) -> Color {
+        // Nearer ridges (fraction → 1) are slightly lighter/warmer to push depth.
+        let base: Double = 0.05
+        let lift: Double = 0.10 * fraction
+        return Color(
+            red: base + lift * 0.55,
+            green: base + lift * 0.85,
+            blue: base + lift * 1.0 + 0.02
+        )
+    }
+
+    private func strokeColor(for fraction: Double) -> Color {
+        // Bright top edge; near ridges glow more.
+        let intensity: Double = 0.35 + 0.55 * fraction
+        return Color(
+            red: 0.30 * intensity,
+            green: 0.78 * intensity,
+            blue: 0.92 * intensity
+        )
+    }
+
+    // MARK: - Surface height field
+
+    /// Returns the y position of ridge `line` at horizontal coord `x`.
+    /// y = baseline + Σ sin(x·freqᵢ + phaseᵢ + time). Frequencies are scaled to
+    /// the view width so the relief reads correctly in a 120pt tile and large area.
+    private func surfaceY(_ x: CGFloat, line: Int, size: CGSize, time t: Double) -> CGFloat {
+        let width: CGFloat = max(size.width, 1)
+        let height: CGFloat = max(size.height, 1)
+
+        // Evenly space ridge baselines down the view, with a little headroom.
+        let lineFraction: CGFloat = CGFloat(line) / CGFloat(max(ridgeCount - 1, 1))
+        let topInset: CGFloat = height * 0.10
+        let baseline: CGFloat = topInset + lineFraction * (height * 0.86)
+
+        // Per-line phase offset so ridges aren't all in lockstep.
+        let linePhase: Double = Double(line) * 0.42
+
+        // Normalize x into [0, 2π) cycles across the width.
+        let nx: Double = Double(x / width)
+
+        // Three octaves of sine, summed. Each octave has its own spatial
+        // frequency, temporal drift speed and amplitude. Amplitudes scale to
+        // height so the relief is proportional at any size.
+        let h: Double = Double(height)
+
+        let f1: Double = sin(nx * 2.0 * .pi * 1.0 + t * 0.35 + linePhase)
+        let a1: Double = h * 0.052
+
+        let f2: Double = sin(nx * 2.0 * .pi * 2.3 - t * 0.22 + linePhase * 1.7)
+        let a2: Double = h * 0.026
+
+        let f3: Double = sin(nx * 2.0 * .pi * 4.1 + t * 0.5 + linePhase * 0.6)
+        let a3: Double = h * 0.013
+
+        let displacement: Double = f1 * a1 + f2 * a2 + f3 * a3
+        return baseline + CGFloat(displacement)
+    }
+
+    // MARK: - Drawing
+
+    private func drawScene(context: inout GraphicsContext, size: CGSize, time t: Double) {
+        guard size.width > 1, size.height > 1 else { return }
+        // Draw back-to-front: farthest (topmost) ridge first so nearer ridges,
+        // drawn later, occlude it. This overlap is what reads as relief depth.
+        for line in 0..<ridgeCount {
+            drawRidge(line: line, context: &context, size: size, time: t)
+        }
+    }
+
+    private func drawRidge(line: Int, context: inout GraphicsContext, size: CGSize, time t: Double) {
+        let fraction: Double = Double(line) / Double(max(ridgeCount - 1, 1))
+
+        // Build the ridge top edge as a sampled path.
+        var edge = Path()
+        var x: CGFloat = 0
+        let endX: CGFloat = size.width
+        var first: Bool = true
+        while x <= endX {
+            let y: CGFloat = surfaceY(x, line: line, size: size, time: t)
+            let point = CGPoint(x: x, y: y)
+            if first {
+                edge.move(to: point)
+                first = false
+            } else {
+                edge.addLine(to: point)
+            }
+            x += sampleStride
+        }
+        // Ensure we reach the exact right edge.
+        let lastY: CGFloat = surfaceY(endX, line: line, size: size, time: t)
+        edge.addLine(to: CGPoint(x: endX, y: lastY))
+
+        // Fill band: close the edge path down to the bottom of the view so the
+        // band is opaque and occludes ridges drawn behind (above) it.
+        var band = edge
+        band.addLine(to: CGPoint(x: endX, y: size.height + 4))
+        band.addLine(to: CGPoint(x: 0, y: size.height + 4))
+        band.closeSubpath()
+
+        context.fill(band, with: .color(bandColor(for: fraction)))
+
+        // Stroke the bright top edge on top of the band.
+        let lineWidth: CGFloat = 0.8 + 1.4 * CGFloat(fraction)
+        context.stroke(
+            edge,
+            with: .color(strokeColor(for: fraction)),
+            style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
+        )
+    }
+}
+"""###,
+        "bg-hex-pulse": ###"""
+import SwiftUI
+
+// MARK: - Hex Pulse
+// A tight honeycomb of hexagon cells whose scale + brightness pulse in
+// expanding rings radiating from the tile center. A glowing wave washes
+// outward across the tessellation and fades toward the edges.
+//
+// interaction == "auto": both the demo tile and the detail view show the
+// same self-driving radial pulse — there is no gesture in this piece.
+struct HexPulseView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                HexPulseView_HexPulseCanvas(time: t, size: geo.size)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.039, green: 0.039, blue: 0.047))
+        .clipped()
+    }
+}
+
+// MARK: - Canvas renderer
+
+private struct HexPulseView_HexPulseCanvas: View {
+    let time: Double
+    let size: CGSize
+
+    // ~3.2s loop for the radial wave.
+    private let loopPeriod: Double = 3.2
+    // Target columns across the width (honeycomb stays dense but capped).
+    private let targetColumns: Int = 8
+
+    var body: some View {
+        Canvas { context, canvasSize in
+            draw(in: &context, canvasSize: canvasSize)
+        }
+        .drawingGroup()
+    }
+
+    private func draw(in context: inout GraphicsContext, canvasSize: CGSize) {
+        let layout = HexPulseView_HexLayout(size: canvasSize, targetColumns: targetColumns)
+        let center = CGPoint(x: canvasSize.width / 2.0, y: canvasSize.height / 2.0)
+
+        // Max distance used for both wave phase delay and edge fade.
+        let maxDist = max(hypot(canvasSize.width, canvasSize.height) / 2.0, 1.0)
+
+        // Continuous phase advancing once per loop period.
+        let phase: Double = (time / loopPeriod) * 2.0 * .pi
+        // How tightly the wave wraps from center to edge (rings).
+        let radialFreq: Double = 3.0
+
+        for row in 0..<layout.rows {
+            for col in 0..<layout.columns {
+                let c = layout.cellCenter(row: row, col: col)
+                let dist = hypot(Double(c.x - center.x), Double(c.y - center.y))
+                let normDist = min(dist / maxDist, 1.0)
+
+                let wave = waveValue(normDist: normDist, phase: phase, radialFreq: radialFreq)
+                let edge = edgeFade(normDist: normDist)
+
+                let scale = cellScale(wave: wave)
+                let opacity = cellOpacity(wave: wave, edge: edge)
+                let color = cellColor(wave: wave)
+
+                drawHex(
+                    in: &context,
+                    center: c,
+                    radius: layout.hexRadius * scale,
+                    color: color,
+                    opacity: opacity
+                )
+            }
+        }
+    }
+
+    // MARK: Per-cell math (kept small for type-checker hygiene)
+
+    /// 0…1 brightness wave: bright ring travels outward as phase advances.
+    private func waveValue(normDist: Double, phase: Double, radialFreq: Double) -> Double {
+        let s = sin(phase - normDist * radialFreq * .pi)
+        return 0.5 + 0.5 * s
+    }
+
+    /// Scale floored so a cell never collapses to nothing.
+    private func cellScale(wave: Double) -> Double {
+        let minScale: Double = 0.58
+        let maxScale: Double = 1.0
+        return minScale + (maxScale - minScale) * wave
+    }
+
+    /// Opacity floored AND edge-faded; never fully transparent near center.
+    private func cellOpacity(wave: Double, edge: Double) -> Double {
+        let minOpacity: Double = 0.30
+        let maxOpacity: Double = 1.0
+        let base = minOpacity + (maxOpacity - minOpacity) * wave
+        return base * edge
+    }
+
+    /// Interpolate fill from a dim teal to a bright cyan glow (no .brightness clip).
+    private func cellColor(wave: Double) -> Color {
+        let dim = (r: 0.07, g: 0.20, b: 0.28)
+        let lit = (r: 0.42, g: 0.92, b: 1.0)
+        let r = dim.r + (lit.r - dim.r) * wave
+        let g = dim.g + (lit.g - dim.g) * wave
+        let b = dim.b + (lit.b - dim.b) * wave
+        return Color(red: r, green: g, blue: b)
+    }
+
+    /// Radial edge fade: full near center, dimming toward the boundary,
+    /// but kept above a floor so edge cells stay faintly legible.
+    private func edgeFade(normDist: Double) -> Double {
+        let floor: Double = 0.22
+        let fade = 1.0 - normDist * normDist
+        return floor + (1.0 - floor) * max(fade, 0.0)
+    }
+
+    // MARK: Hexagon drawing
+
+    private func drawHex(
+        in context: inout GraphicsContext,
+        center: CGPoint,
+        radius: CGFloat,
+        color: Color,
+        opacity: Double
+    ) {
+        guard radius > 0.5 else { return }
+        let path = hexPath(center: center, radius: radius)
+        context.fill(path, with: .color(color.opacity(opacity)))
+        // Crisp seam stroke for the HUD / honeycomb read.
+        context.stroke(
+            path,
+            with: .color(Color(red: 0.55, green: 0.95, blue: 1.0).opacity(opacity * 0.35)),
+            lineWidth: 0.75
+        )
+    }
+
+    /// Pointy-top hexagon path centered at `center`.
+    private func hexPath(center: CGPoint, radius: CGFloat) -> Path {
+        var path = Path()
+        for i in 0..<6 {
+            let angle = (Double(i) * 60.0 - 90.0) * .pi / 180.0
+            let x = center.x + radius * CGFloat(cos(angle))
+            let y = center.y + radius * CGFloat(sin(angle))
+            if i == 0 {
+                path.move(to: CGPoint(x: x, y: y))
+            } else {
+                path.addLine(to: CGPoint(x: x, y: y))
+            }
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+
+// MARK: - Honeycomb layout
+
+/// Derives a pointy-top honeycomb packing from the available size.
+private struct HexPulseView_HexLayout {
+    let hexRadius: CGFloat
+    let columns: Int
+    let rows: Int
+
+    private let horizontalSpacing: CGFloat
+    private let verticalSpacing: CGFloat
+    private let originX: CGFloat
+    private let originY: CGFloat
+
+    init(size: CGSize, targetColumns: Int) {
+        // Floor dimensions to a positive minimum so radius > 0 is guaranteed.
+        // GeometryReader can report .zero on a first/transition pass; without
+        // this, radius == 0 makes `Int(ceil(h / 0))` an infinity/NaN trap.
+        let w = max(size.width, 1.0)
+        let h = max(size.height, 1.0)
+        let cols = max(targetColumns, 3)
+        // Pointy-top hex: width = sqrt(3) * radius. Pack columns across width.
+        let hexWidth = w / CGFloat(cols)
+        let radius = hexWidth / CGFloat(3.0.squareRoot())
+
+        self.hexRadius = radius
+        self.columns = cols + 1 // overscan one column for full bleed
+        self.horizontalSpacing = hexWidth
+        // Pointy-top vertical packing: rows step by 0.75 * height; height = 2*radius.
+        self.verticalSpacing = radius * 1.5
+
+        let rowCount = Int(ceil(h / (radius * 1.5))) + 2
+        self.rows = max(rowCount, 3)
+
+        // Center the grid; alternate-row offset handled in cellCenter.
+        self.originX = 0
+        self.originY = 0
+    }
+
+    /// Pointy-top honeycomb: odd rows shifted right by half a column.
+    func cellCenter(row: Int, col: Int) -> CGPoint {
+        let rowOffset: CGFloat = (row % 2 == 0) ? 0 : horizontalSpacing / 2.0
+        let x = originX + CGFloat(col) * horizontalSpacing + rowOffset
+        let y = originY + CGFloat(row) * verticalSpacing
+        return CGPoint(x: x, y: y)
+    }
+}
+"""###,
+        "bg-magnetic-dot-field": ###"""
+import SwiftUI
+
+// MARK: - Magnetic Dot Field
+//
+// A precise lattice of dots drawn in a single Canvas. Each dot is repelled and
+// scaled by its distance to an active attractor point — like iron filings under
+// a magnet — with a springy settle on release.
+//
+//   demo == true   self-driving Lissajous orbit drives the attractor forever.
+//   demo == false  DragGesture drives the attractor; release springs back with
+//                   a damped-cosine overshoot, then relaxes to a faint idle orbit.
+//
+// Pure SwiftUI + Canvas math, iOS 17. No Metal, no app dependencies.
+
+struct MagneticDotFieldView: View {
+    var demo: Bool = false
+
+    // Live drag state — mutated only in gesture callbacks, never in the render closure.
+    @State private var dragPoint: CGPoint? = nil
+    @State private var releaseDate: Date? = nil
+    @State private var releaseLocation: CGPoint = .zero
+
+    var body: some View {
+        GeometryReader { geo in
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let field = resolveField(size: geo.size, time: t)
+                Canvas { context, size in
+                    drawLattice(context: context, size: size, field: field)
+                }
+                .contentShape(Rectangle())
+                .gesture(dragGesture(in: geo.size))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.039, green: 0.039, blue: 0.047))
+    }
+
+    // MARK: Gesture
+
+    private func dragGesture(in size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                guard !demo else { return }
+                dragPoint = value.location
+                releaseDate = nil
+            }
+            .onEnded { value in
+                guard !demo else { return }
+                dragPoint = nil
+                releaseLocation = value.location
+                releaseDate = Date()
+            }
+    }
+
+    // MARK: Field resolution (single attractor + strength for the whole frame)
+
+    /// The active magnetic source for this frame: one point, one strength.
+    struct Field {
+        var attractor: CGPoint
+        var strength: CGFloat   // can dip slightly negative for inward overshoot
+    }
+
+    private func resolveField(size: CGSize, time t: TimeInterval) -> Field {
+        let idle = idleOrbit(size: size, time: t)
+
+        if demo {
+            // Pure self-driving demo: full-strength attractor on the orbit.
+            return Field(attractor: idle.point, strength: 1.0)
+        }
+
+        // Interactive: live drag overrides everything.
+        if let p = dragPoint {
+            return Field(attractor: p, strength: 1.0)
+        }
+
+        // Released: damped-cosine settle from the release point back to idle.
+        if let rd = releaseDate {
+            let elapsed = max(0, Date().timeIntervalSince1970 - rd.timeIntervalSince1970)
+            return settleField(elapsed: elapsed,
+                               idlePoint: idle.point,
+                               idleStrength: idle.strength)
+        }
+
+        // Untouched idle: faint orbit so an interactive tile still looks alive.
+        return Field(attractor: idle.point, strength: idle.strength)
+    }
+
+    /// Slow Lissajous orbit. In demo it carries the full ripple; interactively it's
+    /// the faint resting motion the field relaxes back into.
+    private func idleOrbit(size: CGSize, time t: TimeInterval) -> (point: CGPoint, strength: CGFloat) {
+        let w = size.width
+        let h = size.height
+        // ~3.4s base period so the tile reads as a slow, calm wander.
+        let phase = t * 0.46
+        let ax: CGFloat = 0.34
+        let ay: CGFloat = 0.30
+        let cx = w * (0.5 + ax * CGFloat(sin(phase)))
+        let cy = h * (0.5 + ay * CGFloat(sin(phase * 1.37 + 1.1)))
+        let idleStrength: CGFloat = demo ? 1.0 : 0.42
+        return (CGPoint(x: cx, y: cy), idleStrength)
+    }
+
+    /// Damped-cosine envelope from a fixed release point toward the idle orbit.
+    /// Strength dips below idle once (dots snap inward past rest) then settles.
+    /// Attractor point is held near the release location through the first
+    /// oscillation, then eased onto the idle orbit so the overshoot stays crisp.
+    private func settleField(elapsed: TimeInterval,
+                             idlePoint: CGPoint,
+                             idleStrength: CGFloat) -> Field {
+        let e = CGFloat(elapsed)
+        // Envelope: starts at 1, decays with a cosine wobble toward idleStrength.
+        let k: CGFloat = 4.2          // decay rate
+        let omega: CGFloat = 8.6      // oscillation frequency
+        let wobble = exp(-k * e) * cos(omega * e)
+        let strength = idleStrength + (1.0 - idleStrength) * wobble
+
+        // Hold the point near release for the first beat, then drift to idle.
+        let handoff = clamp((e - 0.35) / 0.65, 0, 1)
+        let eased = handoff * handoff * (3 - 2 * handoff) // smoothstep
+        let px = releaseLocation.x + (idlePoint.x - releaseLocation.x) * eased
+        let py = releaseLocation.y + (idlePoint.y - releaseLocation.y) * eased
+        return Field(attractor: CGPoint(x: px, y: py), strength: strength)
+    }
+
+    // MARK: Lattice geometry
+
+    /// Lattice spacing derived from the live size so it scales from a 120pt tile
+    /// to a large detail area. Caps total dot count for the per-frame distance pass.
+    private func latticeMetrics(for size: CGSize) -> (spacing: CGFloat, cols: Int, rows: Int) {
+        let minSide = min(size.width, size.height)
+        // ~16 dots across the short side; clamp spacing to a sane band.
+        let spacing = clamp(minSide / 16.0, 9.0, 30.0)
+        let cols = max(2, Int((size.width / spacing).rounded(.down)) + 2)
+        let rows = max(2, Int((size.height / spacing).rounded(.down)) + 2)
+        return (spacing, cols, rows)
+    }
+
+    // MARK: Drawing
+
+    private func drawLattice(context: GraphicsContext, size: CGSize, field: Field) {
+        let metrics = latticeMetrics(for: size)
+        let spacing = metrics.spacing
+        let baseRadius = clamp(spacing * 0.12, 1.0, 3.4)
+        // Influence radius: how far the magnet reaches across the field.
+        let influence = max(spacing * 5.0, min(size.width, size.height) * 0.42)
+        let maxPush = spacing * 1.55
+
+        // Center the lattice within the view.
+        let usedW = CGFloat(metrics.cols - 1) * spacing
+        let usedH = CGFloat(metrics.rows - 1) * spacing
+        let originX = (size.width - usedW) / 2.0
+        let originY = (size.height - usedH) / 2.0
+
+        let attractor = field.attractor
+        let strength = field.strength
+
+        for r in 0..<metrics.rows {
+            for c in 0..<metrics.cols {
+                let restX = originX + CGFloat(c) * spacing
+                let restY = originY + CGFloat(r) * spacing
+                drawDot(context: context,
+                        restX: restX, restY: restY,
+                        attractor: attractor,
+                        strength: strength,
+                        influence: influence,
+                        maxPush: maxPush,
+                        baseRadius: baseRadius)
+            }
+        }
+    }
+
+    private func drawDot(context: GraphicsContext,
+                         restX: CGFloat, restY: CGFloat,
+                         attractor: CGPoint,
+                         strength: CGFloat,
+                         influence: CGFloat,
+                         maxPush: CGFloat,
+                         baseRadius: CGFloat) {
+        let dx = restX - attractor.x
+        let dy = restY - attractor.y
+        let dist = max(0.0001, hypot(dx, dy))
+
+        // Smooth inverse-square-ish falloff, normalized by influence radius.
+        let ratio = dist / influence
+        let falloff = 1.0 / (1.0 + ratio * ratio * 4.0) // 0..1, peaks at the source
+        let active = falloff * strength
+
+        // Push outward along the radial direction.
+        let push = maxPush * active
+        let nx = dx / dist
+        let ny = dy / dist
+        let x = restX + nx * push
+        let y = restY + ny * push
+
+        // Radius swells near the magnet; brightness too. Base is unconditional
+        // so the field is never blank, regardless of strength.
+        let radius = baseRadius * (1.0 + 1.7 * max(0, active))
+        let glow = clamp(0.22 + 0.78 * max(0, active), 0.22, 1.0)
+
+        let color = dotColor(intensity: glow)
+        let rect = CGRect(x: x - radius, y: y - radius,
+                          width: radius * 2, height: radius * 2)
+        context.fill(Path(ellipseIn: rect), with: .color(color))
+    }
+
+    /// Cool-violet resting dot warming to bright cyan-white at the magnet core.
+    private func dotColor(intensity: CGFloat) -> Color {
+        let i = clamp(intensity, 0, 1)
+        let red = 0.34 + 0.55 * i
+        let green = 0.40 + 0.55 * i
+        let blue = 0.62 + 0.38 * i
+        return Color(red: red, green: green, blue: blue).opacity(0.30 + 0.70 * i)
+    }
+
+    // MARK: Helpers
+
+    private func clamp(_ v: CGFloat, _ lo: CGFloat, _ hi: CGFloat) -> CGFloat {
+        min(max(v, lo), hi)
+    }
+}
+"""###,
+        "bg-truchet-flow": ###"""
+import SwiftUI
+
+/// Truchet Flow — a grid of quarter-arc Truchet tiles that perpetually rotate
+/// in eased 90° steps along a diagonal wave, re-threading the connected curves
+/// into endlessly shifting maze-like loops. Pure SwiftUI Canvas, iOS 17+.
+///
+/// `interaction` is "auto": both the demo tile and the real component run the
+/// same self-driving TimelineView loop, so the tile is never blank or static.
+struct TruchetFlowView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            TruchetFlowView_TruchetCanvas(time: t)
+        }
+        .background(Self.backdrop)
+        .clipped()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // Soft graphite backdrop so the bright filaments read at any tile size.
+    private static let backdrop = LinearGradient(
+        colors: [
+            Color(red: 0.04, green: 0.05, blue: 0.08),
+            Color(red: 0.02, green: 0.02, blue: 0.04)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+}
+
+// MARK: - Canvas renderer
+
+private struct TruchetFlowView_TruchetCanvas: View {
+    let time: Double
+
+    var body: some View {
+        Canvas { context, canvasSize in
+            draw(in: &context, canvasSize: canvasSize)
+        }
+    }
+
+    private func draw(in context: inout GraphicsContext, canvasSize: CGSize) {
+        let layout = TruchetFlowView_TruchetLayout(canvasSize: canvasSize)
+        guard layout.isValid else { return }
+
+        let cell = layout.cell
+        let line = max(CGFloat(1.5), cell * 0.16)
+
+        // A faint glow pass underneath the crisp strokes for depth.
+        for row in 0..<layout.rows {
+            for col in 0..<layout.cols {
+                drawCell(
+                    &context,
+                    row: row,
+                    col: col,
+                    layout: layout,
+                    lineWidth: line,
+                    glow: true
+                )
+            }
+        }
+        for row in 0..<layout.rows {
+            for col in 0..<layout.cols {
+                drawCell(
+                    &context,
+                    row: row,
+                    col: col,
+                    layout: layout,
+                    lineWidth: line,
+                    glow: false
+                )
+            }
+        }
+    }
+
+    private func drawCell(
+        _ context: inout GraphicsContext,
+        row: Int,
+        col: Int,
+        layout: TruchetFlowView_TruchetLayout,
+        lineWidth: CGFloat,
+        glow: Bool
+    ) {
+        let cell = layout.cell
+        let centerX = layout.originX + (CGFloat(col) + 0.5) * cell
+        let centerY = layout.originY + (CGFloat(row) + 0.5) * cell
+
+        let rotation = cellRotation(row: row, col: col)
+        let shade = cellColor(row: row, col: col, diagonalSpan: layout.rows + layout.cols)
+
+        // GraphicsContext is a value type with no save/restore stack — copy it
+        // per cell so the translate+rotate transforms never accumulate.
+        var cellCtx = context
+        cellCtx.translateBy(x: centerX, y: centerY)
+        cellCtx.rotate(by: .degrees(rotation))
+
+        let arcs = Self.arcPath(cell: cell)
+        if glow {
+            cellCtx.addFilter(.blur(radius: lineWidth * 1.4))
+            cellCtx.stroke(
+                arcs,
+                with: .color(shade.opacity(0.55)),
+                style: StrokeStyle(lineWidth: lineWidth * 1.8, lineCap: .round)
+            )
+        } else {
+            cellCtx.stroke(
+                arcs,
+                with: .color(shade),
+                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+            )
+        }
+    }
+
+    /// The canonical quarter-arc pair, drawn in cell-CENTER-local coordinates so
+    /// rotation happens about the cell centre. Each arc is centred on an opposite
+    /// corner with radius = cell/2, so every endpoint lands exactly on an edge
+    /// midpoint — that is what keeps adjacent tiles connected as they rotate.
+    ///
+    /// The two arcs MUST be separate subpaths. `addArc` follows CGPath rules:
+    /// on a non-empty path it inserts a straight line from the current point to
+    /// the next arc's start point. Without an explicit `move(to:)` before the
+    /// second arc, that draws a spurious diagonal across every tile. The
+    /// `move(to:)` forces a disjoint subpath so only the two clean arcs render.
+    private static func arcPath(cell: CGFloat) -> Path {
+        let r = cell / 2
+        var path = Path()
+        // Arc centred on the top-left corner (-r, -r): from top-mid to left-mid.
+        path.addArc(
+            center: CGPoint(x: -r, y: -r),
+            radius: r,
+            startAngle: .degrees(0),
+            endAngle: .degrees(90),
+            clockwise: false
+        )
+        // Start a fresh subpath at the bottom-right arc's start point (bottom-mid)
+        // so no connecting line is drawn between the two arcs.
+        path.move(to: CGPoint(x: 0, y: r))
+        // Arc centred on the bottom-right corner (r, r): from bottom-mid to right-mid.
+        path.addArc(
+            center: CGPoint(x: r, y: r),
+            radius: r,
+            startAngle: .degrees(180),
+            endAngle: .degrees(270),
+            clockwise: false
+        )
+        return path
+    }
+
+    /// Eased, perpetually-advancing 90° stepping that travels along the diagonal.
+    /// `localPhase` is offset by the cell's diagonal index so the flips ripple as
+    /// a wave; easeInOut dwells near each detent so the maze stays legible.
+    private func cellRotation(row: Int, col: Int) -> Double {
+        let period: Double = 3.0           // seconds per 90° detent — within 2.5–4s band
+        let diagonalDelay: Double = 0.12   // per-cell phase offset along the diagonal
+        let diagonal = Double(row + col)
+
+        let localPhase = time / period - diagonal * diagonalDelay
+        let step = floor(localPhase)
+        let raw = localPhase - step
+        let eased = Self.easeInOut(raw)
+        return (step + eased) * 90.0
+    }
+
+    private static func easeInOut(_ x: Double) -> Double {
+        let c = min(max(x, 0), 1)
+        return c * c * (3 - 2 * c)
+    }
+
+    /// Hue drift along the diagonal + slow time wash so the labyrinth glows in
+    /// shifting teal/violet bands rather than a flat colour.
+    private func cellColor(row: Int, col: Int, diagonalSpan: Int) -> Color {
+        let span = max(Double(diagonalSpan), 1)
+        let diagonalT = Double(row + col) / span
+        let wash = (sin(time * 0.35 + diagonalT * 6.0) + 1) / 2
+        let hue = 0.52 + 0.22 * wash          // teal -> blue/violet
+        let sat = 0.55 + 0.25 * diagonalT
+        let bri = 0.85 + 0.15 * wash
+        return Color(hue: hue.truncatingRemainder(dividingBy: 1.0),
+                     saturation: min(sat, 1.0),
+                     brightness: min(bri, 1.0))
+    }
+}
+
+// MARK: - Layout
+
+/// Derives a square-cell honeycomb-free grid from the available size so the
+/// identical code fills a ~120pt tile and a large detail area alike.
+private struct TruchetFlowView_TruchetLayout {
+    let cell: CGFloat
+    let cols: Int
+    let rows: Int
+    let originX: CGFloat
+    let originY: CGFloat
+
+    init(canvasSize: CGSize) {
+        let w = max(canvasSize.width, 1)
+        let h = max(canvasSize.height, 1)
+        let minSide = min(w, h)
+
+        // Target a sensible tile density that scales with the view.
+        let targetCells: CGFloat = minSide < 200 ? 5 : 8
+        let rawCell = minSide / targetCells
+        let c = max(rawCell, 12)
+
+        let colCount = max(Int(ceil(w / c)) + 1, 1)
+        let rowCount = max(Int(ceil(h / c)) + 1, 1)
+
+        // Centre the (over-scanned) grid so it always covers the bounds.
+        let gridW = CGFloat(colCount) * c
+        let gridH = CGFloat(rowCount) * c
+
+        cell = c
+        cols = colCount
+        rows = rowCount
+        originX = (w - gridW) / 2
+        originY = (h - gridH) / 2
+    }
+
+    var isValid: Bool { cell > 0 && cols > 0 && rows > 0 }
+}
+"""###,
+        "bg-voronoi-fracture": ###"""
+import SwiftUI
+
+// MARK: - Voronoi Fracture
+// A Canvas renders a coarse field of orbiting Voronoi cells with crisp
+// "stained glass" leading. Cells are exact polygons computed via
+// Sutherland–Hodgman half-plane clipping (not a pixel sample grid), so the
+// seams stay sharp at any size. A tap (or, in demo mode, a time-driven
+// synthetic tap) fractures the nearest cell into a splinter burst that heals
+// back into the mosaic. Fracture progress is a pure function of timeline time,
+// so demo and interactive share one code path.
+
+public struct VoronoiFractureView: View {
+    public var demo: Bool = false
+
+    public init(demo: Bool = false) {
+        self.demo = demo
+    }
+
+    // Per-cell fracture start times (seconds, in the timeline's clock).
+    // A value of -1 means "not fractured".
+    @State private var fractureStartTimes: [Double] = Array(repeating: -1, count: VoronoiFractureView_VoronoiConfig.seedCount)
+    @State private var startDate: Date = .init()
+
+    public var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSince(startDate)
+                Canvas { context, canvasSize in
+                    VoronoiFractureView_VoronoiRenderer.draw(
+                        context: &context,
+                        size: canvasSize,
+                        time: t,
+                        fractureStartTimes: fractureStartTimes,
+                        demo: demo
+                    )
+                }
+                .background(Color(red: 0.039, green: 0.039, blue: 0.047))
+                .contentShape(Rectangle())
+                .gesture(tapGesture(in: size, time: t))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
+
+    // Interactive: SpatialTapGesture reports the location; map to nearest seed,
+    // stamp its fracture start time. Disabled in demo (the timeline fires its own).
+    private func tapGesture(in size: CGSize, time: Double) -> some Gesture {
+        SpatialTapGesture(coordinateSpace: .local)
+            .onEnded { value in
+                guard !demo, size.width > 0, size.height > 0 else { return }
+                let seeds = VoronoiFractureView_VoronoiMath.seeds(at: time, size: size)
+                let idx = VoronoiFractureView_VoronoiMath.nearestSeedIndex(to: value.location, seeds: seeds)
+                if idx >= 0 && idx < fractureStartTimes.count {
+                    fractureStartTimes[idx] = time
+                }
+            }
+    }
+}
+
+// MARK: - Configuration
+
+private enum VoronoiFractureView_VoronoiConfig {
+    static let seedCount: Int = 24
+    static let fractureDuration: Double = 1.1     // seconds for a crack to heal
+    static let demoCadence: Double = 2.5          // seconds between auto-fractures
+    static let strokeWidth: CGFloat = 1.2         // fixed point width (crisp at any size)
+}
+
+// MARK: - Seed Math
+
+private enum VoronoiFractureView_VoronoiMath {
+
+    // Deterministic pseudo-random in [0,1) from an integer key.
+    static func rand(_ key: Int) -> Double {
+        let x = sin(Double(key) * 127.1 + 311.7) * 43758.5453
+        return x - floor(x)
+    }
+
+    // Orbiting seed centers in absolute view coordinates.
+    static func seeds(at time: Double, size: CGSize) -> [CGPoint] {
+        let count = VoronoiFractureView_VoronoiConfig.seedCount
+        var result: [CGPoint] = []
+        result.reserveCapacity(count)
+        let w = size.width
+        let h = size.height
+        for i in 0..<count {
+            // Anchor on a loose jittered grid so cells stay well-distributed.
+            let cols = 6
+            let rows = (count + cols - 1) / cols
+            let col = i % cols
+            let row = i / cols
+            let jitterX = (rand(i * 3 + 1) - 0.5) * 0.6
+            let jitterY = (rand(i * 3 + 2) - 0.5) * 0.6
+            let baseX = (Double(col) + 0.5) / Double(cols) + jitterX / Double(cols)
+            let baseY = (Double(row) + 0.5) / Double(rows) + jitterY / Double(rows)
+
+            // Slow orbit: each seed drifts on its own small ellipse.
+            let speed = 0.18 + rand(i * 5 + 7) * 0.22
+            let phase = rand(i * 5 + 11) * .pi * 2.0
+            let radX = 0.045 + rand(i * 5 + 13) * 0.04
+            let radY = 0.045 + rand(i * 5 + 17) * 0.04
+            let ox = cos(time * speed + phase) * radX
+            let oy = sin(time * speed * 1.1 + phase) * radY
+
+            let nx = min(max(baseX + ox, 0.02), 0.98)
+            let ny = min(max(baseY + oy, 0.02), 0.98)
+            result.append(CGPoint(x: CGFloat(nx) * w, y: CGFloat(ny) * h))
+        }
+        return result
+    }
+
+    static func nearestSeedIndex(to point: CGPoint, seeds: [CGPoint]) -> Int {
+        var best = -1
+        var bestDist = CGFloat.greatestFiniteMagnitude
+        for (i, s) in seeds.enumerated() {
+            let dx = s.x - point.x
+            let dy = s.y - point.y
+            let d = dx * dx + dy * dy
+            if d < bestDist {
+                bestDist = d
+                best = i
+            }
+        }
+        return best
+    }
+
+    static func centroid(of polygon: [CGPoint]) -> CGPoint {
+        guard !polygon.isEmpty else { return .zero }
+        var sx: CGFloat = 0
+        var sy: CGFloat = 0
+        for p in polygon {
+            sx += p.x
+            sy += p.y
+        }
+        let n = CGFloat(polygon.count)
+        return CGPoint(x: sx / n, y: sy / n)
+    }
+}
+
+// MARK: - Voronoi Polygon (Sutherland–Hodgman half-plane clipping)
+
+private enum VoronoiFractureView_VoronoiClipper {
+
+    // The exact Voronoi cell for `site` = the canvas rect clipped against the
+    // perpendicular bisector with every other seed.
+    static func cell(for site: CGPoint, among seeds: [CGPoint], rect: CGSize) -> [CGPoint] {
+        var poly: [CGPoint] = [
+            CGPoint(x: 0, y: 0),
+            CGPoint(x: rect.width, y: 0),
+            CGPoint(x: rect.width, y: rect.height),
+            CGPoint(x: 0, y: rect.height)
+        ]
+        for other in seeds {
+            if other == site { continue }
+            poly = clipHalfPlane(polygon: poly, site: site, other: other)
+            if poly.count < 3 { break }
+        }
+        return poly
+    }
+
+    // Keep the part of `polygon` on the `site` side of the bisector between
+    // `site` and `other`. A point p is kept iff
+    //   dot(p - midpoint, other - site) <= 0   (i.e. p is closer to site).
+    private static func clipHalfPlane(polygon: [CGPoint], site: CGPoint, other: CGPoint) -> [CGPoint] {
+        guard polygon.count >= 3 else { return [] }
+        let mid = CGPoint(x: (site.x + other.x) / 2, y: (site.y + other.y) / 2)
+        let nx = other.x - site.x   // normal pointing toward `other`
+        let ny = other.y - site.y
+
+        func signedValue(_ p: CGPoint) -> CGFloat {
+            (p.x - mid.x) * nx + (p.y - mid.y) * ny
+        }
+
+        var output: [CGPoint] = []
+        output.reserveCapacity(polygon.count + 1)
+        let n = polygon.count
+        for i in 0..<n {
+            let current = polygon[i]
+            let next = polygon[(i + 1) % n]
+            let curVal = signedValue(current)
+            let nextVal = signedValue(next)
+            let curInside = curVal <= 0
+            let nextInside = nextVal <= 0
+
+            if curInside {
+                output.append(current)
+            }
+            // Edge crosses the bisector → add intersection.
+            if curInside != nextInside {
+                let denom = curVal - nextVal
+                if abs(denom) > 1e-9 {
+                    let tt = curVal / denom
+                    let ix = current.x + tt * (next.x - current.x)
+                    let iy = current.y + tt * (next.y - current.y)
+                    output.append(CGPoint(x: ix, y: iy))
+                }
+            }
+        }
+        return output
+    }
+}
+
+// MARK: - Renderer
+
+private enum VoronoiFractureView_VoronoiRenderer {
+
+    static func draw(
+        context: inout GraphicsContext,
+        size: CGSize,
+        time: Double,
+        fractureStartTimes: [Double],
+        demo: Bool
+    ) {
+        guard size.width > 1, size.height > 1 else { return }
+        let seeds = VoronoiFractureView_VoronoiMath.seeds(at: time, size: size)
+
+        // Precompute each cell polygon once per frame.
+        var polygons: [[CGPoint]] = []
+        polygons.reserveCapacity(seeds.count)
+        for s in seeds {
+            polygons.append(VoronoiFractureView_VoronoiClipper.cell(for: s, among: seeds, rect: size))
+        }
+
+        // 1) Draw the COMPLETE intact mosaic first, every frame.
+        //    Guarantees the tile is never blank, even mid-fracture.
+        drawMosaic(context: &context, polygons: polygons, time: time)
+
+        // 2) Splinter overlay on top (additive crack flash), shared by demo + tap.
+        drawFractures(
+            context: &context,
+            polygons: polygons,
+            fractureStartTimes: fractureStartTimes,
+            time: time,
+            demo: demo,
+            count: seeds.count
+        )
+
+        // 3) A soft vignette to seat the mosaic in the tile.
+        drawVignette(context: &context, size: size)
+    }
+
+    private static func cellColor(index: Int, time: Double) -> Color {
+        // Each cell cycles hue over time; wrap into [0,1) (Color(hue:) clamps).
+        let baseHue = VoronoiFractureView_VoronoiMath.rand(index * 7 + 3)
+        let h = baseHue + time * 0.03
+        let hue = h - floor(h)
+        let sat = 0.55 + VoronoiFractureView_VoronoiMath.rand(index * 7 + 5) * 0.25
+        let bri = 0.62 + VoronoiFractureView_VoronoiMath.rand(index * 7 + 9) * 0.28
+        return Color(hue: hue, saturation: sat, brightness: bri)
+    }
+
+    private static func path(from polygon: [CGPoint]) -> Path {
+        var p = Path()
+        guard polygon.count >= 3 else { return p }
+        p.move(to: polygon[0])
+        for i in 1..<polygon.count {
+            p.addLine(to: polygon[i])
+        }
+        p.closeSubpath()
+        return p
+    }
+
+    private static func drawMosaic(
+        context: inout GraphicsContext,
+        polygons: [[CGPoint]],
+        time: Double
+    ) {
+        let stroke = Color(red: 0.04, green: 0.05, blue: 0.07)
+        for (i, poly) in polygons.enumerated() {
+            guard poly.count >= 3 else { continue }
+            let p = path(from: poly)
+            context.fill(p, with: .color(cellColor(index: i, time: time)))
+            // Crisp dark "leading" between panes — fixed point width.
+            context.stroke(
+                p,
+                with: .color(stroke),
+                style: StrokeStyle(lineWidth: VoronoiFractureView_VoronoiConfig.strokeWidth, lineJoin: .round)
+            )
+            // Subtle inner sheen at the top of each pane for glassy depth.
+            let centroid = VoronoiFractureView_VoronoiMath.centroid(of: poly)
+            let sheen = Path(ellipseIn: CGRect(
+                x: centroid.x - 1.2, y: centroid.y - 1.2, width: 2.4, height: 2.4
+            ))
+            context.fill(sheen, with: .color(.white.opacity(0.10)))
+        }
+    }
+
+    private static func drawFractures(
+        context: inout GraphicsContext,
+        polygons: [[CGPoint]],
+        fractureStartTimes: [Double],
+        time: Double,
+        demo: Bool,
+        count: Int
+    ) {
+        for i in 0..<count {
+            let progress = fractureProgress(
+                index: i,
+                fractureStartTimes: fractureStartTimes,
+                time: time,
+                demo: demo,
+                count: count
+            )
+            guard progress > 0.001, i < polygons.count, polygons[i].count >= 3 else { continue }
+            drawSplinters(context: &context, polygon: polygons[i], progress: progress, index: i, time: time)
+        }
+    }
+
+    // Unified fracture progress: pure function of timeline time.
+    // Returns a 1→0 decaying value (eased) while a cell is fracturing.
+    private static func fractureProgress(
+        index: Int,
+        fractureStartTimes: [Double],
+        time: Double,
+        demo: Bool,
+        count: Int
+    ) -> Double {
+        var start: Double = -1
+
+        if demo {
+            // Time-driven synthetic tap: one cell fractures per cadence window.
+            let window = Int(floor(time / VoronoiFractureView_VoronoiConfig.demoCadence))
+            // Pseudo-randomly pick a cell for this window so it wanders.
+            let active = Int(VoronoiFractureView_VoronoiMath.rand(window + 1) * Double(count)) % max(count, 1)
+            if active == index {
+                start = Double(window) * VoronoiFractureView_VoronoiConfig.demoCadence
+            }
+        } else if index < fractureStartTimes.count {
+            start = fractureStartTimes[index]
+        }
+
+        guard start >= 0 else { return 0 }
+        let elapsed = time - start
+        guard elapsed >= 0, elapsed <= VoronoiFractureView_VoronoiConfig.fractureDuration else { return 0 }
+        let raw = 1.0 - elapsed / VoronoiFractureView_VoronoiConfig.fractureDuration  // 1 → 0
+        // Snappy burst then ease back: fast attack via sqrt-like curve.
+        return raw * raw
+    }
+
+    // Fan-triangulate the polygon from its centroid; push each triangle outward
+    // by `progress`, drawn as a bright additive splinter over the intact pane.
+    private static func drawSplinters(
+        context: inout GraphicsContext,
+        polygon: [CGPoint],
+        progress: Double,
+        index: Int,
+        time: Double
+    ) {
+        let centroid = VoronoiFractureView_VoronoiMath.centroid(of: polygon)
+        let n = polygon.count
+        let push = CGFloat(progress) * 26.0
+        let glow = cellColor(index: index, time: time)
+
+        for i in 0..<n {
+            let a = polygon[i]
+            let b = polygon[(i + 1) % n]
+            // Midpoint of this edge defines the outward shard direction.
+            let edgeMid = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+            var dx = edgeMid.x - centroid.x
+            var dy = edgeMid.y - centroid.y
+            let len = max(sqrt(dx * dx + dy * dy), 0.0001)
+            dx /= len
+            dy /= len
+            // Each shard gets a slight rotational spin as it flies out.
+            let spin = CGFloat(progress * (VoronoiFractureView_VoronoiMath.rand(index * 13 + i) - 0.5) * 0.6)
+            let off = CGPoint(x: dx * push, y: dy * push)
+
+            let ca = rotate(point: a, around: centroid, by: spin)
+            let cb = rotate(point: b, around: centroid, by: spin)
+            let shard = [
+                CGPoint(x: centroid.x + off.x * 0.35, y: centroid.y + off.y * 0.35),
+                CGPoint(x: ca.x + off.x, y: ca.y + off.y),
+                CGPoint(x: cb.x + off.x, y: cb.y + off.y)
+            ]
+            var p = Path()
+            p.move(to: shard[0])
+            p.addLine(to: shard[1])
+            p.addLine(to: shard[2])
+            p.closeSubpath()
+
+            let alpha = progress
+            context.fill(p, with: .color(glow.opacity(alpha * 0.85)))
+            context.stroke(
+                p,
+                with: .color(.white.opacity(alpha * 0.7)),
+                style: StrokeStyle(lineWidth: 0.9, lineJoin: .round)
+            )
+        }
+
+        // A central crack flash that fades with the burst.
+        let flashR = CGFloat(2 + progress * 10)
+        let flash = Path(ellipseIn: CGRect(
+            x: centroid.x - flashR, y: centroid.y - flashR,
+            width: flashR * 2, height: flashR * 2
+        ))
+        context.fill(flash, with: .color(.white.opacity(progress * 0.5)))
+    }
+
+    private static func rotate(point: CGPoint, around c: CGPoint, by angle: CGFloat) -> CGPoint {
+        let s = sin(angle)
+        let co = cos(angle)
+        let dx = point.x - c.x
+        let dy = point.y - c.y
+        return CGPoint(x: c.x + dx * co - dy * s, y: c.y + dx * s + dy * co)
+    }
+
+    private static func drawVignette(context: inout GraphicsContext, size: CGSize) {
+        let rect = CGRect(origin: .zero, size: size)
+        let gradient = Gradient(colors: [
+            .clear,
+            Color(red: 0.0, green: 0.0, blue: 0.0).opacity(0.32)
+        ])
+        let maxR = max(size.width, size.height) * 0.75
+        context.fill(
+            Path(rect),
+            with: .radialGradient(
+                gradient,
+                center: CGPoint(x: size.width / 2, y: size.height / 2),
+                startRadius: maxR * 0.45,
+                endRadius: maxR
+            )
+        )
+    }
+}
+"""###,
         "btn-accordion-stretch": ###"""
 import SwiftUI
 
@@ -42488,6 +44186,1995 @@ private struct VolumeFluidView_FluidCanvas: View {
     }
 }
 """###,
+        "mtl-caustic-lens": ###"""
+import SwiftUI
+
+/// Caustic Glass Lens — a draggable circular glass blob that magnifies and
+/// refracts the content beneath it, with animated underwater caustic light
+/// bands rippling across the lens interior.
+///
+/// - `demo == true`  : self-driving figure-eight drift, caustics always live.
+/// - `demo == false` : drag the lens with your finger; on release it springs
+///                     back into the idle figure-eight drift.
+///
+/// Single public view. SwiftUI-only, iOS 17. The refraction/caustics/rim are
+/// all composited in one `.layerEffect` pass (see `CausticLens.metal`).
+struct CausticLensView: View {
+    var demo: Bool = false
+
+    // Live finger position while dragging (view-local points). nil == not dragging.
+    @State private var dragLocation: CGPoint? = nil
+    // Where the finger let go, plus the timeline timestamp of release — used to
+    // interpolate a deterministic spring-back to the idle path.
+    @State private var releaseFrom: CGPoint = .zero
+    @State private var releaseAt: Double = -1_000
+
+    // Seconds for one full figure-eight loop, and the spring-back duration.
+    private let loopDuration: Double = 3.4
+    private let returnDuration: Double = 0.9
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            let radius = lensRadius(for: size)
+
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let center = currentCenter(time: t, size: size)
+
+                CausticLensView_Backdrop()
+                    .modifier(
+                        CausticLensView_CausticLensEffect(
+                            center: center,
+                            radius: radius,
+                            time: t,
+                            size: size
+                        )
+                    )
+                    .contentShape(Rectangle())
+                    .gesture(
+                        dragGesture(time: t, size: size),
+                        including: demo ? .subviews : .all
+                    )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.06, green: 0.04, blue: 0.03))
+        .clipped()
+    }
+
+    // MARK: - Center driver (a pure function of the timeline clock)
+
+    /// The lens center for a given frame. Fully derived from the clock so the
+    /// motion is deterministic and never jumps (no withAnimation on read state).
+    private func currentCenter(time t: Double, size: CGSize) -> CGPoint {
+        let idle = figureEight(time: t, size: size)
+
+        // Dragging: track the finger directly.
+        if let live = dragLocation {
+            return clamp(live, in: size)
+        }
+
+        // Just released: ease from the release point back onto the idle path.
+        let since = t - releaseAt
+        if since < returnDuration {
+            let raw = since / returnDuration
+            let e = springEase(raw)
+            let x = releaseFrom.x + (idle.x - releaseFrom.x) * e
+            let y = releaseFrom.y + (idle.y - releaseFrom.y) * e
+            return CGPoint(x: x, y: y)
+        }
+
+        // Idle: slow figure-eight drift.
+        return idle
+    }
+
+    /// Parametric figure-eight: (sin ωt, sin 2ωt) mapped into the view bounds.
+    private func figureEight(time t: Double, size: CGSize) -> CGPoint {
+        let omega = 2.0 * Double.pi / loopDuration
+        let cx = Double(size.width) * 0.5
+        let cy = Double(size.height) * 0.5
+        // Keep the path comfortably inside so the lens never rides the edge.
+        let ax = Double(size.width) * 0.30
+        let ay = Double(size.height) * 0.26
+        let x = cx + ax * sin(omega * t)
+        let y = cy + ay * sin(2.0 * omega * t)
+        return CGPoint(x: x, y: y)
+    }
+
+    /// Damped-sine ease-out (0→1) that overshoots slightly for a springy snap.
+    private func springEase(_ x: Double) -> Double {
+        let c = x < 0 ? 0 : (x > 1 ? 1 : x)
+        let decay = exp(-5.5 * c)
+        let osc = cos(c * Double.pi * 2.2)
+        return 1.0 - decay * osc
+    }
+
+    // MARK: - Geometry helpers
+
+    private func lensRadius(for size: CGSize) -> CGFloat {
+        let minSide = min(size.width, size.height)
+        return max(minSide * 0.30, 28.0)
+    }
+
+    private func clamp(_ p: CGPoint, in size: CGSize) -> CGPoint {
+        CGPoint(
+            x: min(max(p.x, 0), size.width),
+            y: min(max(p.y, 0), size.height)
+        )
+    }
+
+    // MARK: - Interaction
+
+    private func dragGesture(time t: Double, size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                dragLocation = value.location
+            }
+            .onEnded { value in
+                releaseFrom = clamp(value.location, in: size)
+                releaseAt = t
+                dragLocation = nil
+            }
+    }
+}
+
+// MARK: - Lens effect modifier
+
+/// Wraps the stitchable `causticLens` shader as a `.layerEffect`. Sampling is
+/// inward (magnifying), so the displaced coordinate stays within `radius` of
+/// `position` — that makes `maxSampleOffset == radius` genuinely sufficient.
+private struct CausticLensView_CausticLensEffect: ViewModifier {
+    let center: CGPoint
+    let radius: CGFloat
+    let time: Double
+    let size: CGSize
+
+    func body(content: Content) -> some View {
+        content.layerEffect(
+            ShaderLibrary.causticLens(
+                .float2(Float(center.x), Float(center.y)),
+                .float(Float(radius)),
+                .float(Float(time)),
+                .float2(Float(size.width), Float(size.height))
+            ),
+            maxSampleOffset: CGSize(width: radius, height: radius)
+        )
+    }
+}
+
+// MARK: - CausticLensView_Backdrop (vivid, opaque content for the lens to magnify)
+
+/// A rich, fully opaque scene. The lens needs real detail beneath it to read as
+/// magnification/refraction — without this the effect would be invisible.
+private struct CausticLensView_Backdrop: View {
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            ZStack {
+                // Deep teal→indigo base wash.
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.04, green: 0.20, blue: 0.30),
+                        Color(red: 0.06, green: 0.10, blue: 0.26),
+                        Color(red: 0.10, green: 0.05, blue: 0.20)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                // Warm pooled glow so refracted light has somewhere to gather.
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.95, green: 0.62, blue: 0.30).opacity(0.55),
+                        Color(red: 0.20, green: 0.40, blue: 0.55).opacity(0.0)
+                    ],
+                    center: .init(x: 0.32, y: 0.30),
+                    startRadius: 0,
+                    endRadius: max(size.width, size.height) * 0.7
+                )
+                .blendMode(.screen)
+
+                // Crisp lattice — high-frequency detail makes the magnification
+                // obvious and gives the caustics something to bend.
+                CausticLensView_LensGrid(size: size)
+                    .stroke(Color(red: 0.70, green: 0.90, blue: 1.0).opacity(0.22),
+                            lineWidth: 1)
+
+                // A couple of bold marks for scale reference under the lens.
+                Circle()
+                    .fill(Color(red: 1.0, green: 0.78, blue: 0.32).opacity(0.85))
+                    .frame(width: max(size.width, size.height) * 0.12)
+                    .position(x: size.width * 0.68, y: size.height * 0.40)
+
+                Capsule()
+                    .fill(Color(red: 0.40, green: 0.85, blue: 0.80).opacity(0.75))
+                    .frame(width: max(size.width, size.height) * 0.22,
+                           height: max(size.width, size.height) * 0.05)
+                    .rotationEffect(.degrees(-22))
+                    .position(x: size.width * 0.36, y: size.height * 0.70)
+
+                Text("✦")
+                    .font(.system(size: max(size.width, size.height) * 0.16,
+                                  weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 1.0, green: 0.95, blue: 0.86).opacity(0.9))
+                    .position(x: size.width * 0.78, y: size.height * 0.74)
+            }
+            .frame(width: size.width, height: size.height)
+        }
+        .drawingGroup() // flatten into a single layer for the effect to sample
+    }
+}
+
+/// A thin orthogonal lattice; high-frequency reference texture.
+private struct CausticLensView_LensGrid: Shape {
+    let size: CGSize
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let step = max(min(rect.width, rect.height) / 9.0, 14.0)
+
+        var x = rect.minX
+        while x <= rect.maxX {
+            p.move(to: CGPoint(x: x, y: rect.minY))
+            p.addLine(to: CGPoint(x: x, y: rect.maxY))
+            x += step
+        }
+        var y = rect.minY
+        while y <= rect.maxY {
+            p.move(to: CGPoint(x: rect.minX, y: y))
+            p.addLine(to: CGPoint(x: rect.maxX, y: y))
+            y += step
+        }
+        return p
+    }
+}
+
+
+// ---- Companion Metal shader (CausticLensView.metal) ----
+// Add this as a .metal file in your target:
+/*
+#include <metal_stdlib>
+#include <SwiftUI/SwiftUI_Metal.h>
+
+using namespace metal;
+
+// Caustic Glass Lens — single-pass refraction + caustics + chrome rim.
+//
+// Implicit args (position, layer) come first; then the Swift-supplied uniforms
+// in declaration order: center, radius, time, size.
+//
+// Inside the lens radius we sample the backdrop *inward* (magnify), add a slight
+// edge-refraction bend, paint swimming underwater caustic light bands, and draw
+// a specular chrome rim. Outside, we return the layer unchanged so the rest of
+// the content stays crisp (and the tile is never blank).
+
+[[ stitchable ]]
+half4 causticLens(float2 pos,
+                  SwiftUI::Layer layer,
+                  float2 center,
+                  float radius,
+                  float time,
+                  float2 size) {
+
+    float2 d = pos - center;
+    float dist = length(d);
+
+    // Outside the glass: passthrough.
+    if (dist >= radius) {
+        return layer.sample(pos);
+    }
+
+    // Normalized radius 0 (center) .. 1 (rim).
+    float r = dist / max(radius, 1.0);
+    float2 dir = (dist > 0.0001) ? (d / dist) : float2(0.0, 0.0);
+
+    // ---- Refraction / magnification -------------------------------------
+    // Base magnification: sample inward so the center enlarges. mag < 1.
+    float baseMag = 0.62;
+    // Edge bend: a glass droplet refracts harder near the rim. Push the sample
+    // coordinate outward as r->1 with a smooth lens profile.
+    float bend = pow(r, 3.0) * 0.34;
+    float mag = baseMag + bend;
+
+    float2 src = center + d * mag;
+
+    // Animated ripple in the sampling so the refracted image subtly breathes.
+    float ripple = sin(r * 18.0 - time * 2.2) * (1.0 - r) * 2.4;
+    src += dir * ripple;
+
+    // Keep the sample coordinate on-screen (avoid transparent reads at edges).
+    src = clamp(src, float2(0.5, 0.5), size - float2(0.5, 0.5));
+
+    half4 refracted = layer.sample(src);
+
+    // ---- Underwater caustic light bands ---------------------------------
+    // Two superimposed sine fields, advected over time, raised to a sharp power
+    // to read as thin focused light filaments swimming inside the lens.
+    float2 uv = (pos - center) / max(radius, 1.0); // -1..1 within lens
+    float t = time;
+
+    float w1 = sin(uv.x * 6.0 + t * 1.3) + sin(uv.y * 5.0 - t * 1.1);
+    float w2 = sin((uv.x + uv.y) * 4.5 + t * 0.9)
+             + sin((uv.x - uv.y) * 5.5 - t * 1.5);
+    float field = (w1 + w2) * 0.25 + 0.5;     // ~0..1
+    field = clamp(field, 0.0, 1.0);
+
+    // Sharpen into bands.
+    float bands = pow(field, 3.0);
+    // Fade caustics toward the rim so they pool in the interior.
+    float interior = smoothstep(1.0, 0.25, r);
+    float caustic = bands * interior;
+
+    // Cool-white caustic tint.
+    half3 causticColor = half3(0.72h, 0.92h, 1.0h);
+    half3 lit = refracted.rgb + causticColor * half(caustic) * 0.85h;
+
+    // Faint cyan body tint so the glass reads as colored water.
+    half3 glassTint = half3(0.55h, 0.85h, 0.95h);
+    lit = mix(lit, lit * glassTint, half(0.18 * interior));
+
+    // ---- Chrome / specular rim ------------------------------------------
+    // Bright thin ring at the edge of the lens.
+    float rimWidth = 0.10;
+    float rim = smoothstep(1.0 - rimWidth, 1.0, r) * smoothstep(1.02, 0.98, r);
+    half3 rimColor = half3(1.0h, 0.98h, 0.92h);
+    lit += rimColor * half(rim) * 1.2h;
+
+    // Directional top-left specular hotspot on the dome.
+    float2 lightDir = normalize(float2(-0.6, -0.8));
+    float spec = clamp(dot(dir, lightDir), 0.0, 1.0);
+    spec = pow(spec, 4.0) * smoothstep(0.45, 1.0, r); // strongest near rim
+    lit += rimColor * half(spec) * 0.6h;
+
+    // Soft inner shadow opposite the light for dome volume.
+    float shade = clamp(dot(dir, -lightDir), 0.0, 1.0);
+    shade = pow(shade, 2.0) * smoothstep(0.5, 1.0, r) * 0.25;
+    lit *= (1.0h - half(shade));
+
+    // Antialias the lens boundary.
+    float edge = smoothstep(radius, radius - 1.5, dist);
+    half3 outside = layer.sample(pos).rgb;
+    half3 finalRGB = mix(outside, lit, half(edge));
+
+    return half4(finalRGB, 1.0h);
+}
+*/
+"""###,
+        "mtl-chromatic-velocity": ###"""
+import SwiftUI
+
+/// Chromatic Velocity — RGB channels split apart proportional to drag velocity,
+/// smearing into a prismatic streak on fast flicks and snapping back to crisp on
+/// release. The demo loop oscillates the split with an eased sine.
+///
+/// The split is fed to a `.layerEffect` Metal shader that samples the layer three
+/// times (one per R/G/B) at offset coords and recombines them. Min iOS 17.
+struct ChromaticVelocityView: View {
+
+    var demo: Bool = false
+
+    // Live interactive drag state. These are mutated only inside gesture
+    // callbacks (safe) — never inside the TimelineView closure (which only reads).
+    @State private var dragSplit: CGFloat = 0          // velocity-driven split while dragging
+    @State private var dragDir: CGVector = CGVector(dx: 1, dy: 0)
+    @State private var dragOffset: CGSize = .zero      // content follows the finger
+    @State private var isDragging: Bool = false
+    @State private var releaseSplit: CGFloat = 0       // split captured at release
+    @State private var releaseDir: CGVector = CGVector(dx: 1, dy: 0)
+    @State private var releaseTime: Date? = nil        // when the flick was released
+
+    var body: some View {
+        GeometryReader { geo in
+            let dim = min(geo.size.width, geo.size.height)
+            let maxSplit = self.maxSplit(for: dim)
+
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let resolved = resolvedSplit(now: timeline.date, maxSplit: maxSplit)
+
+                content(dim: dim, time: t)
+                    .offset(demo ? .zero : dragOffset)
+                    .modifier(
+                        ChromaticVelocityView_ChromaticSplit(
+                            split: resolved.magnitude,
+                            dir: resolved.direction,
+                            maxOffset: maxSplit
+                        )
+                    )
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .contentShape(Rectangle())
+            .gesture(demo ? nil : dragGesture(maxSplit: maxSplit))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.06, green: 0.04, blue: 0.03))
+    }
+
+    // MARK: - Split resolution
+
+    /// The split magnitude + direction to feed the shader on this frame.
+    private func resolvedSplit(now: Date, maxSplit: CGFloat) -> (magnitude: CGFloat, direction: CGVector) {
+        if demo {
+            // Eased sine 0 -> max -> 0 on a ~3.2s loop. Direction slowly rotates
+            // so the prism exhaust sweeps around rather than sitting on one axis.
+            let t = now.timeIntervalSinceReferenceDate
+            let phase = (t.truncatingRemainder(dividingBy: 3.2)) / 3.2     // 0..1
+            let eased = (1 - cos(phase * 2 * Double.pi)) / 2               // 0..1..0
+            let angle = t * 0.7
+            let dir = CGVector(dx: cos(angle), dy: sin(angle))
+            return (CGFloat(eased) * maxSplit, dir)
+        }
+
+        if isDragging {
+            return (clamp(dragSplit, 0, maxSplit), normalized(dragDir))
+        }
+
+        // Released: analytic exponential decay from the captured flick split.
+        if let release = releaseTime {
+            let dt = now.timeIntervalSince(release)
+            let decay = exp(-6.5 * dt)                                     // ~0.5s to crisp
+            let mag = clamp(releaseSplit * CGFloat(decay), 0, maxSplit)
+            return (mag, normalized(releaseDir))
+        }
+
+        return (0, CGVector(dx: 1, dy: 0))
+    }
+
+    private func maxSplit(for dim: CGFloat) -> CGFloat {
+        // Cap the split to a modest fraction of the view so the three samples stay
+        // within maxSampleOffset and don't clip at the edges.
+        max(8, dim * 0.16)
+    }
+
+    // MARK: - Gesture
+
+    private func dragGesture(maxSplit: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                isDragging = true
+                releaseTime = nil
+
+                // Velocity -> split magnitude. Fast flicks widen the prism.
+                let vx = value.velocity.width
+                let vy = value.velocity.height
+                let speed = hypot(vx, vy)
+                let mag = clamp(speed / 90.0, 0, maxSplit)
+                dragSplit = mag
+
+                // Direction of the split tracks the motion vector (fallback to x).
+                if speed > 1 {
+                    dragDir = CGVector(dx: vx / speed, dy: vy / speed)
+                }
+
+                // Content follows the finger so the prism reads as motion exhaust.
+                dragOffset = CGSize(
+                    width: value.translation.width * 0.18,
+                    height: value.translation.height * 0.18
+                )
+            }
+            .onEnded { value in
+                isDragging = false
+
+                // Capture release split from the predicted fling speed, then let
+                // resolvedSplit() decay it analytically back to crisp.
+                let vx = value.predictedEndTranslation.width - value.translation.width
+                let vy = value.predictedEndTranslation.height - value.translation.height
+                let predicted = hypot(vx, vy)
+                let snapMag = clamp((dragSplit + predicted / 120.0), 0, maxSplit)
+
+                releaseSplit = snapMag
+                releaseDir = normalized(dragDir)
+                releaseTime = Date()
+                dragSplit = 0
+
+                // Spring the content back to center.
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.7)) {
+                    dragOffset = .zero
+                }
+            }
+    }
+
+    // MARK: - Content (self-contained, high-contrast — the edges where the split reads)
+
+    private func content(dim: CGFloat, time: TimeInterval) -> some View {
+        ZStack {
+            // Faint moving guide rings for extra crisp edges to refract.
+            ForEach(0..<3, id: \.self) { i in
+                Circle()
+                    .stroke(ringColor(i), lineWidth: max(1.5, dim * 0.012))
+                    .frame(width: dim * (0.42 + CGFloat(i) * 0.2))
+                    .opacity(0.5)
+            }
+
+            VStack(spacing: dim * 0.04) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: dim * 0.28, weight: .black))
+                    .foregroundStyle(Color(red: 0.98, green: 0.98, blue: 1.0))
+
+                Text("VELOCITY")
+                    .font(.system(size: dim * 0.11, weight: .heavy, design: .rounded))
+                    .tracking(dim * 0.012)
+                    .foregroundStyle(Color(red: 0.96, green: 0.92, blue: 0.82))
+            }
+            .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(0.35), radius: dim * 0.02)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(backdrop(time: time))
+        .drawingGroup() // flatten into one layer so layerEffect samples a composite
+    }
+
+    private func backdrop(time: TimeInterval) -> some View {
+        let drift = sin(time * 0.4) * 0.5 + 0.5
+        return LinearGradient(
+            colors: [
+                Color(red: 0.10, green: 0.06, blue: 0.16),
+                Color(red: 0.16, green: 0.08, blue: 0.10),
+                Color(red: 0.06, green: 0.05, blue: 0.12)
+            ],
+            startPoint: UnitPoint(x: drift, y: 0),
+            endPoint: UnitPoint(x: 1 - drift, y: 1)
+        )
+    }
+
+    private func ringColor(_ i: Int) -> Color {
+        switch i {
+        case 0: return Color(red: 0.40, green: 0.85, blue: 1.0)
+        case 1: return Color(red: 1.0, green: 0.45, blue: 0.75)
+        default: return Color(red: 0.95, green: 0.85, blue: 0.40)
+        }
+    }
+
+    // MARK: - Math helpers
+
+    private func clamp(_ v: CGFloat, _ lo: CGFloat, _ hi: CGFloat) -> CGFloat {
+        min(max(v, lo), hi)
+    }
+
+    private func normalized(_ v: CGVector) -> CGVector {
+        let len = hypot(v.dx, v.dy)
+        guard len > 0.0001 else { return CGVector(dx: 1, dy: 0) }
+        return CGVector(dx: v.dx / len, dy: v.dy / len)
+    }
+}
+
+// MARK: - layerEffect wrapper
+
+/// Applies the chromatic-velocity RGB split shader. Factored into its own modifier
+/// to keep the body type-checker-friendly.
+private struct ChromaticVelocityView_ChromaticSplit: ViewModifier {
+    let split: CGFloat
+    let dir: CGVector
+    let maxOffset: CGFloat
+
+    func body(content: Content) -> some View {
+        let dx = Float(dir.dx)
+        let dy = Float(dir.dy)
+        let s = Float(split)
+        return content.layerEffect(
+            ShaderLibrary.chromaticVelocity(
+                .float(s),
+                .float2(dx, dy)
+            ),
+            maxSampleOffset: CGSize(width: maxOffset + 2, height: maxOffset + 2)
+        )
+    }
+}
+
+
+// ---- Companion Metal shader (ChromaticVelocityView.metal) ----
+// Add this as a .metal file in your target:
+/*
+#include <metal_stdlib>
+#include <SwiftUI/SwiftUI_Metal.h>
+
+using namespace metal;
+
+// Chromatic Velocity — splits the layer's R/G/B channels along `dir` by `split`
+// pixels, sampling the layer three times and recombining. Referenced from SwiftUI
+// via ShaderLibrary.chromaticVelocity in a .layerEffect modifier.
+//
+// position : pixel coordinate of the destination sample
+// layer    : the source layer being sampled (SwiftUI::Layer)
+// split    : per-channel offset distance in pixels (clamped on the Swift side)
+// dir      : unit direction along which to displace R and B (G stays centered)
+[[ stitchable ]]
+half4 chromaticVelocity(float2 position, SwiftUI::Layer layer, float split, float2 dir) {
+    float2 offset = dir * split;
+
+    half4 r = layer.sample(position + offset);
+    half4 g = layer.sample(position);
+    half4 b = layer.sample(position - offset);
+
+    // Average the three alphas so the smear keeps a coherent silhouette.
+    half a = (r.a + g.a + b.a) / 3.0h;
+
+    return half4(r.r, g.g, b.b, a);
+}
+*/
+"""###,
+        "mtl-crt-poweron": ###"""
+import SwiftUI
+
+/// CRT Power-On — content renders through a vintage CRT with scanlines, a rolling
+/// sync bar, phosphor bloom and a barrel vignette. Tapping fires the power-on
+/// "thunk": the picture collapses to a bright horizontal line then blooms back out.
+/// Idle, the scanlines breathe and the sync bar rolls forever.
+///
+/// - demo == true  : self-driving loop — time rolls the scanlines while the
+///                   power-on collapse→bloom re-fires on a ~3.2s cycle.
+/// - demo == false : the same picture, but the collapse→bloom is triggered by a
+///                   tap (with a haptic "thunk"); the timeline sweeps the curve.
+struct CrtPoweronView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            CrtPoweronView_CrtScreen(demo: demo, size: proxy.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Screen
+
+private struct CrtPoweronView_CrtScreen: View {
+    let demo: Bool
+    let size: CGSize
+
+    /// Reference epoch captured once at appearance. The shader's `time` uniform is
+    /// passed as a Float, so it MUST stay small: feeding the raw
+    /// `timeIntervalSinceReferenceDate` (~8.0e8 in 2026) into a Float32 quantizes
+    /// to ~64s steps, freezing the scanline roll and sync bar. We pass the elapsed
+    /// time since this epoch instead, keeping the magnitude tiny and smooth.
+    @State private var startEpoch: TimeInterval = Date().timeIntervalSinceReferenceDate
+    /// Time origin for the power-on phase. In demo mode it is unused (the loop is
+    /// derived purely from the timeline clock); interactively it marks the tap.
+    @State private var tapEpoch: Date = .distantPast
+    /// Drives the interactive haptic "thunk" exactly once per tap.
+    @State private var tapCount: Int = 0
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let now = timeline.date.timeIntervalSinceReferenceDate
+            // Small, monotonically-increasing time for the shader (Float-safe).
+            let shaderTime = now - startEpoch
+            let power = powerOnValue(now: now)
+
+            screenContent
+                .compositingGroup()
+                .colorEffect(
+                    ShaderLibrary.crtPowerOn(
+                        .float2(Float(max(size.width, 1)), Float(max(size.height, 1))),
+                        .float(Float(shaderTime)),
+                        .float(Float(power))
+                    )
+                )
+                .background(Color(red: 0.02, green: 0.02, blue: 0.03))
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                .contentShape(Rectangle())
+                .modifier(CrtPoweronView_TapToPowerOn(demo: demo) {
+                    tapEpoch = timeline.date
+                    tapCount &+= 1
+                })
+                .sensoryFeedback(.impact(weight: .heavy), trigger: tapCount)
+        }
+    }
+
+    private var cornerRadius: CGFloat {
+        max(8, min(size.width, size.height) * 0.06)
+    }
+
+    // MARK: Power-on curve
+
+    /// The current power-on progress for this frame (0 = collapsed line, 1 = full
+    /// picture). Both branches funnel through `powerOnCurve(elapsed:)` so the
+    /// collapse→bloom motion is identical and always frame-smooth.
+    private func powerOnValue(now: TimeInterval) -> Double {
+        if demo {
+            // Continuous self-firing cycle: hold on, collapse, flash, bloom, repeat.
+            let period: Double = 3.2
+            let phase = now.truncatingRemainder(dividingBy: period)
+            return powerOnCurve(elapsed: phase, period: period)
+        } else {
+            let elapsed = now - tapEpoch.timeIntervalSinceReferenceDate
+            if elapsed < 0 || elapsed > 3.2 {
+                return 1 // resting fully-on between taps
+            }
+            return powerOnCurve(elapsed: elapsed, period: 3.2)
+        }
+    }
+
+    /// hold(on) → collapse → bright line dwell → bloom(on). Never returns a value
+    /// that would render a blank frame: at the minimum the shader keeps a blown-out
+    /// line, and the curve only dips for a brief moment of the cycle.
+    private func powerOnCurve(elapsed: Double, period: Double) -> Double {
+        let collapseStart: Double = 0.0
+        let collapseDur: Double = 0.42
+        let lineDwell: Double = 0.10
+        let bloomDur: Double = 0.55
+
+        let tCollapseEnd = collapseStart + collapseDur
+        let tLineEnd = tCollapseEnd + lineDwell
+        let tBloomEnd = tLineEnd + bloomDur
+
+        if elapsed < collapseStart {
+            return 1
+        } else if elapsed < tCollapseEnd {
+            let p = (elapsed - collapseStart) / collapseDur
+            return easeIn(1 - p) // 1 → 0
+        } else if elapsed < tLineEnd {
+            return 0 // bright collapsed line
+        } else if elapsed < tBloomEnd {
+            let p = (elapsed - tLineEnd) / bloomDur
+            return easeOutBack(p) // 0 → 1 with a touch of overshoot-ish bloom
+        } else {
+            return 1
+        }
+    }
+
+    private func easeIn(_ x: Double) -> Double { x * x }
+
+    private func easeOutBack(_ x: Double) -> Double {
+        let c1 = 1.70158
+        let c3 = c1 + 1.0
+        let xm = x - 1.0
+        let v = 1.0 + c3 * xm * xm * xm + c1 * xm * xm
+        return min(max(v, 0), 1)
+    }
+
+    // MARK: Displayed picture (what the CRT is showing)
+
+    private var screenContent: some View {
+        ZStack {
+            CrtPoweronView_SmpteBars()
+            CrtPoweronView_TestCardOverlay()
+        }
+        .drawingGroup() // flatten to a single layer for the colorEffect
+    }
+}
+
+// MARK: - Tap modifier (interactive only)
+
+private struct CrtPoweronView_TapToPowerOn: ViewModifier {
+    let demo: Bool
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        if demo {
+            content
+        } else {
+            content.onTapGesture { action() }
+        }
+    }
+}
+
+// MARK: - SMPTE-style color bars
+
+private struct CrtPoweronView_SmpteBars: View {
+    private let topBars: [Color] = [
+        Color(red: 0.75, green: 0.75, blue: 0.75), // gray
+        Color(red: 0.78, green: 0.74, blue: 0.10), // yellow
+        Color(red: 0.10, green: 0.74, blue: 0.78), // cyan
+        Color(red: 0.12, green: 0.70, blue: 0.18), // green
+        Color(red: 0.74, green: 0.12, blue: 0.72), // magenta
+        Color(red: 0.78, green: 0.16, blue: 0.14), // red
+        Color(red: 0.13, green: 0.16, blue: 0.74)  // blue
+    ]
+
+    private let castleBars: [Color] = [
+        Color(red: 0.13, green: 0.16, blue: 0.74), // blue
+        Color(red: 0.04, green: 0.04, blue: 0.05), // black
+        Color(red: 0.74, green: 0.12, blue: 0.72), // magenta
+        Color(red: 0.04, green: 0.04, blue: 0.05), // black
+        Color(red: 0.10, green: 0.74, blue: 0.78), // cyan
+        Color(red: 0.04, green: 0.04, blue: 0.05), // black
+        Color(red: 0.75, green: 0.75, blue: 0.75)  // gray
+    ]
+
+    var body: some View {
+        GeometryReader { geo in
+            VStack(spacing: 0) {
+                bars(topBars).frame(height: geo.size.height * 0.66)
+                bars(castleBars).frame(height: geo.size.height * 0.14)
+                pluge(width: geo.size.width).frame(height: geo.size.height * 0.20)
+            }
+        }
+    }
+
+    private func bars(_ colors: [Color]) -> some View {
+        HStack(spacing: 0) {
+            ForEach(colors.indices, id: \.self) { i in
+                colors[i].frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+
+    private func pluge(width: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            Color(red: 0.02, green: 0.10, blue: 0.20).frame(maxWidth: .infinity)
+            Color(red: 0.96, green: 0.96, blue: 0.96).frame(maxWidth: .infinity)
+            Color(red: 0.05, green: 0.02, blue: 0.18).frame(maxWidth: .infinity)
+            Color(red: 0.04, green: 0.04, blue: 0.05).frame(maxWidth: .infinity)
+        }
+    }
+}
+
+// MARK: - Retro test-card overlay
+
+private struct CrtPoweronView_TestCardOverlay: View {
+    var body: some View {
+        GeometryReader { geo in
+            let dim = min(geo.size.width, geo.size.height)
+            ZStack {
+                Circle()
+                    .stroke(Color(red: 0.95, green: 0.95, blue: 0.95).opacity(0.8),
+                            lineWidth: max(1.5, dim * 0.012))
+                    .frame(width: dim * 0.62, height: dim * 0.62)
+
+                Circle()
+                    .fill(Color(red: 0.04, green: 0.05, blue: 0.06).opacity(0.85))
+                    .frame(width: dim * 0.40, height: dim * 0.40)
+
+                VStack(spacing: dim * 0.02) {
+                    Text("CH 03")
+                        .font(.system(size: dim * 0.085, weight: .heavy, design: .monospaced))
+                        .foregroundColor(Color(red: 0.55, green: 0.95, blue: 0.65))
+                    Text("PAL")
+                        .font(.system(size: dim * 0.05, weight: .bold, design: .monospaced))
+                        .foregroundColor(Color(red: 0.95, green: 0.92, blue: 0.55))
+                }
+
+                crossHair(dim: dim)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private func crossHair(dim: CGFloat) -> some View {
+        let w = max(1.0, dim * 0.008)
+        let len = dim * 0.30
+        return ZStack {
+            Rectangle()
+                .fill(Color(red: 0.95, green: 0.95, blue: 0.95).opacity(0.7))
+                .frame(width: len, height: w)
+            Rectangle()
+                .fill(Color(red: 0.95, green: 0.95, blue: 0.95).opacity(0.7))
+                .frame(width: w, height: len)
+        }
+    }
+}
+
+
+// ---- Companion Metal shader (CrtPoweronView.metal) ----
+// Add this as a .metal file in your target:
+/*
+#include <metal_stdlib>
+#include <SwiftUI/SwiftUI_Metal.h>
+
+using namespace metal;
+
+// Vintage CRT power-on color effect.
+//
+//   position : user-space point (injected by SwiftUI)
+//   color    : the incoming premultiplied pixel (injected by SwiftUI)
+//   size     : view size in points (uniform) — used to normalize everything
+//   time     : seconds, for the rolling scanlines / sync bar
+//   powerOn  : 0 = collapsed bright line, 1 = full picture
+//
+// colorEffect cannot sample neighbors, so the "collapse to a line" is a
+// vertical visibility mask that blends toward a blown-out white line at the
+// minimum (never a fully-blank frame), then blooms open as powerOn -> 1.
+[[ stitchable ]]
+half4 crtPowerOn(float2 position, half4 color, float2 size, float time, float powerOn) {
+    float2 uv = position / max(size, float2(1.0, 1.0));   // 0..1
+    float2 centered = uv - 0.5;                            // -0.5..0.5
+
+    // Un-premultiply so we can do real color math, then re-premultiply at the end.
+    float a = max(float(color.a), 0.0001);
+    float3 rgb = float3(color.rgb) / a;
+
+    // --- Phosphor tint: lift toward a warm green/amber phosphor glow ---
+    float lum = dot(rgb, float3(0.299, 0.587, 0.114));
+    float3 phosphor = float3(0.55, 1.0, 0.62);            // P1-ish green
+    rgb = mix(rgb, rgb * phosphor + phosphor * 0.04, 0.35);
+
+    // --- Scanlines (horizontal), gently rolling with time ---
+    float lineCount = clamp(size.y * 0.5, 90.0, 320.0);
+    float roll = time * 0.6;
+    float scan = 0.5 + 0.5 * sin((uv.y * lineCount + roll) * 6.2831853);
+    float scanline = mix(0.72, 1.0, scan);                // 0.72..1.0 darkening
+    rgb *= scanline;
+
+    // Subtle vertical RGB phosphor triad (aperture-grille feel)
+    float triad = fract(uv.x * lineCount * 0.5);
+    float3 mask3 = float3(1.0);
+    if (triad < 0.333)      mask3 = float3(1.0, 0.85, 0.85);
+    else if (triad < 0.666) mask3 = float3(0.85, 1.0, 0.85);
+    else                    mask3 = float3(0.85, 0.85, 1.0);
+    rgb *= mix(float3(1.0), mask3, 0.18);
+
+    // --- Rolling sync bar: a soft bright band drifting down the screen ---
+    float barPos = fract(time * 0.09);
+    float d = abs(uv.y - barPos);
+    d = min(d, 1.0 - d);                                  // wrap
+    float bar = exp(-d * d * 220.0);
+    rgb += bar * float3(0.10, 0.16, 0.12);
+
+    // --- Phosphor bloom: lift glow in bright areas ---
+    rgb += pow(lum, 1.5) * 0.10 * phosphor;
+
+    // --- Barrel vignette (darken corners) ---
+    float r2 = dot(centered, centered);
+    float vignette = clamp(1.0 - r2 * 1.35, 0.0, 1.0);
+    vignette = mix(0.30, 1.0, vignette);
+    rgb *= vignette;
+
+    // --- Power-on collapse / bloom mask ---
+    // openHalf is the half-height of the visible band: ~full when on,
+    // shrinking to a thin slit as powerOn -> 0.
+    float p = clamp(powerOn, 0.0, 1.0);
+    float openHalf = mix(0.012, 0.62, smoothstep(0.0, 1.0, p));
+    float dy = abs(centered.y);
+
+    // visible inside the band, fading at its edge
+    float band = 1.0 - smoothstep(openHalf, openHalf + 0.06, dy);
+
+    // Horizontal scan-line brightness: a sharp blown-out white streak at the
+    // vertical center, strongest when collapsed. This is the "never blank" state.
+    float lineGlow = exp(-(centered.y * centered.y) * 1600.0);
+    float collapse = 1.0 - p;                              // 0 on, 1 collapsed
+    float flash = lineGlow * (0.35 + 0.9 * collapse);
+
+    // Horizontal sweep: the picture also pinches horizontally a touch at the
+    // very end of the collapse, blooming back out.
+    float hOpen = mix(0.15, 1.0, smoothstep(0.0, 0.35, p));
+    float hBand = 1.0 - smoothstep(hOpen, hOpen + 0.10, abs(centered.x));
+    float visible = band * mix(0.6, 1.0, hBand);
+
+    // Compose: picture gated by the band, plus the bright white collapse line.
+    float3 outRGB = rgb * visible;
+    outRGB += flash * float3(0.85, 1.0, 0.88);             // blown-out warm-white line
+    outRGB = min(outRGB, float3(1.4));                     // allow slight over-bright bloom
+
+    // Re-premultiply with full opacity (opaque CRT face).
+    float3 finalRGB = clamp(outRGB, 0.0, 1.0);
+    return half4(half3(finalRGB), 1.0h);
+}
+*/
+"""###,
+        "mtl-develop-pixels": ###"""
+import SwiftUI
+
+/// Develop — content begins as huge mosaic blocks and resolves to full
+/// resolution as a slider thumb is dragged across it, like a developing
+/// Polaroid revealing pixel by pixel. A `.layerEffect` Metal shader snaps
+/// each pixel's sample coordinate to the center of a grid cell, then the
+/// cell-size uniform animates large → 1px.
+///
+/// - `demo == true`  : a self-driving TimelineView loop ramps the develop
+///                     progress 0 → 1 → 0 on a slow eased cycle so the tile
+///                     auto-develops and re-pixelates with no touch.
+/// - `demo == false` : a real slider track + thumb. A DragGesture maps the
+///                     thumb x (clamped 0…1) directly to develop progress;
+///                     releasing holds the current position.
+struct DevelopPixelsView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            content(size: proxy.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
+
+    @ViewBuilder
+    private func content(size: CGSize) -> some View {
+        if demo {
+            DevelopPixelsView_DemoDevelop(size: size)
+        } else {
+            DevelopPixelsView_InteractiveDevelop(size: size)
+        }
+    }
+}
+
+// MARK: - Shared tuning
+
+private enum DevelopPixelsView_DevelopTuning {
+    /// Roughly how many mosaic blocks span the width at the coarsest state.
+    /// Driving cell size off the live size keeps the block *count* constant
+    /// whether the view is a 120pt tile or a large detail area.
+    static let blocksAcross: CGFloat = 9
+
+    static func maxCell(for size: CGSize) -> CGFloat {
+        let basis = max(min(size.width, size.height), 1)
+        return max(basis / blocksAcross, 6)
+    }
+
+    /// Maps 0…1 develop progress to a cell size in points.
+    /// progress 0 → coarse blocks, progress 1 → sharp (1px).
+    static func cellSize(progress: CGFloat, maxCell: CGFloat) -> CGFloat {
+        let p = min(max(progress, 0), 1)
+        return 1 + (maxCell - 1) * (1 - p)
+    }
+}
+
+// MARK: - Demo (self-driving)
+
+private struct DevelopPixelsView_DemoDevelop: View {
+    let size: CGSize
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let progress = developProgress(time: t)
+            DevelopPixelsView_DevelopStage(size: size, progress: progress, thumb: nil)
+        }
+    }
+
+    /// 0 → 1 → 0 on a ~3.6s loop, easing into both extremes so the image
+    /// fully develops (1.0) and fully re-pixelates (0.0) each cycle.
+    private func developProgress(time: Double) -> CGFloat {
+        let period: Double = 3.6
+        let phase = (time.truncatingRemainder(dividingBy: period)) / period
+        // Triangle wave 0→1→0 so both endpoints are reached exactly.
+        let tri = phase < 0.5 ? phase * 2 : (1 - phase) * 2
+        // Smoothstep ease so it dwells slightly at sharp and at blocky.
+        let eased = tri * tri * (3 - 2 * tri)
+        return CGFloat(eased)
+    }
+}
+
+// MARK: - Interactive (real slider)
+
+private struct DevelopPixelsView_InteractiveDevelop: View {
+    let size: CGSize
+
+    @State private var progress: CGFloat = 0.62
+    @GestureState private var dragging: Bool = false
+
+    var body: some View {
+        let geo = sliderGeometry(for: size)
+        ZStack {
+            DevelopPixelsView_DevelopStage(size: size, progress: progress, thumb: thumbInfo(geo: geo))
+        }
+        .contentShape(Rectangle())
+        .gesture(dragGesture(geo: geo))
+        .sensoryFeedback(.selection, trigger: detent)
+    }
+
+    // Fire a soft tick as the image crosses into "developed".
+    private var detent: Bool { progress > 0.92 }
+
+    private func dragGesture(geo: DevelopPixelsView_SliderGeometry) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .updating($dragging) { _, state, _ in state = true }
+            .onChanged { value in
+                let x = value.location.x
+                let raw = (x - geo.minX) / max(geo.span, 1)
+                progress = min(max(raw, 0), 1)
+            }
+        // No .onEnded reset: releasing holds the current position.
+    }
+
+    private func thumbInfo(geo: DevelopPixelsView_SliderGeometry) -> DevelopPixelsView_ThumbInfo {
+        DevelopPixelsView_ThumbInfo(
+            x: geo.minX + geo.span * progress,
+            y: geo.trackY,
+            trackMinX: geo.minX,
+            trackSpan: geo.span,
+            radius: geo.thumbRadius,
+            active: dragging
+        )
+    }
+
+    private func sliderGeometry(for size: CGSize) -> DevelopPixelsView_SliderGeometry {
+        let inset = max(size.width * 0.08, 12)
+        let thumbRadius = max(min(size.width, size.height) * 0.05, 7)
+        let trackY = size.height - max(size.height * 0.12, 18)
+        return DevelopPixelsView_SliderGeometry(
+            minX: inset,
+            span: max(size.width - inset * 2, 1),
+            trackY: trackY,
+            thumbRadius: thumbRadius
+        )
+    }
+}
+
+private struct DevelopPixelsView_SliderGeometry {
+    let minX: CGFloat
+    let span: CGFloat
+    let trackY: CGFloat
+    let thumbRadius: CGFloat
+}
+
+private struct DevelopPixelsView_ThumbInfo {
+    let x: CGFloat
+    let y: CGFloat
+    let trackMinX: CGFloat
+    let trackSpan: CGFloat
+    let radius: CGFloat
+    let active: Bool
+}
+
+// MARK: - Stage: composed content + develop shader + optional slider UI
+
+private struct DevelopPixelsView_DevelopStage: View {
+    let size: CGSize
+    let progress: CGFloat
+    let thumb: DevelopPixelsView_ThumbInfo?
+
+    var body: some View {
+        let maxCell = DevelopPixelsView_DevelopTuning.maxCell(for: size)
+        let cell = DevelopPixelsView_DevelopTuning.cellSize(progress: progress, maxCell: maxCell)
+        ZStack {
+            developedScene(maxCell: maxCell, cell: cell)
+            if let thumb {
+                DevelopPixelsView_SliderOverlay(info: thumb)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func developedScene(maxCell: CGFloat, cell: CGFloat) -> some View {
+        DevelopPixelsView_DevelopScene()
+            .layerEffect(
+                ShaderLibrary.developPixels(.float(Float(cell))),
+                maxSampleOffset: CGSize(width: maxCell, height: maxCell),
+                isEnabled: cell > 1.01
+            )
+    }
+}
+
+// MARK: - The colorful scene that gets pixel-developed
+
+private struct DevelopPixelsView_DevelopScene: View {
+    var body: some View {
+        ZStack {
+            sky
+            sun
+            farHills
+            nearHills
+            water
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .drawingGroup() // flatten so the shader samples one composited layer
+    }
+
+    private var sky: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.99, green: 0.78, blue: 0.40),
+                Color(red: 0.97, green: 0.55, blue: 0.42),
+                Color(red: 0.78, green: 0.39, blue: 0.55),
+                Color(red: 0.40, green: 0.30, blue: 0.58)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var sun: some View {
+        GeometryReader { proxy in
+            let s = proxy.size
+            let r = min(s.width, s.height) * 0.20
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color(red: 1.0, green: 0.97, blue: 0.80).opacity(0.85),
+                                Color(red: 1.0, green: 0.85, blue: 0.55).opacity(0.0)
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: r * 2.4
+                        )
+                    )
+                    .frame(width: r * 4.8, height: r * 4.8)
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color(red: 1.0, green: 0.99, blue: 0.88),
+                                Color(red: 1.0, green: 0.86, blue: 0.50)
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: r
+                        )
+                    )
+                    .frame(width: r * 2, height: r * 2)
+            }
+            .position(x: s.width * 0.66, y: s.height * 0.34)
+        }
+    }
+
+    private var farHills: some View {
+        GeometryReader { proxy in
+            let s = proxy.size
+            DevelopPixelsView_HillShape(crest: 0.58, amplitude: 0.07, phase: 0.0)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.56, green: 0.34, blue: 0.52),
+                            Color(red: 0.42, green: 0.27, blue: 0.50)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: s.width, height: s.height)
+        }
+    }
+
+    private var nearHills: some View {
+        GeometryReader { proxy in
+            let s = proxy.size
+            DevelopPixelsView_HillShape(crest: 0.70, amplitude: 0.10, phase: 1.7)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.24, green: 0.20, blue: 0.40),
+                            Color(red: 0.13, green: 0.12, blue: 0.28)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: s.width, height: s.height)
+        }
+    }
+
+    private var water: some View {
+        GeometryReader { proxy in
+            let s = proxy.size
+            let top = s.height * 0.78
+            LinearGradient(
+                colors: [
+                    Color(red: 0.85, green: 0.52, blue: 0.46),
+                    Color(red: 0.46, green: 0.32, blue: 0.55),
+                    Color(red: 0.20, green: 0.18, blue: 0.40)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(width: s.width, height: s.height - top)
+            .position(x: s.width / 2, y: top + (s.height - top) / 2)
+        }
+    }
+}
+
+/// A smooth rolling hill silhouette filling the lower part of the frame.
+private struct DevelopPixelsView_HillShape: Shape {
+    /// Crest baseline as a fraction of height (0 = top, 1 = bottom).
+    var crest: CGFloat
+    /// Wave amplitude as a fraction of height.
+    var amplitude: CGFloat
+    /// Phase offset so layered hills don't align.
+    var phase: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let baseY = rect.height * crest
+        let amp = rect.height * amplitude
+        let steps = 28
+        path.move(to: CGPoint(x: 0, y: rect.maxY))
+        path.addLine(to: CGPoint(x: 0, y: baseY))
+        for i in 0...steps {
+            let fx = CGFloat(i) / CGFloat(steps)
+            let x = rect.minX + fx * rect.width
+            let wave = sin(fx * .pi * 2 + phase) + 0.4 * sin(fx * .pi * 5 + phase)
+            let y = baseY - wave * amp
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+// MARK: - Slider overlay (interactive affordance)
+
+private struct DevelopPixelsView_SliderOverlay: View {
+    let info: DevelopPixelsView_ThumbInfo
+
+    var body: some View {
+        ZStack {
+            track
+            fill
+            thumb
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var track: some View {
+        Capsule()
+            .fill(Color.white.opacity(0.22))
+            .frame(width: info.trackSpan, height: trackHeight)
+            .position(x: info.trackMinX + info.trackSpan / 2, y: info.y)
+    }
+
+    private var fill: some View {
+        let w = max(info.x - info.trackMinX, 0)
+        return Capsule()
+            .fill(Color.white.opacity(0.9))
+            .frame(width: w, height: trackHeight)
+            .position(x: info.trackMinX + w / 2, y: info.y)
+    }
+
+    private var thumb: some View {
+        let r = info.radius * (info.active ? 1.18 : 1.0)
+        return ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.30))
+                .frame(width: r * 2.6, height: r * 2.6)
+                .blur(radius: r * 0.5)
+            Circle()
+                .fill(Color.white)
+                .frame(width: r * 2, height: r * 2)
+                .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+        }
+        .position(x: info.x, y: info.y)
+        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: info.active)
+    }
+
+    private var trackHeight: CGFloat { max(info.radius * 0.5, 3) }
+}
+
+
+// ---- Companion Metal shader (DevelopPixelsView.metal) ----
+// Add this as a .metal file in your target:
+/*
+#include <metal_stdlib>
+#include <SwiftUI/SwiftUI_Metal.h>
+
+using namespace metal;
+
+// Develop: snap each pixel's sample coordinate to the center of a grid cell,
+// then sample the layer there. As `cellSize` animates from large -> 1px the
+// image resolves from coarse mosaic blocks to full resolution.
+//
+// `position` and `layer.sample` are both in local point space, so `cellSize`
+// is supplied in points. cellSize is clamped to >= 1 to avoid floor()/divide
+// producing NaN (which would yield a blank/garbage frame).
+[[ stitchable ]]
+half4 developPixels(float2 position, SwiftUI::Layer layer, float cellSize) {
+    float c = max(cellSize, 1.0);
+    float2 cell = floor(position / c);
+    float2 sampleCoord = (cell + 0.5) * c;
+    return layer.sample(sampleCoord);
+}
+*/
+"""###,
+        "mtl-foil-tilt": ###"""
+import SwiftUI
+
+// MARK: - Foil Tilt
+// Holographic foil-stamp diffraction. A draggable tilt sweeps an iridescent
+// rainbow sheen across an embossed sticker with a sharp specular glint.
+// demo == true  -> TimelineView(.animation) auto-rocks the tilt forever.
+// demo == false -> DragGesture deflects the tilt; release springs back to idle.
+public struct FoilTiltView: View {
+    public var demo: Bool = false
+
+    // Drag-driven deflection added on top of the always-running idle rock.
+    @State private var dragDeflection: CGSize = .zero
+
+    public init(demo: Bool = false) {
+        self.demo = demo
+    }
+
+    public var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            let minSide = max(min(size.width, size.height), 1)
+
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let tilt = resolvedTilt(time: t)
+
+                FoilTiltView_FoilBadge(unit: minSide)
+                    .frame(width: size.width, height: size.height)
+                    .modifier(
+                        FoilTiltView_FoilShaderModifier(
+                            pixelSize: size,
+                            tilt: tilt,
+                            time: t
+                        )
+                    )
+            }
+            .frame(width: size.width, height: size.height)
+            .contentShape(Rectangle())
+            // `.subviews` disables this view's own drag in demo mode while the
+            // idle rock keeps driving the shader; `.all` enables it otherwise.
+            .gesture(
+                dragGesture(minSide: minSide),
+                including: demo ? .subviews : .all
+            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Tilt resolution (idle rock + drag deflection, always additive)
+
+    private func resolvedTilt(time t: TimeInterval) -> CGPoint {
+        let idle = idleRock(time: t)
+        let dx: Double = idle.x + Double(dragDeflection.width)
+        let dy: Double = idle.y + Double(dragDeflection.height)
+        // Clamp so the rainbow stays in a tactile, believable range.
+        return CGPoint(
+            x: clamp(dx, -1.6, 1.6),
+            y: clamp(dy, -1.6, 1.6)
+        )
+    }
+
+    private func idleRock(time t: TimeInterval) -> (x: Double, y: Double) {
+        // Slow, lazily-drifting sine on x and y so the sheen sweeps back and
+        // forth on its own. Two slightly detuned frequencies keep it organic.
+        let x = sin(t * 0.55) * 0.85 + sin(t * 0.21) * 0.30
+        let y = cos(t * 0.40) * 0.70 + sin(t * 0.17 + 1.3) * 0.25
+        return (x, y)
+    }
+
+    private func clamp(_ v: Double, _ lo: Double, _ hi: Double) -> Double {
+        min(max(v, lo), hi)
+    }
+
+    // MARK: Interaction
+
+    private func dragGesture(minSide: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                // Map finger translation to a tilt vector. Normalize by the
+                // tile size so the feel is consistent in a tiny grid cell and
+                // a large detail area alike.
+                let nx = value.translation.width / minSide
+                let ny = value.translation.height / minSide
+                dragDeflection = CGSize(width: nx * 2.4, height: ny * 2.4)
+            }
+            .onEnded { _ in
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.6)) {
+                    dragDeflection = .zero
+                }
+            }
+    }
+}
+
+// MARK: - Shader modifier (iOS 17 .colorEffect)
+
+private struct FoilTiltView_FoilShaderModifier: ViewModifier {
+    let pixelSize: CGSize
+    let tilt: CGPoint
+    let time: TimeInterval
+
+    func body(content: Content) -> some View {
+        content.colorEffect(
+            ShaderLibrary.foilTilt(
+                .float2(Float(pixelSize.width), Float(pixelSize.height)),
+                .float2(Float(tilt.x), Float(tilt.y)),
+                .float(Float(time))
+            )
+        )
+    }
+}
+
+// MARK: - Base content: an embossed foil sticker
+
+// The shader colors whatever alpha/luminance is here. It must read as a real,
+// legible sticker even with no shader (the "never blank" guarantee), so it is
+// a die-cut badge with an embossed grayscale relief pattern inside.
+private struct FoilTiltView_FoilBadge: View {
+    let unit: CGFloat
+
+    var body: some View {
+        ZStack {
+            // Die-cut shape gives the foil its silhouette (via input alpha).
+            FoilTiltView_FoilStarBadge()
+                .fill(Color(red: 0.62, green: 0.62, blue: 0.64))
+            FoilTiltView_EmbossPattern(unit: unit)
+                .clipShape(FoilTiltView_FoilStarBadge())
+            // A faint rim brightens the edge so the glint has something to bite.
+            FoilTiltView_FoilStarBadge()
+                .stroke(Color(red: 0.95, green: 0.95, blue: 0.97), lineWidth: max(unit * 0.012, 1))
+                .opacity(0.65)
+        }
+        .padding(unit * 0.10)
+    }
+}
+
+// Embossed relief: concentric rings + radial spokes + a center monogram disc,
+// all in grayscale. Luminance variation here becomes the diffraction texture.
+private struct FoilTiltView_EmbossPattern: View {
+    let unit: CGFloat
+
+    var body: some View {
+        ZStack {
+            FoilTiltView_ConcentricRings()
+                .stroke(
+                    Color(red: 0.30, green: 0.30, blue: 0.32),
+                    style: StrokeStyle(lineWidth: max(unit * 0.018, 0.8))
+                )
+                .opacity(0.9)
+            FoilTiltView_RadialSpokes(count: 24)
+                .stroke(
+                    Color(red: 0.80, green: 0.80, blue: 0.82),
+                    style: StrokeStyle(lineWidth: max(unit * 0.010, 0.5))
+                )
+                .opacity(0.55)
+            Circle()
+                .fill(Color(red: 0.50, green: 0.50, blue: 0.52))
+                .frame(width: unit * 0.30, height: unit * 0.30)
+            FoilTiltView_SparkleMark()
+                .fill(Color(red: 0.97, green: 0.97, blue: 0.99))
+                .frame(width: unit * 0.22, height: unit * 0.22)
+                .opacity(0.9)
+        }
+    }
+}
+
+// MARK: - Shapes
+
+// A soft 6-point star / seal used as the foil die-cut.
+private struct FoilTiltView_FoilStarBadge: Shape {
+    func path(in rect: CGRect) -> Path {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let r = min(rect.width, rect.height) / 2
+        let points = 12
+        let outer = r
+        let inner = r * 0.82 // shallow scallops -> reads as a wax/foil seal
+        var p = Path()
+        for i in 0..<(points * 2) {
+            let radius: CGFloat = (i % 2 == 0) ? outer : inner
+            let angle = (Double(i) / Double(points * 2)) * 2 * .pi - .pi / 2
+            let pt = CGPoint(
+                x: center.x + CGFloat(cos(angle)) * radius,
+                y: center.y + CGFloat(sin(angle)) * radius
+            )
+            if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
+        }
+        p.closeSubpath()
+        return p
+    }
+}
+
+private struct FoilTiltView_ConcentricRings: Shape {
+    func path(in rect: CGRect) -> Path {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let maxR = min(rect.width, rect.height) / 2
+        var p = Path()
+        let count = 7
+        for i in 1...count {
+            let radius = maxR * (CGFloat(i) / CGFloat(count + 1))
+            p.addEllipse(
+                in: CGRect(
+                    x: center.x - radius,
+                    y: center.y - radius,
+                    width: radius * 2,
+                    height: radius * 2
+                )
+            )
+        }
+        return p
+    }
+}
+
+private struct FoilTiltView_RadialSpokes: Shape {
+    let count: Int
+    func path(in rect: CGRect) -> Path {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let r = min(rect.width, rect.height) / 2
+        var p = Path()
+        for i in 0..<count {
+            let angle = (Double(i) / Double(count)) * 2 * .pi
+            let outer = CGPoint(
+                x: center.x + CGFloat(cos(angle)) * r,
+                y: center.y + CGFloat(sin(angle)) * r
+            )
+            let inner = CGPoint(
+                x: center.x + CGFloat(cos(angle)) * r * 0.34,
+                y: center.y + CGFloat(sin(angle)) * r * 0.34
+            )
+            p.move(to: inner)
+            p.addLine(to: outer)
+        }
+        return p
+    }
+}
+
+// A 4-point sparkle for the center monogram.
+private struct FoilTiltView_SparkleMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        let c = CGPoint(x: rect.midX, y: rect.midY)
+        let r = min(rect.width, rect.height) / 2
+        let waist = r * 0.18
+        var p = Path()
+        p.move(to: CGPoint(x: c.x, y: c.y - r))
+        p.addQuadCurve(to: CGPoint(x: c.x + r, y: c.y), control: CGPoint(x: c.x + waist, y: c.y - waist))
+        p.addQuadCurve(to: CGPoint(x: c.x, y: c.y + r), control: CGPoint(x: c.x + waist, y: c.y + waist))
+        p.addQuadCurve(to: CGPoint(x: c.x - r, y: c.y), control: CGPoint(x: c.x - waist, y: c.y + waist))
+        p.addQuadCurve(to: CGPoint(x: c.x, y: c.y - r), control: CGPoint(x: c.x - waist, y: c.y - waist))
+        p.closeSubpath()
+        return p
+    }
+}
+
+
+// ---- Companion Metal shader (FoilTiltView.metal) ----
+// Add this as a .metal file in your target:
+/*
+#include <metal_stdlib>
+#include <SwiftUI/SwiftUI_Metal.h>
+
+using namespace metal;
+
+// Hue (0..1) to RGB. MSL has no built-in hue helper, so do the classic
+// abs(fract(h+k)*6-3)-1 clamp per channel.
+static half3 hue2rgb(half h) {
+    half r = abs(fract(h + 1.0h) * 6.0h - 3.0h) - 1.0h;
+    half g = abs(fract(h + 2.0h / 3.0h) * 6.0h - 3.0h) - 1.0h;
+    half b = abs(fract(h + 1.0h / 3.0h) * 6.0h - 3.0h) - 1.0h;
+    return clamp(half3(r, g, b), 0.0h, 1.0h);
+}
+
+// Holographic foil-stamp diffraction.
+//   position : pixel coords in points (implicit colorEffect arg)
+//   color    : the source pixel (implicit) — its alpha is the sticker mask,
+//              its luminance is the embossed relief texture
+//   size     : view size in points (uniform)
+//   tilt     : virtual viewing-angle vector from drag / idle rock (uniform)
+//   time     : seconds, for a faint flowing shimmer (uniform)
+[[ stitchable ]] half4 foilTilt(float2 position,
+                                half4 color,
+                                float2 size,
+                                float2 tilt,
+                                float time) {
+    // Fully transparent source -> nothing here (keeps the die-cut silhouette).
+    if (color.a < 0.001h) {
+        return color;
+    }
+
+    // Normalized, centered coords in -1..1 (roughly) — independent of tile size.
+    float2 uv = (position / max(size, float2(1.0))) * 2.0 - 1.0;
+    float aspect = size.x / max(size.y, 1.0);
+    uv.x *= aspect;
+
+    // Embossed relief from the source luminance: this is the surface the light
+    // diffracts off, so the rainbow follows the engraved pattern.
+    half lum = dot(color.rgb, half3(0.299h, 0.587h, 0.114h));
+
+    // --- Diffraction angle term ---
+    // The hue is a function of pixel position projected onto the tilt vector
+    // plus the relief, so tilting sweeps the spectrum across the pattern.
+    float proj = dot(uv, float2(tilt.x, tilt.y));
+    float relief = float(lum) * 2.4;
+    float radial = length(uv) * 1.2;
+
+    // Multiple detuned bands give the dense, thin-film "many rainbows" look
+    // of real foil instead of one broad gradient.
+    float phase = proj * 3.2 + relief + radial + time * 0.15;
+    half hue = half(fract(phase * 0.5));
+
+    half3 rainbow = hue2rgb(hue);
+    // A second, higher-frequency band layered in for thin-film richness.
+    half3 rainbow2 = hue2rgb(half(fract(phase * 1.3 + 0.33)));
+    rainbow = mix(rainbow, rainbow2, 0.35h);
+
+    // Boost saturation/vividness — foil is intense, not pastel.
+    half3 foil = pow(rainbow, half3(0.85h));
+
+    // --- Specular glint band ---
+    // A narrow bright streak whose position tracks the tilt, racing across as
+    // you tilt. Driven by the same projection so it stays coherent with the hue.
+    float glintCoord = proj * 2.0 - length(float2(tilt.x, tilt.y)) * 0.6;
+    float glintBand = fract(glintCoord * 0.5 + 0.5) - 0.5;
+    float glint = exp(-(glintBand * glintBand) * 90.0);
+    // A faster-moving secondary glint for sparkle on the high-relief ridges.
+    // Square the centered band directly: pow() with a base that can go
+    // negative is undefined in MSL and can produce NaN (blank pixels).
+    float gd = fract(glintCoord + time * 0.2) - 0.5;
+    float glint2 = exp(-(gd * gd) * 160.0);
+    half glintAmt = half(glint * 0.9 + glint2 * 0.5) * (0.5h + 0.5h * lum);
+
+    // --- Compose ---
+    // Keep EVERY pixel iridescent: never gate the whole output on luminance,
+    // or flat mid-gray regions would go dark. Floor it at 0.4.
+    half shade = 0.40h + 0.60h * lum;
+    half3 rgb = foil * shade;
+
+    // Add the white specular glint on top.
+    rgb += half3(glintAmt);
+
+    // A subtle dark base tint in the valleys to sell the metallic depth.
+    rgb = mix(rgb, rgb * half3(0.55h, 0.58h, 0.70h), (1.0h - lum) * 0.30h);
+
+    rgb = clamp(rgb, 0.0h, 1.0h);
+
+    // Premultiply by the source alpha so the foil only fills the sticker shape,
+    // not the whole rectangular tile.
+    return half4(rgb * color.a, color.a);
+}
+*/
+"""###,
+        "mtl-halftone-press": ###"""
+import SwiftUI
+
+// MARK: - Halftone Press
+// Reduces underlying content to a rotating-grid duotone halftone of dots whose
+// radius tracks local luminance (dark = big dot, light = small dot).
+//   demo == false : MagnifyGesture pinches the dot frequency coarse <-> fine.
+//   demo == true  : a TimelineView auto-orbits the screen angle and eases the
+//                   dot size between coarse newsprint and fine continuous tone.
+//
+// The halftone is a Metal [[stitchable]] layerEffect (iOS 17). It is parametrized
+// by *cell size in points* (not cells-across) so the physical dot size is
+// identical in a 120pt grid tile and in a large detail view, and so the shader's
+// maxSampleOffset stays bounded by a constant.
+
+struct HalftonePressView: View {
+    var demo: Bool = false
+
+    // Cell-size clamps, in points. Small cell = fine screen, large cell = coarse.
+    private let minCell: CGFloat = 4.0
+    private let maxCell: CGFloat = 22.0
+
+    // Persisted (folded-in) cell size for the interactive pinch.
+    @State private var baseCell: CGFloat = 13.0
+    // Live cell size shown during an active pinch.
+    @State private var liveCell: CGFloat = 13.0
+
+    var body: some View {
+        GeometryReader { geo in
+            decorated(size: geo.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    // MARK: View-level dispatch
+    //
+    // We branch at the View level (not the ViewModifier level): `@ViewBuilder`
+    // can only fold `View` branches via buildEither, so returning two different
+    // concrete `ViewModifier` types from a `some ViewModifier` func does not
+    // compile. Instead we build the content once and attach the appropriate
+    // concrete modifiers inside each branch.
+    @ViewBuilder
+    private func decorated(size: CGSize) -> some View {
+        let base = content(size: size)
+            .frame(width: size.width, height: size.height)
+
+        if demo {
+            base.modifier(HalftonePressView_DemoHalftone(size: size, minCell: minCell, maxCell: maxCell))
+        } else {
+            base
+                .modifier(HalftonePressView_StaticHalftone(size: size, cell: liveCell))
+                .contentShape(Rectangle())
+                .modifier(
+                    HalftonePressView_PinchInteraction(
+                        baseCell: $baseCell,
+                        liveCell: $liveCell,
+                        minCell: minCell,
+                        maxCell: maxCell
+                    )
+                )
+        }
+    }
+
+    // MARK: Source content (rich tonal range so dots track luminance)
+
+    private func content(size: CGSize) -> some View {
+        let dim = min(size.width, size.height)
+        return ZStack {
+            // Bright paper-tone backdrop with a soft tonal falloff.
+            RadialGradient(
+                colors: [
+                    Color(red: 0.98, green: 0.97, blue: 0.94),
+                    Color(red: 0.62, green: 0.66, blue: 0.74)
+                ],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: dim * 1.3
+            )
+
+            // A diagonal mid-tone sweep adds gradient energy across the frame.
+            LinearGradient(
+                colors: [
+                    Color(red: 0.10, green: 0.12, blue: 0.18).opacity(0.0),
+                    Color(red: 0.10, green: 0.12, blue: 0.18).opacity(0.85)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            // Overlapping dark shapes give crisp tonal masses for big comic dots.
+            Circle()
+                .fill(Color(red: 0.05, green: 0.06, blue: 0.09))
+                .frame(width: dim * 0.52, height: dim * 0.52)
+                .offset(x: -dim * 0.16, y: dim * 0.18)
+
+            Image(systemName: "drop.fill")
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(Color(red: 0.02, green: 0.03, blue: 0.05))
+                .frame(width: dim * 0.46, height: dim * 0.46)
+                .offset(x: dim * 0.14, y: -dim * 0.08)
+
+            // A bright highlight keeps the light end of the tonal range alive.
+            Circle()
+                .fill(Color(red: 1.0, green: 0.98, blue: 0.92))
+                .frame(width: dim * 0.22, height: dim * 0.22)
+                .blur(radius: dim * 0.02)
+                .offset(x: dim * 0.22, y: dim * 0.24)
+        }
+    }
+}
+
+// MARK: - Static (interactive) halftone modifier
+
+private struct HalftonePressView_StaticHalftone: ViewModifier {
+    let size: CGSize
+    let cell: CGFloat
+
+    func body(content: Content) -> some View {
+        content.layerEffect(
+            ShaderLibrary.halftonePress(
+                .float2(Float(size.width), Float(size.height)),
+                .float(Float(cell)),
+                .float(0.0), // fixed screen angle in interactive mode
+                .float3(0.06, 0.07, 0.10), // ink (dark duotone)
+                .float3(0.97, 0.96, 0.93)  // paper (light duotone)
+            ),
+            maxSampleOffset: CGSize(width: 24, height: 24)
+        )
+    }
+}
+
+// MARK: - Demo (self-driving) halftone modifier
+
+private struct HalftonePressView_DemoHalftone: ViewModifier {
+    let size: CGSize
+    let minCell: CGFloat
+    let maxCell: CGFloat
+
+    func body(content: Content) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let cell = demoCell(t)
+            let angle = demoAngle(t)
+
+            content.layerEffect(
+                ShaderLibrary.halftonePress(
+                    .float2(Float(size.width), Float(size.height)),
+                    .float(Float(cell)),
+                    .float(Float(angle)),
+                    .float3(0.06, 0.07, 0.10),
+                    .float3(0.97, 0.96, 0.93)
+                ),
+                maxSampleOffset: CGSize(width: 24, height: 24)
+            )
+        }
+    }
+
+    // Ease cell size coarse <-> fine on a ~3.4s loop, never degenerate.
+    private func demoCell(_ t: Double) -> CGFloat {
+        let phase = (sin(t * (2.0 * .pi / 3.4)) + 1.0) / 2.0 // 0...1
+        let eased = phase * phase * (3.0 - 2.0 * phase)      // smoothstep
+        return minCell + (maxCell - minCell) * CGFloat(eased)
+    }
+
+    // Slowly orbit the screen angle so the dot grid rotates in place.
+    private func demoAngle(_ t: Double) -> CGFloat {
+        CGFloat(t * 0.22)
+    }
+}
+
+// MARK: - Pinch interaction modifier
+
+private struct HalftonePressView_PinchInteraction: ViewModifier {
+    @Binding var baseCell: CGFloat
+    @Binding var liveCell: CGFloat
+    let minCell: CGFloat
+    let maxCell: CGFloat
+
+    func body(content: Content) -> some View {
+        content.gesture(
+            MagnifyGesture()
+                .onChanged { value in
+                    // Pinch out (magnification > 1) -> smaller cell -> finer screen.
+                    liveCell = clamp(baseCell / CGFloat(value.magnification))
+                }
+                .onEnded { value in
+                    // Fold the gesture into the base so the screen holds on release.
+                    baseCell = clamp(baseCell / CGFloat(value.magnification))
+                    liveCell = baseCell
+                }
+        )
+    }
+
+    private func clamp(_ v: CGFloat) -> CGFloat {
+        min(max(v, minCell), maxCell)
+    }
+}
+
+
+// ---- Companion Metal shader (HalftonePressView.metal) ----
+// Add this as a .metal file in your target:
+/*
+#include <metal_stdlib>
+#include <SwiftUI/SwiftUI_Metal.h>
+
+using namespace metal;
+
+// Halftone Press
+// Rotating-grid duotone halftone. For each output pixel:
+//   1. Rotate the pixel about the view center by +angle into "grid space".
+//   2. Snap to the center of its grid cell.
+//   3. Rotate that cell center back by -angle into layer space and sample
+//      the layer there to read the cell's luminance.
+//   4. Dot radius = f(luminance): dark cells -> big dots, light cells -> small.
+//   5. Output duotone: ink inside the dot, paper outside, smoothstep edge.
+//
+// `cellSize` is in points, so the physical dot size is resolution-independent.
+// The sample point is offset from the pixel by at most ~0.71 * cellSize, so the
+// SwiftUI side sets maxSampleOffset to comfortably cover the largest cell.
+
+[[ stitchable ]]
+half4 halftonePress(float2 position,
+                    SwiftUI::Layer layer,
+                    float2 size,
+                    float cellSize,
+                    float angle,
+                    float3 inkColor,
+                    float3 paperColor) {
+    float cell = max(cellSize, 2.0);
+    float2 center = size * 0.5;
+
+    float s = sin(angle);
+    float c = cos(angle);
+
+    // Forward-rotate the pixel about the center into grid space.
+    float2 rel = position - center;
+    float2 g = float2(rel.x * c - rel.y * s,
+                      rel.x * s + rel.y * c);
+
+    // Snap to the cell center in grid space.
+    float2 cellCenterG = (floor(g / cell) + 0.5) * cell;
+
+    // Back-rotate the cell center into layer space to pick the sample point.
+    // Inverse rotation uses (c, +s) / (-s, c).
+    float2 sampleRel = float2(cellCenterG.x * c + cellCenterG.y * s,
+                              -cellCenterG.x * s + cellCenterG.y * c);
+    float2 samplePos = sampleRel + center;
+
+    // Read the cell's tone. Clamp the sample inside the view to avoid edge bleed.
+    float2 clamped = clamp(samplePos, float2(0.0), size);
+    half4 src = layer.sample(clamped);
+
+    // Premultiplied-safe luminance (Rec.709), respecting alpha.
+    half a = max(src.a, half(0.0001));
+    half3 rgb = src.rgb / a;
+    float lum = dot(float3(rgb), float3(0.2126, 0.7152, 0.0722));
+    lum = clamp(lum * float(src.a), 0.0, 1.0);
+
+    // Dot radius from inverted luminance. Max radius slightly over half the cell
+    // so dark regions can fully merge into solid ink. sqrt keeps area perceptual.
+    float darkness = 1.0 - lum;
+    float maxR = cell * 0.72;
+    float radius = sqrt(darkness) * maxR;
+
+    // Distance from this pixel to its cell center, measured in grid space.
+    float dist = distance(g, cellCenterG);
+
+    // Smoothstep edge over ~1px for crisp but anti-aliased dots.
+    float edge = 1.0;
+    float mask = 1.0 - smoothstep(radius - edge, radius + edge, dist);
+
+    float3 outRGB = mix(paperColor, inkColor, mask);
+    return half4(half3(outRGB), 1.0h);
+}
+*/
+"""###,
         "mtl-heat-mirage": ###"""
 //
 //  HeatMirageView.swift
@@ -42597,6 +46284,958 @@ float2 heatMirage(float2 position, float time, float2 hotspot, float intensity) 
     p.x += wave * (0.6 + falloff * 5.0);
     p.y -= falloff * 3.0;
     return p;
+}
+*/
+"""###,
+        "mtl-jelly-wobble": ###"""
+import SwiftUI
+
+/// Jelly Wobble — flinging the surface sends a springy, decaying shockwave that
+/// jiggles the pixels like a block of gelatin with directional inertia.
+///
+/// `.distortionEffect` (iOS 17) offsets each sample coordinate by a radial
+/// damped-sine wave emanating from an impulse origin. The wave's amplitude is
+/// seeded by the drag velocity and decays via the in-shader damping term, so
+/// the panel settles on its own after release.
+///
+/// - demo == true  : a TimelineView re-seeds a pseudo-random impulse every few
+///   seconds (purely from the clock, no cross-frame state) so the panel keeps
+///   sloshing with no touch.
+/// - demo == false : a DragGesture(minimumDistance: 0) reads the release
+///   velocity and location to fire a real impulse.
+struct JellyWobbleView: View {
+    var demo: Bool = false
+
+    /// Peak displacement in points. maxSampleOffset is sized to match this so
+    /// the wobble never clips at the panel edges.
+    private let peakAmplitude: CGFloat = 26
+
+    /// One live impulse for the interactive branch.
+    @State private var impulse = JellyWobbleView_Impulse.zero
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            TimelineView(.animation) { timeline in
+                let now = timeline.date.timeIntervalSinceReferenceDate
+                let state = waveState(now: now, size: size)
+                JellyWobbleView_JellyBackdrop()
+                    .distortionEffect(
+                        ShaderLibrary.jellyWobble(
+                            .float(Float(state.time)),
+                            .float2(Float(state.origin.x), Float(state.origin.y)),
+                            .float(Float(state.amplitude)),
+                            .float2(Float(state.dir.dx), Float(state.dir.dy))
+                        ),
+                        // Worst case the radial crest (~27pt) and the directional
+                        // drag slosh (~13pt) align, so budget ~1.6x peak + slack
+                        // to guarantee the wobble never clips at the panel edges.
+                        maxSampleOffset: CGSize(width: peakAmplitude * 1.6 + 8,
+                                                height: peakAmplitude * 1.6 + 8)
+                    )
+            }
+            .contentShape(Rectangle())
+            // Attach unconditionally; the hit-test mask disables our gesture in
+            // demo mode (Optional<Gesture> doesn't conform to Gesture, so a
+            // `demo ? nil : …` ternary would fail to compile).
+            .gesture(flingGesture(size: size),
+                     including: demo ? .subviews : .all)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    // MARK: - Wave state resolution
+
+    struct WaveState {
+        var time: Double          // seconds elapsed since the active impulse
+        var origin: CGPoint
+        var amplitude: CGFloat
+        var dir: CGVector         // normalized fling direction (or zero)
+    }
+
+    private func waveState(now: TimeInterval, size: CGSize) -> WaveState {
+        demo ? demoState(now: now, size: size) : liveState(now: now, size: size)
+    }
+
+    /// Stateless demo: derive a fresh impulse from the integer cycle index so a
+    /// new nudge fires every `period` seconds with no @State mutation per frame.
+    private func demoState(now: TimeInterval, size: CGSize) -> WaveState {
+        let period: Double = 3.2
+        let cycle = floor(now / period)
+        let phase = now - cycle * period
+
+        let h1 = hash(cycle * 1.0 + 0.13)
+        let h2 = hash(cycle * 1.0 + 0.57)
+        let h3 = hash(cycle * 1.0 + 0.91)
+
+        let ox = (0.2 + 0.6 * h1) * Double(size.width)
+        let oy = (0.2 + 0.6 * h2) * Double(size.height)
+        let origin = CGPoint(x: ox, y: oy)
+        let angle: Double = h3 * .pi * 2.0
+        let dir = CGVector(dx: cos(angle), dy: sin(angle))
+        // Vary the kick so some cycles slosh harder than others.
+        let amp = peakAmplitude * CGFloat(0.6 + 0.4 * hash(cycle + 0.33))
+
+        return WaveState(time: phase, origin: origin, amplitude: amp, dir: dir)
+    }
+
+    /// Interactive: elapsed since the stored impulse fired; amplitude is held at
+    /// its seeded value and the shader's decay term settles it over time.
+    private func liveState(now: TimeInterval, size: CGSize) -> WaveState {
+        let elapsed = max(0, now - impulse.startDate)
+        // Let the impulse fully expire so the resting state is undistorted.
+        let amp: CGFloat = elapsed > 3.0 ? 0 : impulse.amplitude
+        let fallbackOrigin = CGPoint(x: size.width / 2, y: size.height / 2)
+        let origin = impulse.origin == .zero ? fallbackOrigin : impulse.origin
+        return WaveState(time: elapsed,
+                         origin: origin,
+                         amplitude: amp,
+                         dir: impulse.dir)
+    }
+
+    // MARK: - Gesture
+
+    private func flingGesture(size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onEnded { value in
+                let v = value.velocity                // points / second (iOS 17)
+                let speed = hypot(v.width, v.height)
+                let location = value.location
+
+                // Map fling speed → amplitude, clamped to the peak.
+                let mapped = min(peakAmplitude, peakAmplitude * speed / 2400)
+                // A tap with no velocity still gives a gentle, non-directional nudge.
+                let amp = max(peakAmplitude * 0.35, mapped)
+
+                let dir: CGVector
+                if speed > 1 {
+                    dir = CGVector(dx: v.width / speed, dy: v.height / speed)
+                } else {
+                    dir = .zero
+                }
+
+                impulse = JellyWobbleView_Impulse(
+                    startDate: Date().timeIntervalSinceReferenceDate,
+                    origin: clampedPoint(location, in: size),
+                    amplitude: amp,
+                    dir: dir
+                )
+            }
+    }
+
+    private func clampedPoint(_ p: CGPoint, in size: CGSize) -> CGPoint {
+        CGPoint(x: min(max(0, p.x), size.width),
+                y: min(max(0, p.y), size.height))
+    }
+
+    /// Deterministic 0…1 pseudo-random hash from a Double seed.
+    private func hash(_ x: Double) -> Double {
+        let v = sin(x * 127.1 + 311.7) * 43758.5453
+        return v - floor(v)
+    }
+}
+
+// MARK: - JellyWobbleView_Impulse model
+
+private struct JellyWobbleView_Impulse {
+    var startDate: TimeInterval
+    var origin: CGPoint
+    var amplitude: CGFloat
+    var dir: CGVector
+
+    static let zero = JellyWobbleView_Impulse(startDate: -100,
+                              origin: .zero,
+                              amplitude: 0,
+                              dir: .zero)
+}
+
+// MARK: - Backdrop
+
+/// High-frequency content so the coordinate warp is actually visible. A solid
+/// fill would distort invisibly — we need bold edges (grid + rings + label).
+private struct JellyWobbleView_JellyBackdrop: View {
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.07, green: 0.10, blue: 0.22),
+                        Color(red: 0.16, green: 0.06, blue: 0.26)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                gridLayer(size: size)
+                ringLayer(size: size)
+                label(size: size)
+            }
+            .frame(width: size.width, height: size.height)
+        }
+    }
+
+    private func gridLayer(size: CGSize) -> some View {
+        let spacing = max(14, min(size.width, size.height) / 9)
+        let cols = Int((size.width / spacing).rounded(.up)) + 1
+        let rows = Int((size.height / spacing).rounded(.up)) + 1
+        let lineColor = Color(red: 0.45, green: 0.72, blue: 1.0).opacity(0.32)
+        return Path { path in
+            for c in 0...cols {
+                let x = CGFloat(c) * spacing
+                path.move(to: CGPoint(x: x, y: 0))
+                path.addLine(to: CGPoint(x: x, y: size.height))
+            }
+            for r in 0...rows {
+                let y = CGFloat(r) * spacing
+                path.move(to: CGPoint(x: 0, y: y))
+                path.addLine(to: CGPoint(x: size.width, y: y))
+            }
+        }
+        .stroke(lineColor, lineWidth: 1)
+    }
+
+    private func ringLayer(size: CGSize) -> some View {
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let maxR = max(size.width, size.height) * 0.55
+        let count = 5
+        let step = maxR / CGFloat(count)
+        let ringColor = Color(red: 1.0, green: 0.55, blue: 0.78).opacity(0.5)
+        return Path { path in
+            for i in 1...count {
+                let radius = step * CGFloat(i)
+                let rect = CGRect(x: center.x - radius,
+                                  y: center.y - radius,
+                                  width: radius * 2,
+                                  height: radius * 2)
+                path.addEllipse(in: rect)
+            }
+        }
+        .stroke(ringColor, lineWidth: 1.5)
+    }
+
+    private func label(size: CGSize) -> some View {
+        let fontSize = max(15, min(size.width, size.height) * 0.16)
+        return Text("JELLY")
+            .font(.system(size: fontSize, weight: .black, design: .rounded))
+            .tracking(fontSize * 0.05)
+            .foregroundStyle(Color(red: 1.0, green: 0.97, blue: 0.78))
+            .shadow(color: Color(red: 1.0, green: 0.45, blue: 0.6).opacity(0.6),
+                    radius: 6)
+    }
+}
+
+
+// ---- Companion Metal shader (JellyWobbleView.metal) ----
+// Add this as a .metal file in your target:
+/*
+#include <metal_stdlib>
+#include <SwiftUI/SwiftUI_Metal.h>
+using namespace metal;
+
+// Radial damped-sine shockwave that returns the coordinate to sample FROM.
+// pos      : current pixel position in user-space points (same space as origin)
+// time     : seconds elapsed since the impulse fired (NOT wall-clock)
+// origin   : impulse origin in user-space points
+// amplitude: peak displacement in points (already velocity-seeded + clamped by Swift)
+// dir      : normalized fling direction (or float2(0) for a non-directional nudge)
+[[ stitchable ]]
+float2 jellyWobble(float2 pos,
+                   float time,
+                   float2 origin,
+                   float amplitude,
+                   float2 dir) {
+    if (amplitude < 0.01) {
+        return pos;
+    }
+
+    float2 d = pos - origin;
+    float r = length(d);
+
+    // Guard the singularity at the impulse origin.
+    float2 radial = r > 0.001 ? d / r : float2(0.0);
+
+    // The wavefront sweeps outward at `speed`; we envelope the wave around it
+    // but keep the envelope wide so the WHOLE surface sloshes (jelly), with a
+    // gentle traveling crest rather than a hairline ring.
+    float speed = 320.0;          // points / second the crest travels
+    float front = speed * time;   // current crest radius
+    float spread = 220.0;         // envelope width (wide => jelly, not a ring)
+
+    float gx = (r - front) / spread;
+    float envelope = exp(-gx * gx);            // traveling crest
+    float plane = exp(-r / 520.0);             // whole-plane slosh contribution
+
+    // Damped oscillation: rings ride outward and fade over time.
+    float freq = 0.045;                        // spatial frequency (1/points)
+    float omega = 11.0;                        // temporal angular frequency
+    float decay = exp(-time * 2.6);            // settle-down envelope
+    float wave = sin(r * freq - time * omega);
+
+    // Directional inertia: the side the fling points toward sloshes more,
+    // the trailing side recoils. dot in [-1, 1]; bias keeps it always positive
+    // so the radial wobble survives even for a zero-velocity tap.
+    float bias = 0.55 + 0.45 * dot(radial, dir);
+
+    float radialOffset = amplitude * decay * bias *
+                         (0.7 * envelope + 0.35 * plane) * wave;
+
+    // A secondary slosh that drags the surface bodily along the fling axis,
+    // decaying faster so it reads as initial inertia before the rings take over.
+    float dragDecay = exp(-time * 3.4);
+    float dragWave = sin(time * omega * 0.5) * dragDecay;
+    float2 dragOffset = dir * amplitude * 0.5 * dragWave * plane;
+
+    return pos + radial * radialOffset + dragOffset;
+}
+*/
+"""###,
+        "mtl-mercury-pour": ###"""
+import SwiftUI
+
+/// Mercury Pour — a metaball threshold turns the bright "beads" into liquid metal
+/// that merges and splits with a chrome specular rim as gravity is tilted.
+///
+/// Architecture (the part that defeats the HIGH risk note):
+///   ZStack { dark backdrop; bright radial-gradient blobs }
+///       .blur(radius:)            ← the gooey merge happens HERE, in SwiftUI
+///       .layerEffect(mercuryPour) ← shader only does threshold + a few neighbor
+///                                    samples for the chrome rim → cheap.
+///
+/// The blobs physically move under gravity in SwiftUI space, so when they overlap
+/// the blur+threshold merges them and when they separate they pull apart — that
+/// emergent surface-tension merge/split IS the effect, not a relit static image.
+struct MercuryPourView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            MercuryPourView_MercuryStage(demo: demo, size: geo.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
+}
+
+// MARK: - Stage (owns gesture + time, drives the gravity uniform)
+
+private struct MercuryPourView_MercuryStage: View {
+    let demo: Bool
+    let size: CGSize
+
+    @State private var startDate = Date()
+
+    // Drag → gravity direction.
+    @State private var isDragging = false
+    @State private var dragGravity: CGVector = .zero
+    // Blend weight that eases gravity back to the auto circular sweep on release.
+    @State private var autoBlend: CGFloat = 1
+
+    private let beads: [MercuryPourView_Bead] = MercuryPourView_Bead.makeField()
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSince(startDate)
+            let gravity = currentGravity(time: t)
+
+            MercuryPourView_MercuryContent(
+                beads: beads,
+                size: size,
+                time: t,
+                gravity: gravity
+            )
+        }
+        .contentShape(Rectangle())
+        // No `.gesture(nil)` overload exists; mask the gesture off in demo instead.
+        .gesture(dragGesture, including: demo ? .subviews : .all)
+    }
+
+    // MARK: Gravity blend
+
+    private func currentGravity(time t: TimeInterval) -> CGVector {
+        let auto = autoGravity(time: t)
+        if demo { return auto }
+        // Lerp drag → auto using the eased blend weight (0 = full drag, 1 = full auto).
+        let w = autoBlend
+        let x = dragGravity.dx * (1 - w) + auto.dx * w
+        let y = dragGravity.dy * (1 - w) + auto.dy * w
+        return CGVector(dx: x, dy: y)
+    }
+
+    /// Circular sweep — full orbit ≈ 3.9s so the gesture progress auto-cycles in
+    /// range; never points "nowhere", so beads always pour somewhere.
+    private func autoGravity(time t: TimeInterval) -> CGVector {
+        let speed: Double = 1.6
+        let a: Double = t * speed
+        return CGVector(dx: CGFloat(cos(a)), dy: CGFloat(sin(a)))
+    }
+
+    // MARK: Gesture
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                isDragging = true
+                autoBlend = 0
+                let maxLen: CGFloat = max(size.width, size.height) * 0.45
+                let dx = value.translation.width / maxLen
+                let dy = value.translation.height / maxLen
+                dragGravity = clampedUnit(dx: dx, dy: dy)
+            }
+            .onEnded { _ in
+                isDragging = false
+                // Ease gravity back to the auto sweep.
+                withAnimation(.easeInOut(duration: 1.1)) {
+                    autoBlend = 1
+                }
+            }
+    }
+
+    private func clampedUnit(dx: CGFloat, dy: CGFloat) -> CGVector {
+        let len = sqrt(dx * dx + dy * dy)
+        if len <= 1 { return CGVector(dx: dx, dy: dy) }
+        return CGVector(dx: dx / len, dy: dy / len)
+    }
+}
+
+// MARK: - Content: moving blobs → blur → metaball shader
+
+private struct MercuryPourView_MercuryContent: View {
+    let beads: [MercuryPourView_Bead]
+    let size: CGSize
+    let time: TimeInterval
+    let gravity: CGVector
+
+    var body: some View {
+        let dim = min(size.width, size.height)
+        let blur = blurRadius(for: dim)
+
+        ZStack {
+            backdrop
+            blobLayer
+        }
+        .frame(width: size.width, height: size.height)
+        .blur(radius: blur)
+        .modifier(
+            MercuryPourView_MercuryShaderModifier(
+                size: size,
+                time: time,
+                gravity: gravity
+            )
+        )
+    }
+
+    private var backdrop: some View {
+        // Faint cool backdrop so the tile is never fully blank between beads.
+        LinearGradient(
+            colors: [
+                Color(red: 0.05, green: 0.06, blue: 0.09),
+                Color(red: 0.02, green: 0.02, blue: 0.04)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    /// Bright soft circles whose centres slide under gravity + a small time-bob.
+    /// Overlap → blur merges them → threshold reads as one bead. Separate → split.
+    private var blobLayer: some View {
+        Canvas { ctx, canvasSize in
+            for bead in beads {
+                let p = position(for: bead, in: canvasSize)
+                let r = bead.radius * min(canvasSize.width, canvasSize.height)
+                let rect = CGRect(
+                    x: p.x - r, y: p.y - r,
+                    width: r * 2, height: r * 2
+                )
+                let grad = Gradient(stops: [
+                    .init(color: .white, location: 0.0),
+                    .init(color: Color(white: 1.0, opacity: 0.95), location: 0.45),
+                    .init(color: Color(white: 1.0, opacity: 0.0), location: 1.0)
+                ])
+                let shading = GraphicsContext.Shading.radialGradient(
+                    grad,
+                    center: p,
+                    startRadius: 0,
+                    endRadius: r
+                )
+                ctx.fill(Path(ellipseIn: rect), with: shading)
+            }
+        }
+    }
+
+    private func position(for bead: MercuryPourView_Bead, in s: CGSize) -> CGPoint {
+        let dim = min(s.width, s.height)
+        // Gravity displacement: beads pour toward the gravity direction.
+        let pour = dim * 0.18
+        let gx = gravity.dx * pour
+        let gy = gravity.dy * pour
+        // Per-bead time bob so beads continually drift in/out of contact.
+        let bob = dim * 0.05
+        let bx = CGFloat(cos(time * bead.bobSpeed + bead.phase)) * bob
+        let by = CGFloat(sin(time * bead.bobSpeed * 1.3 + bead.phase)) * bob
+
+        let baseX = bead.base.x * s.width
+        let baseY = bead.base.y * s.height
+        return CGPoint(x: baseX + gx + bx, y: baseY + gy + by)
+    }
+
+    /// Blur scales with tile size: capped so it never explodes on a large detail view.
+    private func blurRadius(for dim: CGFloat) -> CGFloat {
+        min(max(dim * 0.06, 6), 26)
+    }
+}
+
+// MARK: - Shader application
+
+private struct MercuryPourView_MercuryShaderModifier: ViewModifier {
+    let size: CGSize
+    let time: TimeInterval
+    let gravity: CGVector
+
+    func body(content: Content) -> some View {
+        let shader = ShaderLibrary.mercuryPour(
+            .float2(Float(size.width), Float(size.height)),
+            .float(Float(time)),
+            .float2(Float(gravity.dx), Float(gravity.dy))
+        )
+        content.layerEffect(shader, maxSampleOffset: CGSize(width: 8, height: 8))
+    }
+}
+
+// MARK: - MercuryPourView_Bead model
+
+private struct MercuryPourView_Bead {
+    var base: CGPoint   // normalised 0…1 rest position
+    var radius: CGFloat // normalised radius (× min dimension)
+    var phase: Double
+    var bobSpeed: Double
+
+    /// A modest field of beads (capped per the HIGH-risk note) arranged so they
+    /// sit close enough to merge as gravity pours them together.
+    static func makeField() -> [MercuryPourView_Bead] {
+        let positions: [(CGFloat, CGFloat, CGFloat)] = [
+            (0.30, 0.34, 0.16),
+            (0.52, 0.28, 0.13),
+            (0.70, 0.40, 0.15),
+            (0.40, 0.55, 0.14),
+            (0.60, 0.60, 0.12),
+            (0.48, 0.45, 0.17),
+            (0.28, 0.62, 0.11),
+            (0.72, 0.66, 0.12)
+        ]
+        var out: [MercuryPourView_Bead] = []
+        for (i, p) in positions.enumerated() {
+            out.append(
+                MercuryPourView_Bead(
+                    base: CGPoint(x: p.0, y: p.1),
+                    radius: p.2,
+                    phase: Double(i) * 0.9,
+                    bobSpeed: 0.7 + Double(i) * 0.08
+                )
+            )
+        }
+        return out
+    }
+}
+
+
+// ---- Companion Metal shader (MercuryPourView.metal) ----
+// Add this as a .metal file in your target:
+/*
+#include <metal_stdlib>
+#include <SwiftUI/SwiftUI_Metal.h>
+using namespace metal;
+
+// Mercury Pour — metaball threshold + chrome specular rim.
+//
+// The view blurs the bright beads in SwiftUI BEFORE this layer effect, so the
+// layer we sample is already a smooth gooey field. Here we only:
+//   1. threshold the blurred luminance with smoothstep → the metal surface,
+//   2. read 4 neighbours to estimate a surface gradient → a fake normal,
+//   3. light that normal with a specular glint + an environment gradient that
+//      is biased by the gravity direction → chrome.
+//
+// Cheap: 5 samples per pixel, modest maxSampleOffset.
+
+static inline half luma(half4 c) {
+    return dot(c.rgb, half3(0.299h, 0.587h, 0.114h));
+}
+
+[[ stitchable ]]
+half4 mercuryPour(float2 pos,
+                  SwiftUI::Layer layer,
+                  float2 size,
+                  float time,
+                  float2 gravity) {
+
+    // Center sample of the pre-blurred field.
+    half4 c = layer.sample(pos);
+    half  l = luma(c) * c.a;
+
+    // --- Metaball threshold (soft edge so the rim reads as metal, not aliased).
+    half edge0 = 0.32h;
+    half edge1 = 0.55h;
+    half surface = smoothstep(edge0, edge1, l);
+
+    if (surface <= 0.001h) {
+        // Outside the metal: faint cool backdrop tint, never fully black so the
+        // tile is legible on every frame.
+        half3 bg = half3(0.035h, 0.045h, 0.07h);
+        return half4(bg, 1.0h);
+    }
+
+    // --- Neighbour samples → gradient of the blurred field (fake surface normal).
+    float o = 3.0;
+    half lx0 = luma(layer.sample(pos + float2(-o, 0.0)));
+    half lx1 = luma(layer.sample(pos + float2( o, 0.0)));
+    half ly0 = luma(layer.sample(pos + float2(0.0, -o)));
+    half ly1 = luma(layer.sample(pos + float2(0.0,  o)));
+
+    half gx = (lx1 - lx0);
+    half gy = (ly1 - ly0);
+    // Normal tilts away from rising luminance; z gives it body.
+    half3 n = normalize(half3(-gx * 2.2h, -gy * 2.2h, 1.0h));
+
+    // --- Lighting. Gravity biases the environment so the sheen shifts as you pour.
+    float2 g = gravity;
+    float glen = length(g);
+    if (glen > 0.0001) { g = g / glen; } else { g = float2(0.0, -1.0); }
+
+    half3 lightDir = normalize(half3(half(g.x) * 0.6h, half(-g.y) * 0.6h, 0.85h));
+    half3 viewDir  = half3(0.0h, 0.0h, 1.0h);
+    half3 halfV    = normalize(lightDir + viewDir);
+
+    half ndl  = max(dot(n, lightDir), 0.0h);
+    half ndh  = max(dot(n, halfV), 0.0h);
+    half spec = pow(ndh, 48.0h);          // tight chrome glint
+    half spec2 = pow(ndh, 9.0h) * 0.5h;   // broader sheen
+
+    // Environment gradient (top bright, bottom dark) rotated a touch by gravity +
+    // a slow time wobble so the chrome surface looks like it reflects a room.
+    half env = 0.5h + 0.5h * n.y;
+    half wob = 0.08h * half(sin(time * 0.8 + n.x * 4.0));
+    env = clamp(env + wob, 0.0h, 1.0h);
+
+    half3 dark   = half3(0.08h, 0.10h, 0.14h);
+    half3 mid    = half3(0.45h, 0.50h, 0.58h);
+    half3 bright = half3(0.85h, 0.90h, 0.97h);
+    half3 chrome = mix(dark, mid, env);
+    chrome = mix(chrome, bright, env * env);
+
+    // Diffuse body + speculars.
+    half3 col = chrome * (0.55h + 0.45h * ndl);
+    col += half3(1.0h, 1.0h, 1.0h) * spec;
+    col += bright * spec2;
+
+    // --- Rim: emphasise the metaball silhouette so merging beads show surface
+    // tension at the contact neck. surface ~ between edge0/edge1 = the rim band.
+    half rim = surface * (1.0h - surface) * 4.0h;
+    col += half3(0.9h, 0.95h, 1.0h) * rim * 0.35h;
+
+    // Composite over the faint backdrop using the threshold as coverage.
+    half3 bg = half3(0.035h, 0.045h, 0.07h);
+    half3 outc = mix(bg, col, surface);
+    return half4(outc, 1.0h);
+}
+*/
+"""###,
+        "mtl-wax-melt": ###"""
+import SwiftUI
+
+/// Wax Melt — a long-press heats the panel so its pixels sag and drip downward
+/// into molten wax strands that pool at the bottom, then re-solidify upward on
+/// release. `demo == true` self-melts and reforms on a slow eased sine loop.
+///
+/// The melt is a single `[[ stitchable ]]` distortionEffect whose `melt` uniform
+/// (0…1) scales a per-column noise-weighted downward pull. Both demo and
+/// interactive modes derive `melt` *analytically* each frame from one
+/// `TimelineView(.animation)` — a shader argument is opaque to SwiftUI and will
+/// not interpolate via `withAnimation`, so we never animate the uniform directly.
+struct WaxMeltView: View {
+    var demo: Bool = false
+
+    // Interactive press state. We store the transition's start time and the
+    // melt value it started from, then ramp analytically off the timeline clock.
+    @State private var pressed: Bool = false
+    @State private var transitionStart: Date = .distantPast
+    @State private var fromMelt: Double = 0
+
+    // Tunables.
+    private let demoPeriod: Double = 3.2     // seconds for a full solid→molten→solid cycle
+    private let rampDuration: Double = 0.9   // seconds to fully melt / reform on press
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            TimelineView(.animation) { tl in
+                let t = tl.date.timeIntervalSinceReferenceDate
+                let melt = currentMelt(now: tl.date, clock: t)
+                meltedContent(size: size, time: t, melt: melt)
+            }
+            .frame(width: size.width, height: size.height)
+            .contentShape(Rectangle())
+            .gesture(pressGesture)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Melt driver (analytic, never animated as a uniform)
+
+    private func currentMelt(now: Date, clock t: Double) -> Double {
+        if demo {
+            // Eased sine 0→1→0 over demoPeriod. Never reaches a blank state.
+            let phase = (t.truncatingRemainder(dividingBy: demoPeriod)) / demoPeriod
+            let raw = (1 - cos(phase * 2 * .pi)) / 2     // 0→1→0
+            return easeInOut(raw)
+        } else {
+            let target: Double = pressed ? 1 : 0
+            let elapsed = now.timeIntervalSince(transitionStart)
+            guard elapsed >= 0 else { return fromMelt }
+            let p = min(max(elapsed / rampDuration, 0), 1)
+            return lerp(fromMelt, target, easeInOut(p))
+        }
+    }
+
+    private var pressGesture: some Gesture {
+        // minimumDistance: 0 so the panel wins inside a ScrollView and the press
+        // registers immediately; it doubles as a press-and-hold driver.
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                if !pressed {
+                    fromMelt = meltAtTransitionEdge(target: 1)
+                    transitionStart = Date()
+                    pressed = true
+                }
+            }
+            .onEnded { _ in
+                fromMelt = meltAtTransitionEdge(target: 0)
+                transitionStart = Date()
+                pressed = false
+            }
+    }
+
+    /// Estimates the current melt value at the instant a new transition begins so
+    /// the ramp picks up smoothly from wherever the previous ramp had reached.
+    private func meltAtTransitionEdge(target: Double) -> Double {
+        let prevTarget: Double = pressed ? 1 : 0
+        let elapsed = Date().timeIntervalSince(transitionStart)
+        guard elapsed >= 0 else { return fromMelt }
+        let p = min(max(elapsed / rampDuration, 0), 1)
+        return lerp(fromMelt, prevTarget, easeInOut(p))
+    }
+
+    // MARK: - Content
+
+    @ViewBuilder
+    private func meltedContent(size: CGSize, time: Double, melt: Double) -> some View {
+        // maxSampleOffset height ≥ the furthest upward sample distance (≈ full
+        // view height) so long drip strands never clip; a little horizontal
+        // wobble room too.
+        let maxOffset = CGSize(width: 14, height: max(size.height, 1))
+        WaxMeltView_WaxPanel(melt: melt)
+            .distortionEffect(
+                ShaderLibrary.waxMelt(
+                    .float(Float(time)),
+                    .float(Float(melt)),
+                    .float2(Float(size.width), Float(size.height))
+                ),
+                maxSampleOffset: maxOffset
+            )
+            // A warm bloom that intensifies as the wax heats up.
+            .overlay(heatGlow(melt: melt))
+    }
+
+    private func heatGlow(melt: Double) -> some View {
+        RadialGradient(
+            colors: [
+                Color(red: 1.0, green: 0.62, blue: 0.30).opacity(0.42 * melt),
+                Color(red: 1.0, green: 0.40, blue: 0.18).opacity(0.0)
+            ],
+            center: .center,
+            startRadius: 2,
+            endRadius: 140
+        )
+        .blendMode(.screen)
+        .allowsHitTesting(false)
+    }
+
+    // MARK: - Math helpers
+
+    private func easeInOut(_ x: Double) -> Double {
+        // Smoothstep-style ease.
+        let c = min(max(x, 0), 1)
+        return c * c * (3 - 2 * c)
+    }
+
+    private func lerp(_ a: Double, _ b: Double, _ t: Double) -> Double {
+        a + (b - a) * t
+    }
+}
+
+// MARK: - The thing that melts (textured so the drip is legible)
+
+private struct WaxMeltView_WaxPanel: View {
+    var melt: Double
+
+    var body: some View {
+        ZStack {
+            base
+            stripes
+            badge
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
+
+    private var base: some View {
+        // A waxy candle-slab gradient; warms toward orange as it melts.
+        LinearGradient(
+            colors: [
+                Color(red: 0.96, green: 0.90, blue: 0.78),
+                Color(red: 0.93, green: 0.74, blue: 0.52),
+                Color(red: 0.86, green: 0.52, blue: 0.34),
+                Color(red: 0.62, green: 0.30, blue: 0.22)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .overlay(
+            LinearGradient(
+                colors: [
+                    Color(red: 1.0, green: 0.50, blue: 0.20).opacity(0.55 * melt),
+                    Color(red: 1.0, green: 0.30, blue: 0.12).opacity(0.0)
+                ],
+                startPoint: .bottom,
+                endPoint: .center
+            )
+        )
+    }
+
+    private var stripes: some View {
+        // Horizontal banding gives the distortion something to streak.
+        GeometryReader { g in
+            let h = g.size.height
+            let bands = 9
+            let bandH = h / CGFloat(bands)
+            ZStack {
+                ForEach(0..<bands, id: \.self) { i in
+                    Rectangle()
+                        .fill(Color.white.opacity(i % 2 == 0 ? 0.10 : 0.0))
+                        .frame(height: bandH)
+                        .offset(y: CGFloat(i) * bandH - h / 2 + bandH / 2)
+                }
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var badge: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "flame.fill")
+                .font(.system(size: 30, weight: .semibold))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 1.0, green: 0.86, blue: 0.55),
+                            Color(red: 1.0, green: 0.55, blue: 0.25)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .shadow(color: Color(red: 0.4, green: 0.12, blue: 0.05).opacity(0.5),
+                        radius: 2, x: 0, y: 1)
+            Text("HOLD")
+                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                .tracking(3)
+                .foregroundStyle(Color(red: 0.30, green: 0.14, blue: 0.08))
+            Text("to melt")
+                .font(.system(size: 9, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color(red: 0.45, green: 0.22, blue: 0.14).opacity(0.9))
+        }
+        .padding(10)
+    }
+}
+
+
+// ---- Companion Metal shader (WaxMeltView.metal) ----
+// Add this as a .metal file in your target:
+/*
+#include <metal_stdlib>
+#include <SwiftUI/SwiftUI_Metal.h>
+using namespace metal;
+
+// A cheap deterministic hash → [0,1), used per-column so each vertical strand
+// of "wax" drips a different length, giving the molten-strand look.
+static float wm_hash(float x) {
+    return fract(sin(x * 127.1) * 43758.5453);
+}
+
+// Smooth value noise across columns (interpolate between neighbouring hashes)
+// so adjacent columns relate and the drips read as fluid rather than jagged.
+static float wm_columnNoise(float u) {
+    float i = floor(u);
+    float f = fract(u);
+    float a = wm_hash(i);
+    float b = wm_hash(i + 1.0);
+    float s = f * f * (3.0 - 2.0 * f); // smoothstep
+    return mix(a, b, s);
+}
+
+// Distortion entry point.
+// Returns the SOURCE coordinate to sample FROM. To make content droop DOWNWARD,
+// we sample from ABOVE the current pixel (y - drip): each output row pulls in
+// content from higher up, so the picture slides toward the floor.
+//
+// position : view-local points (NOT 0..1 UV)
+// time     : seconds, for a slow live shimmer in the strands
+// melt     : 0 (solid) … 1 (fully molten)
+// size     : view size in points, to normalize the per-column frequency
+[[ stitchable ]]
+float2 waxMelt(float2 position, float time, float melt, float2 size) {
+    if (melt <= 0.0001) {
+        return position;
+    }
+
+    float w = max(size.x, 1.0);
+    float h = max(size.y, 1.0);
+
+    // Normalized horizontal position → a few dozen strand columns across the view.
+    float columns = 26.0;
+    float u = (position.x / w) * columns;
+
+    // Per-column drip weight in [0,1]; mix two octaves + a slow time shimmer so
+    // strands writhe gently while molten.
+    float n = wm_columnNoise(u);
+    float n2 = wm_columnNoise(u * 2.37 + 11.0);
+    float colWeight = mix(n, n2, 0.35);
+    colWeight = mix(0.30, 1.0, colWeight); // keep every column dripping a little
+
+    float shimmer = 0.5 + 0.5 * sin(time * 1.7 + u * 1.3);
+    colWeight *= mix(0.85, 1.0, shimmer);
+
+    // Vertical falloff: top barely moves, bottom sags most (gravity pools the
+    // wax toward the floor).
+    float v = position.y / h;                 // 0 at top … 1 at bottom
+    float gravity = v * v;                    // accelerate downward
+
+    // Eased melt so the onset is gentle then runs.
+    float m = melt * melt * (3.0 - 2.0 * melt);
+
+    // Max strand length scales with melt; capped near the view height so the
+    // furthest sample stays within the maxSampleOffset we declared on the view.
+    float maxDrip = h * 0.92;
+    float drip = maxDrip * m * gravity * colWeight;
+
+    // Sample from above → content moves down.
+    float sourceY = position.y - drip;
+
+    // Subtle horizontal wobble so strands aren't perfectly straight ribbons.
+    float wobble = sin(position.y * 0.06 + u * 2.0 + time * 2.1) * 4.0 * m * colWeight;
+    float sourceX = position.x + wobble;
+
+    return float2(sourceX, sourceY);
 }
 */
 """###,
@@ -47731,6 +52370,353 @@ private extension CGFloat {
     func clampedLow(_ low: CGFloat) -> CGFloat { Swift.max(self, low) }
 }
 """###,
+        "nav-typewriter-return-tabs": ###"""
+import SwiftUI
+
+/// Ratchet Slide Tabs — the active-tab indicator advances like a ratcheting
+/// mechanism: on switch it steps along a toothed rail one notch at a time with
+/// a clicking detent at each tooth, accelerating across longer jumps and
+/// braking into a hard stop with a tiny recoil at the destination.
+///
+/// Mechanism: a `KeyframeAnimator` drives the indicator's x through one
+/// `LinearKeyframe` per intervening tooth (stepped, accelerating spacing), then
+/// a `SpringKeyframe` brake + recoil at the destination. `sensoryFeedback`
+/// fires on each switch. iOS 17.
+struct TypewriterReturnTabsView: View {
+    var demo: Bool = false
+
+    private let tabs: [String] = ["Home", "Search", "Saved", "Profile"]
+
+    // KeyframeAnimator needs a *committed* source and target so it knows how
+    // far to travel. We mutate `source = target` first, then `target = i`, so
+    // both land before the re-render and the ratchet always starts from the
+    // tab we actually left (not always from index 0).
+    @State private var source: Int = 0
+    @State private var target: Int = 0
+
+    // Demo auto-stepping clock phase.
+    @State private var demoPhase: Int = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(backgroundFill)
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.7), trigger: target)
+    }
+
+    // MARK: - Layout
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        let count = tabs.count
+        // The bar occupies a comfortable band; size everything off it so the
+        // piece reads in a 120pt tile and a full detail area alike.
+        let barHeight: CGFloat = min(max(size.height * 0.42, 40), 92)
+        let barWidth: CGFloat = max(size.width - barHeight * 0.5, 1)
+        let slotWidth: CGFloat = barWidth / CGFloat(count)
+        let pillInset: CGFloat = slotWidth * 0.12
+        let pillWidth: CGFloat = slotWidth - pillInset * 2
+        let pillHeight: CGFloat = barHeight - barHeight * 0.22
+
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            tabBar(
+                barWidth: barWidth,
+                barHeight: barHeight,
+                slotWidth: slotWidth,
+                pillInset: pillInset,
+                pillWidth: pillWidth,
+                pillHeight: pillHeight
+            )
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .modifier(TypewriterReturnTabsView_DemoDriver(enabled: demo, phase: $demoPhase, count: count) { next in
+            select(to: next)
+        })
+    }
+
+    @ViewBuilder
+    private func tabBar(
+        barWidth: CGFloat,
+        barHeight: CGFloat,
+        slotWidth: CGFloat,
+        pillInset: CGFloat,
+        pillWidth: CGFloat,
+        pillHeight: CGFloat
+    ) -> some View {
+        let corner: CGFloat = barHeight * 0.34
+
+        ZStack(alignment: .leading) {
+            // Rail trough.
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .fill(railFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: corner, style: .continuous)
+                        .strokeBorder(railStroke, lineWidth: 1)
+                )
+
+            // Toothed rail — the tick marks that make the stepping legible.
+            toothRail(barWidth: barWidth, barHeight: barHeight)
+
+            // The ratcheting indicator pill.
+            indicatorPill(
+                slotWidth: slotWidth,
+                pillInset: pillInset,
+                pillWidth: pillWidth,
+                pillHeight: pillHeight,
+                barHeight: barHeight
+            )
+
+            // Tab labels on top, hit targets for the interactive build.
+            labelRow(slotWidth: slotWidth, barHeight: barHeight)
+        }
+        .frame(width: barWidth, height: barHeight)
+        .padding(.horizontal, (barHeight * 0.5) / 2)
+    }
+
+    // MARK: - Tooth rail
+
+    @ViewBuilder
+    private func toothRail(barWidth: CGFloat, barHeight: CGFloat) -> some View {
+        let pitch = toothPitch(barWidth: barWidth)
+        let count = max(Int((barWidth / pitch).rounded()) - 1, 1)
+        let toothHeight: CGFloat = barHeight * 0.16
+        Canvas { ctx, sz in
+            var x = pitch
+            let midY = sz.height / 2
+            while x < sz.width - pitch * 0.5 {
+                let rect = CGRect(
+                    x: x - 0.6,
+                    y: midY - toothHeight / 2,
+                    width: 1.2,
+                    height: toothHeight
+                )
+                ctx.fill(
+                    Path(roundedRect: rect, cornerRadius: 0.6),
+                    with: .color(toothColor)
+                )
+                x += pitch
+            }
+            _ = count
+        }
+        .allowsHitTesting(false)
+    }
+
+    // MARK: - Indicator
+
+    @ViewBuilder
+    private func indicatorPill(
+        slotWidth: CGFloat,
+        pillInset: CGFloat,
+        pillWidth: CGFloat,
+        pillHeight: CGFloat,
+        barHeight: CGFloat
+    ) -> some View {
+        let corner: CGFloat = pillHeight * 0.42
+        let startX = xFor(source, slotWidth: slotWidth, pillInset: pillInset)
+        let endX = xFor(target, slotWidth: slotWidth, pillInset: pillInset)
+        let barWidth = slotWidth * CGFloat(tabs.count)
+        let pitch = toothPitch(barWidth: barWidth)
+
+        KeyframeAnimator(initialValue: startX, trigger: target) { x in
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .fill(pillFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: corner, style: .continuous)
+                        .strokeBorder(pillStroke, lineWidth: 1)
+                )
+                .frame(width: pillWidth, height: pillHeight)
+                .shadow(color: pillGlow, radius: 8, x: 0, y: 0)
+                .offset(x: x, y: 0)
+        } keyframes: { _ in
+            ratchetKeyframes(from: startX, to: endX, pitch: pitch)
+        }
+        .allowsHitTesting(false)
+    }
+
+    /// Builds the stepped, accelerating ratchet track from `start` to `end`.
+    @KeyframesBuilder<CGFloat>
+    private func ratchetKeyframes(
+        from start: CGFloat,
+        to end: CGFloat,
+        pitch: CGFloat
+    ) -> some Keyframes<CGFloat> {
+        let distance = end - start
+        let direction: CGFloat = distance >= 0 ? 1 : -1
+        let span = abs(distance)
+        // Number of detent steps; at least 1 so even an adjacent hop clicks.
+        let teeth = max(Int((span / pitch).rounded()), 1)
+        // No travel (e.g. first appear): a tiny hold avoids a spurious recoil.
+        let overshoot: CGFloat = span > 0.5 ? direction * min(pitch * 0.5, 10) : 0
+
+        // Force the true starting point with a near-instant keyframe so the
+        // animator does not visually snap from a stale initialValue.
+        LinearKeyframe(start, duration: 0.0001)
+
+        // One LinearKeyframe per intervening tooth, durations shrinking so the
+        // slide accelerates across the rail (cranking up to speed).
+        for step in 1...teeth {
+            let progress = CGFloat(step) / CGFloat(teeth)
+            let notchX = start + distance * progress
+            LinearKeyframe(notchX, duration: notchDuration(step: step, total: teeth))
+        }
+
+        // Brake: drive slightly past the target (the wall impact)...
+        LinearKeyframe(end + overshoot, duration: 0.05)
+        // ...then a spring settles back for the tiny recoil + hard stop.
+        SpringKeyframe(end, duration: 0.28, spring: Spring(response: 0.22, dampingRatio: 0.55))
+    }
+
+    /// Per-notch duration: starts slow, accelerates to a fast crank.
+    private func notchDuration(step: Int, total: Int) -> Double {
+        guard total > 1 else { return 0.10 }
+        let t = Double(step) / Double(total) // 0...1 across the rail
+        // Ease-in on speed: longer at the start, shorter near the end.
+        let fast: Double = 0.028
+        let slow: Double = 0.085
+        let eased = (1.0 - t) * (1.0 - t) // quadratic deceleration of *duration*
+        return fast + (slow - fast) * eased
+    }
+
+    // MARK: - Labels / hit targets
+
+    @ViewBuilder
+    private func labelRow(slotWidth: CGFloat, barHeight: CGFloat) -> some View {
+        let fontSize: CGFloat = min(max(barHeight * 0.26, 9), 16)
+        HStack(spacing: 0) {
+            ForEach(Array(tabs.enumerated()), id: \.offset) { index, title in
+                tabLabel(
+                    title: title,
+                    index: index,
+                    fontSize: fontSize,
+                    barHeight: barHeight
+                )
+                .frame(width: slotWidth, height: barHeight)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func tabLabel(
+        title: String,
+        index: Int,
+        fontSize: CGFloat,
+        barHeight: CGFloat
+    ) -> some View {
+        let isActive = index == target
+        Text(title)
+            .font(.system(size: fontSize, weight: isActive ? .semibold : .medium, design: .rounded))
+            .foregroundStyle(isActive ? activeLabel : idleLabel)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .padding(.horizontal, 2)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .allowsHitTesting(!demo)
+            .onTapGesture { select(to: index) }
+            .animation(.easeOut(duration: 0.25), value: target)
+    }
+
+    // MARK: - Selection engine (shared by tap + demo)
+
+    /// Commit `source` before `target` so the KeyframeAnimator's initialValue
+    /// and trigger stay consistent and the ratchet starts from the real tab.
+    private func select(to index: Int) {
+        guard index != target else { return }
+        source = target
+        target = index
+    }
+
+    // MARK: - Geometry helpers
+
+    private func xFor(_ index: Int, slotWidth: CGFloat, pillInset: CGFloat) -> CGFloat {
+        CGFloat(index) * slotWidth + pillInset
+    }
+
+    /// Fixed-ish tooth pitch so a wide bar yields more detents (more clicks)
+    /// and a narrow tile still ratchets visibly.
+    private func toothPitch(barWidth: CGFloat) -> CGFloat {
+        let slot = barWidth / CGFloat(tabs.count)
+        // ~4 sub-notches per slot, clamped to a tactile range.
+        return min(max(slot / 4, 14), 34)
+    }
+
+    // MARK: - Palette (tint #101418)
+
+    private var backgroundFill: some ShapeStyle {
+        LinearGradient(
+            colors: [
+                Color(red: 0.063, green: 0.078, blue: 0.094),
+                Color(red: 0.043, green: 0.055, blue: 0.070)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var railFill: some ShapeStyle {
+        LinearGradient(
+            colors: [
+                Color(red: 0.094, green: 0.110, blue: 0.133),
+                Color(red: 0.063, green: 0.075, blue: 0.094)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var railStroke: Color { Color(red: 0.20, green: 0.23, blue: 0.27).opacity(0.6) }
+    private var toothColor: Color { Color(red: 0.42, green: 0.47, blue: 0.55).opacity(0.55) }
+
+    private var pillFill: some ShapeStyle {
+        LinearGradient(
+            colors: [
+                Color(red: 0.36, green: 0.62, blue: 0.95),
+                Color(red: 0.24, green: 0.46, blue: 0.86)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var pillStroke: Color { Color(red: 0.62, green: 0.80, blue: 1.0).opacity(0.55) }
+    private var pillGlow: Color { Color(red: 0.30, green: 0.55, blue: 0.95).opacity(0.45) }
+    private var activeLabel: Color { Color(red: 1.0, green: 1.0, blue: 1.0) }
+    private var idleLabel: Color { Color(red: 0.62, green: 0.67, blue: 0.74) }
+}
+
+// MARK: - Demo driver
+
+/// Drives the demo auto-loop. A cancellable async timer acts as a ~3s clock;
+/// on each tick it steps the selection, reusing the exact same ratchet engine
+/// the tap path uses. Inert when `enabled` is false; cancels cleanly when the
+/// flag toggles.
+private struct TypewriterReturnTabsView_DemoDriver: ViewModifier {
+    let enabled: Bool
+    @Binding var phase: Int
+    let count: Int
+    let onStep: (Int) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .task(id: enabled) {
+                guard enabled, count > 0 else { return }
+                var i = phase
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    if Task.isCancelled { break }
+                    i = (i + 1) % count
+                    phase = i
+                    onStep(i)
+                }
+            }
+    }
+}
+"""###,
         "ob-color-bleed": ###"""
 import SwiftUI
 
@@ -52056,6 +57042,235 @@ private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat {
 private func smoothstep(_ x: CGFloat) -> CGFloat {
     let t = clamp01(x)
     return t * t * (3 - 2 * t)
+}
+"""###,
+        "ob-worm-pager": ###"""
+import SwiftUI
+
+// MARK: - WormPagerView
+// "Worm Page Dots" — the active indicator stretches into a connecting pill that
+// elongates toward the destination dot then snaps closed around it, like an
+// inchworm crawling along the track. demo == true auto-crawls forever; demo ==
+// false is a draggable dot-row page control.
+struct WormPagerView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        let layout = WormPagerView_WormLayout(size: size, pageCount: Self.pageCount)
+        ZStack {
+            backdrop
+            if demo {
+                demoStage(layout: layout)
+            } else {
+                WormPagerView_InteractiveWormPager(layout: layout, pageCount: Self.pageCount)
+            }
+        }
+    }
+
+    // MARK: Demo (self-driving)
+
+    @ViewBuilder
+    private func demoStage(layout: WormPagerView_WormLayout) -> some View {
+        // Ping-pong through the dots so the worm never teleports across a wrap.
+        let phases: [CGFloat] = [0, 1, 2, 3, 2, 1]
+        PhaseAnimator(phases, content: { progress in
+            WormPagerView_WormTrack(layout: layout, progress: progress)
+        }, animation: { _ in
+            .spring(response: 0.62, dampingFraction: 0.58)
+        })
+    }
+
+    @ViewBuilder
+    private var backdrop: some View {
+        // Soft tinted plate (#120e18 family) so the row reads on any host.
+        RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.075, green: 0.055, blue: 0.105),
+                        Color(red: 0.045, green: 0.035, blue: 0.070)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .ignoresSafeArea()
+    }
+
+    static let pageCount: Int = 4
+}
+
+// MARK: - Shared layout math
+
+private struct WormPagerView_WormLayout {
+    let size: CGSize
+    let pageCount: Int
+
+    // Dot radius scales with the tile so it works at 120pt and full screen.
+    var dotRadius: CGFloat {
+        let base = min(size.width, size.height) * 0.045
+        return min(max(base, 5), 13)
+    }
+
+    var rowY: CGFloat { size.height / 2 }
+
+    // Even spacing of dot centers across the available width with side inset.
+    var dotCenters: [CGFloat] {
+        guard pageCount > 1 else { return [size.width / 2] }
+        let r = dotRadius
+        let inset = max(r * 2.4, size.width * 0.12)
+        let usable = max(size.width - inset * 2, 1)
+        let step = usable / CGFloat(pageCount - 1)
+        return (0..<pageCount).map { inset + step * CGFloat($0) }
+    }
+
+    var segmentWidth: CGFloat {
+        let c = dotCenters
+        guard c.count > 1 else { return size.width }
+        return max(c[1] - c[0], 1)
+    }
+}
+
+// MARK: - Worm track (static dots + animating pill)
+
+private struct WormPagerView_WormTrack: View {
+    let layout: WormPagerView_WormLayout
+    let progress: CGFloat
+
+    var body: some View {
+        ZStack {
+            staticDots
+            WormPagerView_WormPill(progress: progress, layout: layout)
+                .fill(wormGradient)
+                .shadow(color: Color(red: 0.62, green: 0.40, blue: 0.95).opacity(0.55),
+                        radius: layout.dotRadius * 0.9)
+        }
+    }
+
+    private var staticDots: some View {
+        let centers = layout.dotCenters
+        let r = layout.dotRadius
+        return ZStack {
+            ForEach(centers.indices, id: \.self) { i in
+                Circle()
+                    .fill(Color(red: 0.42, green: 0.40, blue: 0.52).opacity(0.42))
+                    .frame(width: r * 2, height: r * 2)
+                    .position(x: centers[i], y: layout.rowY)
+            }
+        }
+    }
+
+    private var wormGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.55, green: 0.34, blue: 0.96),
+                Color(red: 0.86, green: 0.52, blue: 0.99)
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+}
+
+// MARK: - The worm pill Shape
+// CRUCIAL: progress is animatableData, so withAnimation / PhaseAnimator re-runs
+// path(in:) at every interpolated value — the lead edge races ahead and the
+// trail edge catches up, producing the inchworm stretch instead of a sliding
+// dot. Endpoints are one-dot-wide; the spring overshoot reads as the snap-close.
+private struct WormPagerView_WormPill: Shape {
+    var progress: CGFloat
+    let layout: WormPagerView_WormLayout
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let centers = layout.dotCenters
+        let r = layout.dotRadius
+        let y = layout.rowY
+        guard centers.count > 1 else {
+            return Path(ellipseIn: CGRect(x: centers.first ?? rect.midX - r,
+                                          y: y - r, width: r * 2, height: r * 2))
+        }
+
+        let maxIndex = centers.count - 1
+        let clamped = min(max(progress, 0), CGFloat(maxIndex))
+        // Clamp the SEGMENT index, not progress, so overshoot past an integer
+        // still draws as bounce around the destination dot.
+        let i = min(max(Int(floor(clamped)), 0), maxIndex - 1)
+        let frac = clamped - CGFloat(i)
+
+        let x0 = centers[i]
+        let gap = centers[i + 1] - x0
+
+        // Front races during the first half, back catches up in the second half.
+        let leadFrac = min(frac * 2, 1)
+        let trailFrac = max(frac * 2 - 1, 0)
+
+        let rightCenter = x0 + gap * leadFrac
+        let leftCenter = x0 + gap * trailFrac
+
+        let left = leftCenter - r
+        let right = rightCenter + r
+        let width = max(right - left, r * 2)
+
+        let pill = CGRect(x: left, y: y - r, width: width, height: r * 2)
+        return Path(roundedRect: pill, cornerRadius: r, style: .continuous)
+    }
+}
+
+// MARK: - Interactive (drag the dot row)
+
+private struct WormPagerView_InteractiveWormPager: View {
+    let layout: WormPagerView_WormLayout
+    let pageCount: Int
+
+    @State private var progress: CGFloat = 0
+    @State private var dragStart: CGFloat? = nil
+
+    var body: some View {
+        WormPagerView_WormTrack(layout: layout, progress: progress)
+            .contentShape(Rectangle())
+            .gesture(dragGesture)
+    }
+
+    private var maxProgress: CGFloat { CGFloat(pageCount - 1) }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let start = dragStart ?? progress
+                if dragStart == nil { dragStart = start }
+                // Lead edge tracks the finger directly (body re-runs each frame).
+                let delta = value.translation.width / layout.segmentWidth
+                progress = clamp(start + delta, 0, maxProgress)
+            }
+            .onEnded { value in
+                let start = dragStart ?? progress
+                let predicted = value.predictedEndTranslation.width / layout.segmentWidth
+                let raw = clamp(start + predicted, 0, maxProgress)
+                let target = clamp(raw.rounded(), 0, maxProgress)
+                dragStart = nil
+                // Trail edge lags then reels in with a spring snap-close.
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.55)) {
+                    progress = target
+                }
+            }
+    }
+
+    private func clamp(_ v: CGFloat, _ lo: CGFloat, _ hi: CGFloat) -> CGFloat {
+        min(max(v, lo), hi)
+    }
 }
 """###,
         "tr-clock-pie-wipe": ###"""

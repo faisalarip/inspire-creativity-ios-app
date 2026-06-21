@@ -21,6 +21,7 @@
 		118A221E902084EBD76BE426 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3163399E3EEB394753E8EA26 /* LibraryViewModel.swift */; };
 		126192DAB8E3A2A077F07F52 /* MockURLProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 361E22506EB084BF5ED5B712 /* MockURLProtocol.swift */; };
 		12AF4D651C2422C1C026DB33 /* CodeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD7BC8965FC5EABE5EC84610 /* CodeSheet.swift */; };
+		153F6D4214F633A67C5752B4 /* MercuryPourView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343DE53FF962645126281CA9 /* MercuryPourView.swift */; };
 		1694795BF036EC17478E97E1 /* DetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093CDD403EB3D71EF6C506E9 /* DetailView.swift */; };
 		182E170EF6F7A3FB10078D74 /* SectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1209EED7FE0D81CEF5AAE20B /* SectionHeader.swift */; };
 		19FEA535E60E1693F73177F3 /* MuteMorphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8933304484F9F75442E694F8 /* MuteMorphView.swift */; };
@@ -28,6 +29,7 @@
 		1C25984FFE960A0462E4C37F /* FoldAccordionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C577F3ECCF2AB402F4D27883 /* FoldAccordionView.swift */; };
 		1C557D481307EA602199B529 /* StitchThreadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761AB642D6732D60B286B9AB /* StitchThreadView.swift */; };
 		1DBC9C0F2F5018D5BDDC2AA5 /* CubeRollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFBC66BFB68C5E62DA0E9364 /* CubeRollView.swift */; };
+		1FDD1D71A1AB1596F40BC1A3 /* ContourTopoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6BE993E9E2334B96F14EC34 /* ContourTopoView.swift */; };
 		21181CFF6BDEB34FE8FA9690 /* Marquee3dView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 170EF1BFC14EF2317DB3BCC9 /* Marquee3dView.swift */; };
 		214A05E5C42E24789A6319AC /* FlipClockToggleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4E5F456B1ED4232F2CB8290 /* FlipClockToggleView.swift */; };
 		21595E0EADA8CF11A35A98F3 /* DepthStackPushView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6787F1CEE96075CE6B36ED6A /* DepthStackPushView.swift */; };
@@ -54,12 +56,14 @@
 		31C976A98AE307BE7A60B756 /* MagneticCursorFerrofluidView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D51A15D5903C2700C34023B /* MagneticCursorFerrofluidView.swift */; };
 		32248300C3F0DBED202DD5B8 /* ParticleAssembleCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 417A69ECA0C324A4E976A55C /* ParticleAssembleCheckView.swift */; };
 		33287BD15E3D36694E09A27F /* VenetianBlindsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D737098C17B0C16CBF2641E /* VenetianBlindsView.swift */; };
+		3492FD3ACC8BE39222F69FDC /* WaxMeltView.metal in Sources */ = {isa = PBXBuildFile; fileRef = 5EF6C9DD6E2EC0EDDBE14132 /* WaxMeltView.metal */; };
 		35350DFE964C701DD6016C07 /* AuthStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBA2741E26DB5539EAD51C34 /* AuthStoreTests.swift */; };
 		35EED92AB66D8DFE724BC198 /* InspireCreativityApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A332D11ACAB227309C906699 /* InspireCreativityApp.swift */; };
 		36184A301AE104AE9B3B8D64 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D28A7BE3270F6F2E730011E /* SettingsView.swift */; };
 		3773A8858A77E31B48690156 /* DetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411F3E0F2A3ADCCC3E07957A /* DetailViewModel.swift */; };
 		38A9A175F6029975F75ED3F2 /* RubberBandSheetMorphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2F8869BAB9D239E1E309435 /* RubberBandSheetMorphView.swift */; };
 		38F63E3A3CCC6F1CFB330B02 /* AnimationCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15F24EB8C54EE4A03CECC637 /* AnimationCard.swift */; };
+		39502FCEB7A5077B4642CEA7 /* JellyWobbleView.metal in Sources */ = {isa = PBXBuildFile; fileRef = 08E92BDF1B56F57B16A5969C /* JellyWobbleView.metal */; };
 		3A31C2836CE28734940F185C /* OrigamiFoldTabsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 039EA3FA5E0FBCF0D8CD598E /* OrigamiFoldTabsView.swift */; };
 		3AF7C3DEBDB49E7FA84B75ED /* KnurledStepperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BA930BE33055FA9B0E480B7 /* KnurledStepperView.swift */; };
 		3C8E5ED2AE017A243B759F9E /* SwipeCurtainPartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FA135432B4311CC755D1298 /* SwipeCurtainPartView.swift */; };
@@ -73,14 +77,18 @@
 		427D018BDD1C619262F4249A /* ShatterReformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3449310CC5054890B09E6758 /* ShatterReformView.swift */; };
 		43A8D8F7A396C908F18C13B4 /* RibbonDropBookmarkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41838756A1D3F69CE82A834B /* RibbonDropBookmarkView.swift */; };
 		4431CAFA5D4C67684A73BC9D /* AuroraCodeGen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C5F461F15679801F8B87BA1 /* AuroraCodeGen.swift */; };
+		457F3B1B239B80AF88BC534C /* ChromaticVelocityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 249BBC358A73314402E7942E /* ChromaticVelocityView.swift */; };
 		4581C06B1AF5D381035C85F6 /* BubbleWrapPopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0230972310E91968E26ABD5E /* BubbleWrapPopView.swift */; };
 		4584158E695ECF9209E9027C /* ZipperUnzipTransitionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF5C1CC8D1BEE7464719BBD2 /* ZipperUnzipTransitionView.swift */; };
+		4650171E1102A1BEBFD02547 /* HalftonePressView.metal in Sources */ = {isa = PBXBuildFile; fileRef = 98639AAABE57B5BE20AED3B4 /* HalftonePressView.metal */; };
 		46C61154580A67BC625036C5 /* AppContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA8184AB99520780EA38DE62 /* AppContainer.swift */; };
 		46D88684076430FFA4E2611C /* SocialAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3D86A2772663765B1B8AD1C /* SocialAuthService.swift */; };
 		4804C0513A2B626F37D8E067 /* BrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AC4FA0F701F0DD31050AD9C /* BrowseView.swift */; };
+		48998CD2785ADBD538C142D4 /* WormPagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35DE3676A652D400305A48E0 /* WormPagerView.swift */; };
 		49A26CEF9837FBD3BFC92062 /* CollapsingChevronCrumbsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9286C437E4A2561FFB77BC81 /* CollapsingChevronCrumbsView.swift */; };
 		4A566948438929E9AA6E39A6 /* ColorBleedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED7F09D744FF0F6C88756C40 /* ColorBleedView.swift */; };
 		4B786DD6D4D428A25C0BF27B /* AnimationItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 132C538C5CD2F760463FCF8E /* AnimationItem.swift */; };
+		4C9A9E58506A3635F9658F1C /* JellyWobbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 078F8EB2FDCF67045A047E56 /* JellyWobbleView.swift */; };
 		4D2308714EEBF813AD3D4CB6 /* CreativePreviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA75BD038E4E82FAEA107CBB /* CreativePreviews.swift */; };
 		4DBC4EC8C1B522CF4244C173 /* LongPressMeltView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BBF5AFD6DE398B6A7867709 /* LongPressMeltView.swift */; };
 		4F65A18F9515D1F0EE06E28D /* GradientFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE02328DBEA11A067FC4127 /* GradientFlowView.swift */; };
@@ -97,6 +105,7 @@
 		57569B12B1DBCD2981CBE33F /* PendulumNewtonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB6582DDE83A343828671BD /* PendulumNewtonView.swift */; };
 		57DFAE95B63E7059367B736E /* SpotlightSweepTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFFB651C9D17010439F46181 /* SpotlightSweepTextView.swift */; };
 		590C44EDAD60C8B0BDB9B89B /* SymbolAssemblyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94F1835E23780B71740409B3 /* SymbolAssemblyView.swift */; };
+		5A386B4689DDB5038A340694 /* FoilTiltView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E3A5C9D08335A2EB93EE39A /* FoilTiltView.swift */; };
 		5AF1B4E6DCEFBDCB1AC27822 /* ConfettiLettersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5EEA0182546D2106210378 /* ConfettiLettersView.swift */; };
 		5B6A3B6FFDEC654C8242FB64 /* ParticleAssembleLogoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31CC49938FE9D1F6FB5F551F /* ParticleAssembleLogoView.swift */; };
 		5BD4089203E6020F3FC037B9 /* ThermalPressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B53609E3E4E910B3ACC13E6 /* ThermalPressView.swift */; };
@@ -107,6 +116,7 @@
 		5FB394B100D56E4B029DE443 /* AccordionFoldListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E56FC46709681EFE06DD638D /* AccordionFoldListView.swift */; };
 		5FD2913CE07BF132B18BF5F1 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 772EB0C6915BB039D9E2468B /* Theme.swift */; };
 		60189542D13893FCD7997663 /* LiquidDripView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EEB4A9BEC64E014F3B54C88 /* LiquidDripView.swift */; };
+		602A510339F101A59C01053E /* CrtPoweronView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25951F00CC2C1C37B13AB5DC /* CrtPoweronView.swift */; };
 		6147AFA78EA4D6A0936CEC44 /* CubeTumbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A6B53321A1F907F352E2914 /* CubeTumbleView.swift */; };
 		62BB0094A55E27FC34098102 /* CopyShredView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFD298655CB231D0297A971D /* CopyShredView.swift */; };
 		62DB68304AE5F6B289E3EEEE /* PinShakeSuccessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAA611B0323FC1465DC405C /* PinShakeSuccessView.swift */; };
@@ -135,6 +145,7 @@
 		76E7C9DF97CD441D0FB6C702 /* OrigamiFoldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B0ECFBF14AF0C1DBA837A2F /* OrigamiFoldView.swift */; };
 		773989FB27FECB7B4C20D8A6 /* PasswordRevealView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11D639D3E2ACF3F0A590460A /* PasswordRevealView.swift */; };
 		7A1C0DE5B0F1CA7E90AB0001 /* BrowseFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C0DE5B0F1CA7E90AB0002 /* BrowseFilterTests.swift */; };
+		7A53B8AB13B29BD3DE09227B /* CrtPoweronView.metal in Sources */ = {isa = PBXBuildFile; fileRef = 460ACA8577787CA9D59F21BE /* CrtPoweronView.metal */; };
 		7A57DC411B958841D94C22F2 /* AuroraPackPromoCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E732010C44DA939BEC3410 /* AuroraPackPromoCard.swift */; };
 		7C8CFAC4345B7567953C3B44 /* OrbitalElectronsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6834515DAF4692A737C5E7BA /* OrbitalElectronsView.swift */; };
 		7EBE9543F171A332F5B3F04B /* CrumpleDismissView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7C555A264A71616BA4B00DA /* CrumpleDismissView.swift */; };
@@ -151,6 +162,7 @@
 		871704859E5F1DACFA93B81C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2D7586E1E77DA3D2DFAB881 /* Foundation.framework */; };
 		87C1620BBB47B9A64F6A2E7C /* RadioInkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5D0E3CC4239E364091B2F5B /* RadioInkView.swift */; };
 		8B4F2E72E08A535DCFB4DC58 /* MagneticSnapDockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0DF0BC6A2DE2BBBB459D0D /* MagneticSnapDockView.swift */; };
+		8BED3B52BDDA3AF274E1DD7F /* ConicPrismView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7749E3F05F3FDAEFE3B85632 /* ConicPrismView.swift */; };
 		8C59429469B262F5E49B2C57 /* ThumbFlipLikeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F40099A4840DDF395BC758 /* ThumbFlipLikeView.swift */; };
 		8D1E5AC76744E3E1698E426C /* FanDeckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06EE30DC21A52A26A6DA8BC2 /* FanDeckView.swift */; };
 		8D4E469776682DAFE6D5EF0D /* NeonFlickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B3C1055F9F37F5F69622FA /* NeonFlickerView.swift */; };
@@ -170,6 +182,7 @@
 		9B05363A67C1F6794BC630B6 /* GravityBinTossView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B188D7C18B119E6BB32C1E32 /* GravityBinTossView.swift */; };
 		9B4985BBD6C83EAB29DA001D /* CometTrailCrumbsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 820AAC0941267398642A4217 /* CometTrailCrumbsView.swift */; };
 		9B66EEECF5087ECB646F8627 /* GooeyMergeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68CC85B7BCD590F23655318C /* GooeyMergeView.swift */; };
+		9B86ADF128F0716925127D8A /* ConstellationMeshView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B143487F30301BC51C2AB6C0 /* ConstellationMeshView.swift */; };
 		9DB190F1602E7C34EE76D7CE /* TwoFingerShearView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CDEDE5F006916ACD54E313A /* TwoFingerShearView.swift */; };
 		9DD2540ABB188E04B6D7C234 /* IconButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 033038572D9397EFBE11BDA6 /* IconButton.swift */; };
 		9E0D4822C36D39AC355FD771 /* DotGridWaveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 923B206D2299066C13466265 /* DotGridWaveView.swift */; };
@@ -198,8 +211,10 @@
 		AA8F48E9EFA8E28AAE0106B3 /* TearReceiptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6A1CCE10D6AB12D08812865 /* TearReceiptView.swift */; };
 		AB1123A8E45ACA40107256FC /* PeelAwayCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9969A5201420094F6CD42E65 /* PeelAwayCardView.swift */; };
 		AD5046F46BC168513623F6EF /* StretchPillSwitchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EF880BE97E4D575B2EE4D42 /* StretchPillSwitchView.swift */; };
+		AE025A3FBF7C5EF5DB11586B /* HexPulseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C53EA2D434A7B6D73BACA450 /* HexPulseView.swift */; };
 		AF6F2254B829430E19E39ACC /* StampInkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D801DA85F2E4716F8D1E5706 /* StampInkView.swift */; };
 		B073353088604C3DEF1CAD80 /* PaywallViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 285ECCB3C202B1CDD1639600 /* PaywallViewModel.swift */; };
+		B13AF2D5E0B16545966CE878 /* DevelopPixelsView.metal in Sources */ = {isa = PBXBuildFile; fileRef = 3360C558EB7FC93513583F8F /* DevelopPixelsView.metal */; };
 		B253C666E90DE728E000018F /* HeatMirageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC940BBE4EFB42C2419D0663 /* HeatMirageView.swift */; };
 		B2BE6AE1EAA23599EC65CA94 /* FavoriteFoldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CE6F322EE6F5D423B3D96C /* FavoriteFoldView.swift */; };
 		B2ECDB2D751F5BC191A879FA /* CategoryGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37A5D643CFF4A20D9F882776 /* CategoryGrid.swift */; };
@@ -214,7 +229,9 @@
 		BD179D0F36A824576E233426 /* FoldingOrigamiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C350DF496A8CD25907938432 /* FoldingOrigamiView.swift */; };
 		C2EFF45AE643F89EDE1B7D1E /* InfinityFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF74B906AB950A0C7FB9EB51 /* InfinityFlowView.swift */; };
 		C32D0502E847CBA387034DE9 /* RotateClockRewindView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9DB72EFDB33F32D48520C8 /* RotateClockRewindView.swift */; };
+		C339510E4EDC69793B54B832 /* WaxMeltView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCD73FF851FB8A693CBDF7AC /* WaxMeltView.swift */; };
 		C36942BFEBF6B277FC6D887A /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94EF677A1038D5C944234F40 /* SearchViewModel.swift */; };
+		C38B30AA08EF872413189931 /* TruchetFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9E105C4FB47E3D21047D80C /* TruchetFlowView.swift */; };
 		C56610B1863B8805E8751DC5 /* DecodeMatrixView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86BEA9C9375495718FF2CA70 /* DecodeMatrixView.swift */; };
 		C6A1A2A83FAE9892C4788A9F /* ZipperConfirmView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80878B060362EFB7BCB420FC /* ZipperConfirmView.swift */; };
 		CA82F789B717F4895260E0D6 /* FlowLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24133A0FDBE410C3CDD77866 /* FlowLayout.swift */; };
@@ -230,12 +247,16 @@
 		D23376155664312FDB0D6F42 /* FuseSparkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E67967BA8F1206AA53E0A702 /* FuseSparkView.swift */; };
 		D2972E9D5510B9B3BAC823ED /* CorePreviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF7AD31123582821158EDBE3 /* CorePreviews.swift */; };
 		D37A2DE5C0F8353A85427BED /* HandwritingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3279104233385E941BB2B81 /* HandwritingView.swift */; };
+		D4E3719C6AB1ABD7AB28192B /* DevelopPixelsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5603657E473B3122B0A41BB9 /* DevelopPixelsView.swift */; };
+		D682580F27E8274732F30AA0 /* MercuryPourView.metal in Sources */ = {isa = PBXBuildFile; fileRef = 87E0EA9BCD38E5501040B632 /* MercuryPourView.metal */; };
 		D6D960F701F21637FBCED599 /* ConcertinaSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 425D0F805EB53AE9C7B46263 /* ConcertinaSidebarView.swift */; };
+		D70083428BBE28C83B71DC43 /* CausticLensView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2BDFFF69662EEF984B11CDC /* CausticLensView.swift */; };
 		D7B403AE040AB9EED15DE299 /* CodeSamples.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CAA33CAEBEF39553607CEB9 /* CodeSamples.swift */; };
 		D9228AAF0A58561B817A2656 /* SwiftCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935D098AF14DDA0F49C9DC8B /* SwiftCodeView.swift */; };
 		D9CCD50286276CBD2AC112A4 /* PunchoutCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1825BD4A68E66667911BD63C /* PunchoutCheckView.swift */; };
 		DA9B0DAFCC2DC9F10FB669C1 /* VolumeFluidView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 473305573637A34DB5274FAF /* VolumeFluidView.swift */; };
 		DAD02CB2C20A1E1252755A8F /* RollingBeadTabsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03511C3E866077DD8D5D75DB /* RollingBeadTabsView.swift */; };
+		DB99ECA3393E49B6397CF879 /* VoronoiFractureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFD6E69984D83F0E1C0CE896 /* VoronoiFractureView.swift */; };
 		DCC00700D93A5F0529DE77D4 /* ZipperUnzipView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14D5D0F960C8C1E074EDD681 /* ZipperUnzipView.swift */; };
 		DD431C3096DCA0D068126A1E /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066F04F8C34E6BA806207CB2 /* StoreManager.swift */; };
 		DDB674BAB282F7DCB87923DF /* FoldOrigamiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A36E661CCCAB429513EB7D1 /* FoldOrigamiView.swift */; };
@@ -244,12 +265,17 @@
 		E447257D45F22F4F1AA631D1 /* RotateDialKnobView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D2BC5440216EA187C44C459 /* RotateDialKnobView.swift */; };
 		E47927F041A11F6FA21D94B3 /* AuroraCodeGenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E359BB92170C0ED91B2520CF /* AuroraCodeGenTests.swift */; };
 		E4C8C398B3CC25CC6372E366 /* ElasticPopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9B0368BA21D62269ACFCFBA /* ElasticPopView.swift */; };
+		E5DB4E16B9FE1AE6AC8F6DDB /* ChromaticVelocityView.metal in Sources */ = {isa = PBXBuildFile; fileRef = DFD74B1E3D141B7F76EAD501 /* ChromaticVelocityView.metal */; };
 		E5F5D0FC0E619D38851A2187 /* RolodexQuantityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2726380BC40CDF96B36FD6CD /* RolodexQuantityView.swift */; };
 		E670764A0357C962BF155099 /* MetaballOrbitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EEE673CCC6108989B566198 /* MetaballOrbitView.swift */; };
+		E6C65703F7D2BA893C264234 /* CausticLensView.metal in Sources */ = {isa = PBXBuildFile; fileRef = 4547194AD2548699F3D6EEA0 /* CausticLensView.metal */; };
+		E97CCCAF960D7F66A656B739 /* HalftonePressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8E098F02A61DA347E619932 /* HalftonePressView.swift */; };
 		E9972DE6519FFE44582AF46E /* ClockPieWipeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70BB057ADD4B5D993ACF14BA /* ClockPieWipeView.swift */; };
 		E9BF7EC8E51341413D5970D3 /* PullToTriggerBowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB312229AEDC94F2DD50012A /* PullToTriggerBowView.swift */; };
 		EA0090516BC68EB871104D84 /* Chip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5229D0CDFACBA80BB2AAEEA8 /* Chip.swift */; };
 		EB57E6A089261DEB96D05B88 /* InkBleedToggleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16EAA347BC3F5A6E5143E84 /* InkBleedToggleView.swift */; };
+		EC2CF15AEE32580725824179 /* FoilTiltView.metal in Sources */ = {isa = PBXBuildFile; fileRef = 24B6FB797254F19CF3B37474 /* FoilTiltView.metal */; };
+		ED685D1282B647649D24271F /* TypewriterReturnTabsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49F896B3CD06F8063DFAC707 /* TypewriterReturnTabsView.swift */; };
 		EE310A25CC8AC676902D17AF /* PinchFocusDepthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D978EA3B7380013024868C2C /* PinchFocusDepthView.swift */; };
 		EE9412A8BB1533F2E1FF630D /* IrisShutterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 621B6409DE398398BC15BF22 /* IrisShutterView.swift */; };
 		EFFF5F61EB9F10E0E4999BC2 /* ConveyorLoadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 428E624D5E7CA6E0620F3083 /* ConveyorLoadView.swift */; };
@@ -258,6 +284,7 @@
 		F40AC091F5CFA870716EFE83 /* PopcornEmojiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11244778FE6BFD9984796F3E /* PopcornEmojiView.swift */; };
 		F43C54029C70DD8F2464A19B /* SwipeElasticRevealView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C81E7E68D81D34E851456A4B /* SwipeElasticRevealView.swift */; };
 		F48D73859B12257620FD6EDC /* RotateVinylScrubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB52AF9F87962635702D0F49 /* RotateVinylScrubView.swift */; };
+		F51DDD53901307A7C5BBB987 /* MagneticDotFieldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4736F16C60209C316E2A5DBC /* MagneticDotFieldView.swift */; };
 		F62A6B9EE9924D4DCDC89D82 /* DayNightToggleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EF7B6A75A2239F52C1212DC /* DayNightToggleView.swift */; };
 		F841F845E4ABFC1F42454C5E /* ScrubberWaveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F396DCAE73BF48FD8FF5110 /* ScrubberWaveView.swift */; };
 		FA878F90F4A002E73BFEAA54 /* GlassShatterSettleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82F73253939283D6444C5164 /* GlassShatterSettleView.swift */; };
@@ -287,7 +314,9 @@
 		03E43B8E7A3EEE217AECAE71 /* CopyVanishView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CopyVanishView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/CopyVanishView.swift; sourceTree = "<group>"; };
 		066F04F8C34E6BA806207CB2 /* StoreManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
 		06EE30DC21A52A26A6DA8BC2 /* FanDeckView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FanDeckView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/FanDeckView.swift; sourceTree = "<group>"; };
+		078F8EB2FDCF67045A047E56 /* JellyWobbleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = JellyWobbleView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/JellyWobbleView.swift; sourceTree = "<group>"; };
 		0804B204F0E72E433A500305 /* SwipeStampImpressView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SwipeStampImpressView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/SwipeStampImpressView.swift; sourceTree = "<group>"; };
+		08E92BDF1B56F57B16A5969C /* JellyWobbleView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = JellyWobbleView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/JellyWobbleView.metal; sourceTree = "<group>"; };
 		093CDD403EB3D71EF6C506E9 /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
 		0A6703F807C783B2C426ADB6 /* HexColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HexColor.swift; sourceTree = "<group>"; };
 		0AEA8E26388833F35CA554A4 /* PinchCollapseGridView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PinchCollapseGridView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/PinchCollapseGridView.swift; sourceTree = "<group>"; };
@@ -317,6 +346,9 @@
 		22BFCA166ADF8113BACE9DB6 /* VaultDialView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VaultDialView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/VaultDialView.swift; sourceTree = "<group>"; };
 		22DCD11BEBD9C32C40E4393C /* DragElasticGridWarpView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DragElasticGridWarpView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/DragElasticGridWarpView.swift; sourceTree = "<group>"; };
 		24133A0FDBE410C3CDD77866 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
+		249BBC358A73314402E7942E /* ChromaticVelocityView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ChromaticVelocityView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/ChromaticVelocityView.swift; sourceTree = "<group>"; };
+		24B6FB797254F19CF3B37474 /* FoilTiltView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = FoilTiltView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/FoilTiltView.metal; sourceTree = "<group>"; };
+		25951F00CC2C1C37B13AB5DC /* CrtPoweronView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CrtPoweronView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/CrtPoweronView.swift; sourceTree = "<group>"; };
 		25E0A8D421B3F17211AAD853 /* GenieWarpView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GenieWarpView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/GenieWarpView.swift; sourceTree = "<group>"; };
 		2726380BC40CDF96B36FD6CD /* RolodexQuantityView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RolodexQuantityView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/RolodexQuantityView.swift; sourceTree = "<group>"; };
 		27F16917E50A8D186325AF0C /* ReactionTrayRollView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ReactionTrayRollView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/ReactionTrayRollView.swift; sourceTree = "<group>"; };
@@ -331,9 +363,12 @@
 		31CC49938FE9D1F6FB5F551F /* ParticleAssembleLogoView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ParticleAssembleLogoView.swift; path = InspireCreativityApp/Animations/Catalog/Loaders/ParticleAssembleLogoView.swift; sourceTree = "<group>"; };
 		3288925741A3C7A6F3FB1B36 /* InkbleedSegmentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InkbleedSegmentView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/InkbleedSegmentView.swift; sourceTree = "<group>"; };
 		328CF05BD82582AB0DD93EDC /* ColumnSlatSlideView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ColumnSlatSlideView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/ColumnSlatSlideView.swift; sourceTree = "<group>"; };
+		3360C558EB7FC93513583F8F /* DevelopPixelsView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = DevelopPixelsView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/DevelopPixelsView.metal; sourceTree = "<group>"; };
+		343DE53FF962645126281CA9 /* MercuryPourView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MercuryPourView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/MercuryPourView.swift; sourceTree = "<group>"; };
 		3449310CC5054890B09E6758 /* ShatterReformView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShatterReformView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/ShatterReformView.swift; sourceTree = "<group>"; };
 		35357A91C39A0DBD0E0C90BC /* RotateGearTrainView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RotateGearTrainView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/RotateGearTrainView.swift; sourceTree = "<group>"; };
 		35452490A843B6C4597CBF56 /* HeroZoomScatterView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HeroZoomScatterView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/HeroZoomScatterView.swift; sourceTree = "<group>"; };
+		35DE3676A652D400305A48E0 /* WormPagerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WormPagerView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/WormPagerView.swift; sourceTree = "<group>"; };
 		361E22506EB084BF5ED5B712 /* MockURLProtocol.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MockURLProtocol.swift; sourceTree = "<group>"; };
 		36498B19B74C27B418AF59AA /* DragRopeBridgeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DragRopeBridgeView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/DragRopeBridgeView.swift; sourceTree = "<group>"; };
 		37A5D643CFF4A20D9F882776 /* CategoryGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryGrid.swift; sourceTree = "<group>"; };
@@ -353,9 +388,13 @@
 		425D0F805EB53AE9C7B46263 /* ConcertinaSidebarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConcertinaSidebarView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/ConcertinaSidebarView.swift; sourceTree = "<group>"; };
 		428E624D5E7CA6E0620F3083 /* ConveyorLoadView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConveyorLoadView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/ConveyorLoadView.swift; sourceTree = "<group>"; };
 		44AE7E63BD4563B3880AC146 /* WeightBreatheView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeightBreatheView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/WeightBreatheView.swift; sourceTree = "<group>"; };
+		4547194AD2548699F3D6EEA0 /* CausticLensView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = CausticLensView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/CausticLensView.metal; sourceTree = "<group>"; };
+		460ACA8577787CA9D59F21BE /* CrtPoweronView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = CrtPoweronView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/CrtPoweronView.metal; sourceTree = "<group>"; };
 		473305573637A34DB5274FAF /* VolumeFluidView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VolumeFluidView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/VolumeFluidView.swift; sourceTree = "<group>"; };
+		4736F16C60209C316E2A5DBC /* MagneticDotFieldView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticDotFieldView.swift; path = InspireCreativityApp/Animations/Catalog/Backgrounds/MagneticDotFieldView.swift; sourceTree = "<group>"; };
 		4777F0AE8ECB9092AB5E218C /* SlideToConfirmView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SlideToConfirmView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/SlideToConfirmView.swift; sourceTree = "<group>"; };
 		47F9550584FD300878A00C10 /* BrowseViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseViewModel.swift; sourceTree = "<group>"; };
+		49F896B3CD06F8063DFAC707 /* TypewriterReturnTabsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TypewriterReturnTabsView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/TypewriterReturnTabsView.swift; sourceTree = "<group>"; };
 		4A6B53321A1F907F352E2914 /* CubeTumbleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CubeTumbleView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/CubeTumbleView.swift; sourceTree = "<group>"; };
 		4B53609E3E4E910B3ACC13E6 /* ThermalPressView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ThermalPressView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/ThermalPressView.swift; sourceTree = "<group>"; };
 		4BBEA1F18DD88B0C7CE0BC19 /* GenieMagnifyDockView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GenieMagnifyDockView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/GenieMagnifyDockView.swift; sourceTree = "<group>"; };
@@ -366,6 +405,7 @@
 		4EF7B6A75A2239F52C1212DC /* DayNightToggleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DayNightToggleView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/DayNightToggleView.swift; sourceTree = "<group>"; };
 		5229D0CDFACBA80BB2AAEEA8 /* Chip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chip.swift; sourceTree = "<group>"; };
 		542300F6DC63037D47410903 /* BespokeCodeSamples.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BespokeCodeSamples.swift; path = InspireCreativityApp/Animations/Catalog/BespokeCodeSamples.swift; sourceTree = "<group>"; };
+		5603657E473B3122B0A41BB9 /* DevelopPixelsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DevelopPixelsView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/DevelopPixelsView.swift; sourceTree = "<group>"; };
 		56FE1D93A4E036DDEE1BABFB /* FavoritesRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesRepository.swift; sourceTree = "<group>"; };
 		58278D049C482CFBB9500259 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
 		5A08678D4CB7E492C32731A3 /* GearTrainView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GearTrainView.swift; path = InspireCreativityApp/Animations/Catalog/Loaders/GearTrainView.swift; sourceTree = "<group>"; };
@@ -374,6 +414,7 @@
 		5B9DB72EFDB33F32D48520C8 /* RotateClockRewindView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RotateClockRewindView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/RotateClockRewindView.swift; sourceTree = "<group>"; };
 		5CE02328DBEA11A067FC4127 /* GradientFlowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GradientFlowView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/GradientFlowView.swift; sourceTree = "<group>"; };
 		5E62DF6C009F124077079CF0 /* ElasticRopeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ElasticRopeView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/ElasticRopeView.swift; sourceTree = "<group>"; };
+		5EF6C9DD6E2EC0EDDBE14132 /* WaxMeltView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = WaxMeltView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/WaxMeltView.metal; sourceTree = "<group>"; };
 		5EF880BE97E4D575B2EE4D42 /* StretchPillSwitchView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StretchPillSwitchView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/StretchPillSwitchView.swift; sourceTree = "<group>"; };
 		5F1D6355086CAD815EBCC81E /* MetaballMergeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MetaballMergeView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/MetaballMergeView.swift; sourceTree = "<group>"; };
 		5F396DCAE73BF48FD8FF5110 /* ScrubberWaveView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ScrubberWaveView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/ScrubberWaveView.swift; sourceTree = "<group>"; };
@@ -397,6 +438,7 @@
 		6BF698437D7ECE7E004268BB /* MagneticGrabDrawerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticGrabDrawerView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/MagneticGrabDrawerView.swift; sourceTree = "<group>"; };
 		6C52936F7B6A641A15CDC64E /* DragReorderSpringView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DragReorderSpringView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/DragReorderSpringView.swift; sourceTree = "<group>"; };
 		6D2BC5440216EA187C44C459 /* RotateDialKnobView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RotateDialKnobView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/RotateDialKnobView.swift; sourceTree = "<group>"; };
+		6E3A5C9D08335A2EB93EE39A /* FoilTiltView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FoilTiltView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/FoilTiltView.swift; sourceTree = "<group>"; };
 		6E5351838AADEC6D82AFDF40 /* TypewriterCursorView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TypewriterCursorView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/TypewriterCursorView.swift; sourceTree = "<group>"; };
 		70024B1C7E6C67FB37C01B56 /* PaperPopupView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PaperPopupView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/PaperPopupView.swift; sourceTree = "<group>"; };
 		70BB057ADD4B5D993ACF14BA /* ClockPieWipeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ClockPieWipeView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/ClockPieWipeView.swift; sourceTree = "<group>"; };
@@ -404,6 +446,7 @@
 		75EEC94784C95555C61C2FAF /* AccordionStretchView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AccordionStretchView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/AccordionStretchView.swift; sourceTree = "<group>"; };
 		761AB642D6732D60B286B9AB /* StitchThreadView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StitchThreadView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/StitchThreadView.swift; sourceTree = "<group>"; };
 		772EB0C6915BB039D9E2468B /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		7749E3F05F3FDAEFE3B85632 /* ConicPrismView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConicPrismView.swift; path = InspireCreativityApp/Animations/Catalog/Backgrounds/ConicPrismView.swift; sourceTree = "<group>"; };
 		7A1C0DE5B0F1CA7E90AB0002 /* BrowseFilterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowseFilterTests.swift; sourceTree = "<group>"; };
 		7BA930BE33055FA9B0E480B7 /* KnurledStepperView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = KnurledStepperView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/KnurledStepperView.swift; sourceTree = "<group>"; };
 		7CFBBBA1CE70084528774427 /* FlipboardSegmentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FlipboardSegmentView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/FlipboardSegmentView.swift; sourceTree = "<group>"; };
@@ -416,6 +459,7 @@
 		82F73253939283D6444C5164 /* GlassShatterSettleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GlassShatterSettleView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/GlassShatterSettleView.swift; sourceTree = "<group>"; };
 		8629FCD4490840B09A8AF225 /* GlassShatterView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GlassShatterView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/GlassShatterView.swift; sourceTree = "<group>"; };
 		86BEA9C9375495718FF2CA70 /* DecodeMatrixView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DecodeMatrixView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/DecodeMatrixView.swift; sourceTree = "<group>"; };
+		87E0EA9BCD38E5501040B632 /* MercuryPourView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = MercuryPourView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/MercuryPourView.metal; sourceTree = "<group>"; };
 		8933304484F9F75442E694F8 /* MuteMorphView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MuteMorphView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/MuteMorphView.swift; sourceTree = "<group>"; };
 		893DC8EF73079679BF69D22C /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
 		8D7172619DB15AD08404D409 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -432,6 +476,7 @@
 		94F1835E23780B71740409B3 /* SymbolAssemblyView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SymbolAssemblyView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/SymbolAssemblyView.swift; sourceTree = "<group>"; };
 		959AF64BF0F8536C8885F891 /* PurchaseRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseRepository.swift; sourceTree = "<group>"; };
 		97EC98780C194E82CA688AC0 /* OtpCascadeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OtpCascadeView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/OtpCascadeView.swift; sourceTree = "<group>"; };
+		98639AAABE57B5BE20AED3B4 /* HalftonePressView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = HalftonePressView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/HalftonePressView.metal; sourceTree = "<group>"; };
 		9969A5201420094F6CD42E65 /* PeelAwayCardView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PeelAwayCardView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/PeelAwayCardView.swift; sourceTree = "<group>"; };
 		9B33E8615462F6DB3135BDE3 /* BespokeSeed.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BespokeSeed.swift; path = InspireCreativityApp/Repositories/Seed/BespokeSeed.swift; sourceTree = "<group>"; };
 		9BBF5AFD6DE398B6A7867709 /* LongPressMeltView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LongPressMeltView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/LongPressMeltView.swift; sourceTree = "<group>"; };
@@ -463,7 +508,9 @@
 		AEE5A84B9C4126E5E34AEE4F /* TearPerforationView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TearPerforationView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/TearPerforationView.swift; sourceTree = "<group>"; };
 		AEEE421B8B862C66D6DA3494 /* OrbitBadgeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OrbitBadgeView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/OrbitBadgeView.swift; sourceTree = "<group>"; };
 		AFD298655CB231D0297A971D /* CopyShredView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CopyShredView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/CopyShredView.swift; sourceTree = "<group>"; };
+		B143487F30301BC51C2AB6C0 /* ConstellationMeshView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConstellationMeshView.swift; path = InspireCreativityApp/Animations/Catalog/Backgrounds/ConstellationMeshView.swift; sourceTree = "<group>"; };
 		B188D7C18B119E6BB32C1E32 /* GravityBinTossView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GravityBinTossView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/GravityBinTossView.swift; sourceTree = "<group>"; };
+		B2BDFFF69662EEF984B11CDC /* CausticLensView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CausticLensView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/CausticLensView.swift; sourceTree = "<group>"; };
 		B43732A20CD3F2FA920290F7 /* JellyDragBlobView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = JellyDragBlobView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/JellyDragBlobView.swift; sourceTree = "<group>"; };
 		B51FB3883513339312E07D6C /* SpotlightSweepView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SpotlightSweepView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/SpotlightSweepView.swift; sourceTree = "<group>"; };
 		B5508EADC3186622FC645AED /* PinchOrigamiCraneView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PinchOrigamiCraneView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/PinchOrigamiCraneView.swift; sourceTree = "<group>"; };
@@ -487,8 +534,10 @@
 		C2F8869BAB9D239E1E309435 /* RubberBandSheetMorphView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RubberBandSheetMorphView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/RubberBandSheetMorphView.swift; sourceTree = "<group>"; };
 		C350DF496A8CD25907938432 /* FoldingOrigamiView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FoldingOrigamiView.swift; path = InspireCreativityApp/Animations/Catalog/Loaders/FoldingOrigamiView.swift; sourceTree = "<group>"; };
 		C4E5F456B1ED4232F2CB8290 /* FlipClockToggleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FlipClockToggleView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/FlipClockToggleView.swift; sourceTree = "<group>"; };
+		C53EA2D434A7B6D73BACA450 /* HexPulseView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HexPulseView.swift; path = InspireCreativityApp/Animations/Catalog/Backgrounds/HexPulseView.swift; sourceTree = "<group>"; };
 		C577F3ECCF2AB402F4D27883 /* FoldAccordionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FoldAccordionView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/FoldAccordionView.swift; sourceTree = "<group>"; };
 		C6B7915621E0B7956B01D868 /* AnimationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationRepository.swift; sourceTree = "<group>"; };
+		C6BE993E9E2334B96F14EC34 /* ContourTopoView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ContourTopoView.swift; path = InspireCreativityApp/Animations/Catalog/Backgrounds/ContourTopoView.swift; sourceTree = "<group>"; };
 		C7C555A264A71616BA4B00DA /* CrumpleDismissView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CrumpleDismissView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/CrumpleDismissView.swift; sourceTree = "<group>"; };
 		C81E7E68D81D34E851456A4B /* SwipeElasticRevealView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SwipeElasticRevealView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/SwipeElasticRevealView.swift; sourceTree = "<group>"; };
 		C991212D073F82BBD4BEBFCB /* MagneticSwapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticSwapView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/MagneticSwapView.swift; sourceTree = "<group>"; };
@@ -507,11 +556,14 @@
 		D719BD58DFD32E988D50E17F /* DominoSegmentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DominoSegmentView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/DominoSegmentView.swift; sourceTree = "<group>"; };
 		D801DA85F2E4716F8D1E5706 /* StampInkView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StampInkView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/StampInkView.swift; sourceTree = "<group>"; };
 		D80D4CAD87F963D2E48D4149 /* ConstellationHeroView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConstellationHeroView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/ConstellationHeroView.swift; sourceTree = "<group>"; };
+		D8E098F02A61DA347E619932 /* HalftonePressView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HalftonePressView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/HalftonePressView.swift; sourceTree = "<group>"; };
 		D93BA63D315F2243AD0F0332 /* DrawerCascadeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DrawerCascadeView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/DrawerCascadeView.swift; sourceTree = "<group>"; };
 		D978EA3B7380013024868C2C /* PinchFocusDepthView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PinchFocusDepthView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/PinchFocusDepthView.swift; sourceTree = "<group>"; };
+		DCD73FF851FB8A693CBDF7AC /* WaxMeltView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WaxMeltView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/WaxMeltView.swift; sourceTree = "<group>"; };
 		DD7BC8965FC5EABE5EC84610 /* CodeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeSheet.swift; sourceTree = "<group>"; };
 		DF5C1CC8D1BEE7464719BBD2 /* ZipperUnzipTransitionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ZipperUnzipTransitionView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/ZipperUnzipTransitionView.swift; sourceTree = "<group>"; };
 		DFA37AC81384F066B478D2A3 /* PagecurlDrawerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PagecurlDrawerView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/PagecurlDrawerView.swift; sourceTree = "<group>"; };
+		DFD74B1E3D141B7F76EAD501 /* ChromaticVelocityView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = ChromaticVelocityView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/ChromaticVelocityView.metal; sourceTree = "<group>"; };
 		E0A26A73E32CA21847D50130 /* InspireCreativityAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = InspireCreativityAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E196A223AFD846500215A007 /* PermissionBellView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PermissionBellView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/PermissionBellView.swift; sourceTree = "<group>"; };
 		E2C5D267C1B8307996EC393C /* ParallaxDeckTabsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ParallaxDeckTabsView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/ParallaxDeckTabsView.swift; sourceTree = "<group>"; };
@@ -521,6 +573,7 @@
 		E67967BA8F1206AA53E0A702 /* FuseSparkView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FuseSparkView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/FuseSparkView.swift; sourceTree = "<group>"; };
 		E872C6A233E789C02029A285 /* RatingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RatingView.swift; sourceTree = "<group>"; };
 		E9B0368BA21D62269ACFCFBA /* ElasticPopView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ElasticPopView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/ElasticPopView.swift; sourceTree = "<group>"; };
+		E9E105C4FB47E3D21047D80C /* TruchetFlowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TruchetFlowView.swift; path = InspireCreativityApp/Animations/Catalog/Backgrounds/TruchetFlowView.swift; sourceTree = "<group>"; };
 		E9F2277EA6DDBB3FA9DE32AD /* FlipBookView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FlipBookView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/FlipBookView.swift; sourceTree = "<group>"; };
 		EA8184AB99520780EA38DE62 /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
 		EBA2741E26DB5539EAD51C34 /* AuthStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthStoreTests.swift; sourceTree = "<group>"; };
@@ -530,6 +583,7 @@
 		EDDEF8090EB09A91E353E021 /* MoodMorphRatingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MoodMorphRatingView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/MoodMorphRatingView.swift; sourceTree = "<group>"; };
 		EDE82FCB6FB76477F26C6773 /* SwipeStackShuffleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SwipeStackShuffleView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/SwipeStackShuffleView.swift; sourceTree = "<group>"; };
 		EF0182DF85A7CD0319333F24 /* InspireCreativityApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = InspireCreativityApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EFD6E69984D83F0E1C0CE896 /* VoronoiFractureView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VoronoiFractureView.swift; path = InspireCreativityApp/Animations/Catalog/Backgrounds/VoronoiFractureView.swift; sourceTree = "<group>"; };
 		F1A8C3C91116B11AA8509692 /* MagneticRadioSnapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticRadioSnapView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/MagneticRadioSnapView.swift; sourceTree = "<group>"; };
 		F26BB3F00AF051346ED3B6F2 /* VortexSpiralView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VortexSpiralView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/VortexSpiralView.swift; sourceTree = "<group>"; };
 		F3279104233385E941BB2B81 /* HandwritingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HandwritingView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/HandwritingView.swift; sourceTree = "<group>"; };
@@ -647,6 +701,24 @@
 			children = (
 				AC940BBE4EFB42C2419D0663 /* HeatMirageView.swift */,
 				AAF1F67C5AC8D4841F1166F2 /* HeatMirage.metal */,
+				B2BDFFF69662EEF984B11CDC /* CausticLensView.swift */,
+				4547194AD2548699F3D6EEA0 /* CausticLensView.metal */,
+				249BBC358A73314402E7942E /* ChromaticVelocityView.swift */,
+				DFD74B1E3D141B7F76EAD501 /* ChromaticVelocityView.metal */,
+				25951F00CC2C1C37B13AB5DC /* CrtPoweronView.swift */,
+				460ACA8577787CA9D59F21BE /* CrtPoweronView.metal */,
+				5603657E473B3122B0A41BB9 /* DevelopPixelsView.swift */,
+				3360C558EB7FC93513583F8F /* DevelopPixelsView.metal */,
+				6E3A5C9D08335A2EB93EE39A /* FoilTiltView.swift */,
+				24B6FB797254F19CF3B37474 /* FoilTiltView.metal */,
+				D8E098F02A61DA347E619932 /* HalftonePressView.swift */,
+				98639AAABE57B5BE20AED3B4 /* HalftonePressView.metal */,
+				078F8EB2FDCF67045A047E56 /* JellyWobbleView.swift */,
+				08E92BDF1B56F57B16A5969C /* JellyWobbleView.metal */,
+				343DE53FF962645126281CA9 /* MercuryPourView.swift */,
+				87E0EA9BCD38E5501040B632 /* MercuryPourView.metal */,
+				DCD73FF851FB8A693CBDF7AC /* WaxMeltView.swift */,
+				5EF6C9DD6E2EC0EDDBE14132 /* WaxMeltView.metal */,
 			);
 			name = MetalShaders;
 			sourceTree = SOURCE_ROOT;
@@ -738,6 +810,20 @@
 			);
 			path = InspireCreativityApp;
 			sourceTree = "<group>";
+		};
+		5BC3E19DBFB9563FA772905F /* Backgrounds */ = {
+			isa = PBXGroup;
+			children = (
+				7749E3F05F3FDAEFE3B85632 /* ConicPrismView.swift */,
+				B143487F30301BC51C2AB6C0 /* ConstellationMeshView.swift */,
+				C6BE993E9E2334B96F14EC34 /* ContourTopoView.swift */,
+				C53EA2D434A7B6D73BACA450 /* HexPulseView.swift */,
+				4736F16C60209C316E2A5DBC /* MagneticDotFieldView.swift */,
+				E9E105C4FB47E3D21047D80C /* TruchetFlowView.swift */,
+				EFD6E69984D83F0E1C0CE896 /* VoronoiFractureView.swift */,
+			);
+			name = Backgrounds;
+			sourceTree = SOURCE_ROOT;
 		};
 		5C2C6697E75EB176D84DB43D /* Auth */ = {
 			isa = PBXGroup;
@@ -858,6 +944,7 @@
 				DFA37AC81384F066B478D2A3 /* PagecurlDrawerView.swift */,
 				E2C5D267C1B8307996EC393C /* ParallaxDeckTabsView.swift */,
 				03511C3E866077DD8D5D75DB /* RollingBeadTabsView.swift */,
+				49F896B3CD06F8063DFAC707 /* TypewriterReturnTabsView.swift */,
 			);
 			name = Navigation;
 			sourceTree = SOURCE_ROOT;
@@ -1005,6 +1092,7 @@
 				E196A223AFD846500215A007 /* PermissionBellView.swift */,
 				3F895F98C4EA1E4634B15D34 /* RadarLockView.swift */,
 				94F1835E23780B71740409B3 /* SymbolAssemblyView.swift */,
+				35DE3676A652D400305A48E0 /* WormPagerView.swift */,
 			);
 			name = Onboarding;
 			sourceTree = SOURCE_ROOT;
@@ -1104,6 +1192,7 @@
 				7D3B4FCA439A0682A62C10AD /* Loaders */,
 				8A23E9FAAC6E1893AC9DB884 /* Navigation */,
 				B14E2F7E5CAE0E8F994CDC5E /* Onboarding */,
+				5BC3E19DBFB9563FA772905F /* Backgrounds */,
 			);
 			name = Catalog;
 			sourceTree = SOURCE_ROOT;
@@ -1457,6 +1546,33 @@
 				2A3AE5E3E497B9E555CCEFC7 /* PermissionBellView.swift in Sources */,
 				A96826B1B269B90704D3F6AC /* RadarLockView.swift in Sources */,
 				590C44EDAD60C8B0BDB9B89B /* SymbolAssemblyView.swift in Sources */,
+				ED685D1282B647649D24271F /* TypewriterReturnTabsView.swift in Sources */,
+				48998CD2785ADBD538C142D4 /* WormPagerView.swift in Sources */,
+				D70083428BBE28C83B71DC43 /* CausticLensView.swift in Sources */,
+				E6C65703F7D2BA893C264234 /* CausticLensView.metal in Sources */,
+				457F3B1B239B80AF88BC534C /* ChromaticVelocityView.swift in Sources */,
+				E5DB4E16B9FE1AE6AC8F6DDB /* ChromaticVelocityView.metal in Sources */,
+				602A510339F101A59C01053E /* CrtPoweronView.swift in Sources */,
+				7A53B8AB13B29BD3DE09227B /* CrtPoweronView.metal in Sources */,
+				D4E3719C6AB1ABD7AB28192B /* DevelopPixelsView.swift in Sources */,
+				B13AF2D5E0B16545966CE878 /* DevelopPixelsView.metal in Sources */,
+				5A386B4689DDB5038A340694 /* FoilTiltView.swift in Sources */,
+				EC2CF15AEE32580725824179 /* FoilTiltView.metal in Sources */,
+				E97CCCAF960D7F66A656B739 /* HalftonePressView.swift in Sources */,
+				4650171E1102A1BEBFD02547 /* HalftonePressView.metal in Sources */,
+				4C9A9E58506A3635F9658F1C /* JellyWobbleView.swift in Sources */,
+				39502FCEB7A5077B4642CEA7 /* JellyWobbleView.metal in Sources */,
+				153F6D4214F633A67C5752B4 /* MercuryPourView.swift in Sources */,
+				D682580F27E8274732F30AA0 /* MercuryPourView.metal in Sources */,
+				C339510E4EDC69793B54B832 /* WaxMeltView.swift in Sources */,
+				3492FD3ACC8BE39222F69FDC /* WaxMeltView.metal in Sources */,
+				8BED3B52BDDA3AF274E1DD7F /* ConicPrismView.swift in Sources */,
+				9B86ADF128F0716925127D8A /* ConstellationMeshView.swift in Sources */,
+				1FDD1D71A1AB1596F40BC1A3 /* ContourTopoView.swift in Sources */,
+				AE025A3FBF7C5EF5DB11586B /* HexPulseView.swift in Sources */,
+				F51DDD53901307A7C5BBB987 /* MagneticDotFieldView.swift in Sources */,
+				C38B30AA08EF872413189931 /* TruchetFlowView.swift in Sources */,
+				DB99ECA3393E49B6397CF879 /* VoronoiFractureView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

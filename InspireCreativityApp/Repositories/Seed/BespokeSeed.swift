@@ -849,6 +849,10 @@ enum BespokeSeed {
              category: .backgrounds, difficulty: .advanced, iosVersion: "17+",
              tintHex: "#0a0a0c",
              description: "A Canvas renders a coarse field of ~24 Voronoi cells with crisp seams; the cell seeds slowly orbit so the whole stained-glass tessellation creeps and re-tiles while each cell cycles hue, and a tap fractures the nearest cell into a brief splinter-burst before it heals back into the mosaic."),
+        make(id: "bg-depth-starfield", name: "Depth Starfield",
+             category: .backgrounds, difficulty: .intermediate, iosVersion: "17+",
+             tintHex: "#0a0a0c",
+             description: "Three parallax layers of point-stars (far/mid/near, each with its own size, brightness and twinkle) scroll opposite to a drag with depth-weighted speed so near stars streak past and far stars barely move; with no input the field auto-drifts forward as a slow warp toward a vanishing point."),
 // BESPOKE-SEED-INSERT (Tools/integrate_batch.py appends above this line)
     ]
 

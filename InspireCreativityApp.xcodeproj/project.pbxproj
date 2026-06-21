@@ -74,6 +74,7 @@
 		415FFD01ED4ECACF7833BD17 /* VaultDialView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22BFCA166ADF8113BACE9DB6 /* VaultDialView.swift */; };
 		416CC4CF2E523B4C36C0F732 /* SpotlightSweepView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B51FB3883513339312E07D6C /* SpotlightSweepView.swift */; };
 		41854E2352A6527F0C84FD35 /* SandPourView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F76047B384240EC245DAFF19 /* SandPourView.swift */; };
+		418A244F0B6956364504FEB2 /* DepthStarfieldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99D4970B4184F960B9778F17 /* DepthStarfieldView.swift */; };
 		427D018BDD1C619262F4249A /* ShatterReformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3449310CC5054890B09E6758 /* ShatterReformView.swift */; };
 		43A8D8F7A396C908F18C13B4 /* RibbonDropBookmarkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41838756A1D3F69CE82A834B /* RibbonDropBookmarkView.swift */; };
 		4431CAFA5D4C67684A73BC9D /* AuroraCodeGen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C5F461F15679801F8B87BA1 /* AuroraCodeGen.swift */; };
@@ -478,6 +479,7 @@
 		97EC98780C194E82CA688AC0 /* OtpCascadeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OtpCascadeView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/OtpCascadeView.swift; sourceTree = "<group>"; };
 		98639AAABE57B5BE20AED3B4 /* HalftonePressView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = HalftonePressView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/HalftonePressView.metal; sourceTree = "<group>"; };
 		9969A5201420094F6CD42E65 /* PeelAwayCardView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PeelAwayCardView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/PeelAwayCardView.swift; sourceTree = "<group>"; };
+		99D4970B4184F960B9778F17 /* DepthStarfieldView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DepthStarfieldView.swift; path = InspireCreativityApp/Animations/Catalog/Backgrounds/DepthStarfieldView.swift; sourceTree = "<group>"; };
 		9B33E8615462F6DB3135BDE3 /* BespokeSeed.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BespokeSeed.swift; path = InspireCreativityApp/Repositories/Seed/BespokeSeed.swift; sourceTree = "<group>"; };
 		9BBF5AFD6DE398B6A7867709 /* LongPressMeltView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LongPressMeltView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/LongPressMeltView.swift; sourceTree = "<group>"; };
 		9CAA33CAEBEF39553607CEB9 /* CodeSamples.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeSamples.swift; sourceTree = "<group>"; };
@@ -821,6 +823,7 @@
 				4736F16C60209C316E2A5DBC /* MagneticDotFieldView.swift */,
 				E9E105C4FB47E3D21047D80C /* TruchetFlowView.swift */,
 				EFD6E69984D83F0E1C0CE896 /* VoronoiFractureView.swift */,
+				99D4970B4184F960B9778F17 /* DepthStarfieldView.swift */,
 			);
 			name = Backgrounds;
 			sourceTree = SOURCE_ROOT;
@@ -1573,6 +1576,7 @@
 				F51DDD53901307A7C5BBB987 /* MagneticDotFieldView.swift in Sources */,
 				C38B30AA08EF872413189931 /* TruchetFlowView.swift in Sources */,
 				DB99ECA3393E49B6397CF879 /* VoronoiFractureView.swift in Sources */,
+				418A244F0B6956364504FEB2 /* DepthStarfieldView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

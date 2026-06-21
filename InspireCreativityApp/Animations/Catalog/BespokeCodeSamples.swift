@@ -630,6 +630,380 @@ struct ContourTopoView: View {
     }
 }
 """###,
+        "bg-depth-starfield": ###"""
+import SwiftUI
+
+// MARK: - Depth Starfield
+// Three parallax layers (far / mid / near) of point-stars drawn in a Canvas.
+// A TimelineView(.animation) advances a forward "warp" so stars stream outward
+// from a vanishing point and twinkle via a per-star sine. A DragGesture offsets
+// each layer by its depth weight (near streaks, far barely moves); a flick is
+// folded into the TIME model (not SwiftUI animation, which Canvas can't
+// interpolate) as an exponentially-decaying velocity term so a quick release
+// sends near stars streaking like a hyperspace nudge before easing back to drift.
+
+struct DepthStarfieldView: View {
+    var demo: Bool = false
+
+    // Persisted star arrays (built once per view identity — never reshuffled in body).
+    @State private var layers: [DepthStarfieldView_StarLayer] = DepthStarfieldView.makeLayers()
+
+    // Live drag state.
+    @State private var dragOffset: CGSize = .zero
+
+    // Flick decay model — pure time-domain, read by the Canvas each frame.
+    @State private var releaseOffset: CGSize = .zero
+    @State private var releaseVelocity: CGSize = .zero
+    @State private var releaseTime: Double = -1_000
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            TimelineView(.animation) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                Canvas { context, canvasSize in
+                    drawField(context: context, size: canvasSize, time: t)
+                }
+                .background(Self.spaceGradient)
+            }
+            .frame(width: size.width, height: size.height)
+            .contentShape(Rectangle())
+            // Always attach the gesture; in demo mode mask it off so onChanged/onEnded
+            // never fire and baseOffset(time:) takes the self-driving demo branch.
+            .gesture(starDrag, including: demo ? .subviews : .all)
+            .clipped()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Gesture
+
+    private var starDrag: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                dragOffset = value.translation
+            }
+            .onEnded { value in
+                // Velocity ~ predictedEnd - current, captured as the flick impulse.
+                let dx = value.predictedEndTranslation.width - value.translation.width
+                let dy = value.predictedEndTranslation.height - value.translation.height
+                releaseOffset = value.translation
+                releaseVelocity = CGSize(width: dx, height: dy)
+                releaseTime = Date().timeIntervalSinceReferenceDate
+                dragOffset = .zero
+            }
+    }
+
+    // MARK: Effective offset (drag + decaying flick + idle synthetic motion)
+
+    /// The pointer-space offset applied at depth-weight 1.0, before per-layer scaling.
+    private func baseOffset(time: Double) -> CGSize {
+        if demo {
+            return demoOffset(time: time)
+        }
+        // Active drag dominates.
+        if dragOffset != .zero {
+            return dragOffset
+        }
+        // Decaying flick: offset(t) = releaseOffset*ease + velocity*tau*exp(-dt/tau)
+        let dt = time - releaseTime
+        if dt < 0 || dt > 6 { return .zero }
+        let tau: Double = 0.42
+        let decay = exp(-dt / tau)
+        let settle = exp(-dt / (tau * 1.6)) // releaseOffset eases home a touch slower
+        let vx = Double(releaseVelocity.width) * tau * decay
+        let vy = Double(releaseVelocity.height) * tau * decay
+        let ox = Double(releaseOffset.width) * settle
+        let oy = Double(releaseOffset.height) * settle
+        return CGSize(width: vx + ox, height: vy + oy)
+    }
+
+    /// In demo mode, synthesize a flick every ~3.2s that exercises real parallax:
+    /// a sharp push that decays, so near stars visibly streak and far stars barely move.
+    private func demoOffset(time: Double) -> CGSize {
+        let period: Double = 3.2
+        let phase = time.truncatingRemainder(dividingBy: period)
+        // Direction rotates slowly between pulses so it doesn't look mechanical.
+        let dirAngle = (time / period) * 1.7
+        let dirX = cos(dirAngle)
+        let dirY = sin(dirAngle * 0.8)
+        // Impulse fires near the start of each period, then decays.
+        let tau: Double = 0.5
+        let impulse = exp(-phase / tau)
+        let strength: Double = 150
+        return CGSize(width: dirX * strength * impulse,
+                      height: dirY * strength * impulse)
+    }
+
+    // MARK: Drawing
+
+    private func drawField(context: GraphicsContext, size: CGSize, time: Double) {
+        let w = size.width
+        let h = size.height
+        guard w > 1, h > 1 else { return }
+
+        let center = CGPoint(x: w / 2, y: h / 2)
+        let maxRadius = sqrt(w * w + h * h) / 2 * 1.05
+        let unit = min(w, h)
+
+        let offset = baseOffset(time: time)
+
+        // Subtle vanishing-point glow.
+        drawCoreGlow(context: context, center: center, unit: unit)
+
+        for layer in layers {
+            drawLayer(context: context,
+                      layer: layer,
+                      center: center,
+                      maxRadius: maxRadius,
+                      unit: unit,
+                      offset: offset,
+                      time: time)
+        }
+    }
+
+    private func drawCoreGlow(context: GraphicsContext, center: CGPoint, unit: CGFloat) {
+        let r = unit * 0.32
+        let rect = CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
+        let glow = GraphicsContext.Shading.radialGradient(
+            Gradient(colors: [
+                Color(red: 0.30, green: 0.34, blue: 0.55).opacity(0.30),
+                Color(red: 0.10, green: 0.12, blue: 0.22).opacity(0.0)
+            ]),
+            center: center,
+            startRadius: 0,
+            endRadius: r
+        )
+        context.fill(Path(ellipseIn: rect), with: glow)
+    }
+
+    private func drawLayer(context: GraphicsContext,
+                           layer: DepthStarfieldView_StarLayer,
+                           center: CGPoint,
+                           maxRadius: CGFloat,
+                           unit: CGFloat,
+                           offset: CGSize,
+                           time: Double) {
+
+        // Per-layer parallax-weighted pointer offset (in points).
+        let depth = layer.parallax
+        let px = CGFloat(offset.width) * depth * 0.35
+        let py = CGFloat(offset.height) * depth * 0.35
+
+        // Pointer offset speed also drives streak length on the near layers.
+        let offsetSpeedMag = hypot(Double(offset.width), Double(offset.height)) * Double(depth)
+
+        let warp = time * layer.warpSpeed
+        let dotSize = unit * layer.sizeFactor
+
+        for star in layer.stars {
+            // Radial position cycles 0->1 outward from the vanishing point.
+            let r = fract(star.r0 + CGFloat(warp))
+
+            // Boundary fade: ramp in near the core, ramp out near the edge.
+            let fadeIn = smooth01(r / 0.14)
+            let fadeOut = 1 - smooth01((r - 0.82) / 0.18)
+            let edgeFade = fadeIn * fadeOut
+            if edgeFade <= 0.01 { continue }
+
+            // Stars accelerate outward (perspective): position eased toward edge.
+            let eased = r * r
+            let radius = eased * maxRadius
+
+            let pos = CGPoint(
+                x: center.x + star.dirX * radius + px,
+                y: center.y + star.dirY * radius + py
+            )
+
+            // Twinkle: per-star sine on its own phase.
+            let tw = 0.55 + 0.45 * sin(time * layer.twinkleRate + star.phase)
+            let baseAlpha = star.brightness * layer.baseAlpha
+            let alpha = baseAlpha * Double(edgeFade) * tw
+
+            // Apparent size grows as the star nears the edge.
+            let brightnessF = CGFloat(star.brightness)
+            let growth = 0.45 + 0.95 * r
+            let bright = 0.7 + brightnessF * 0.6
+            let pointSize = dotSize * growth * bright
+
+            // Streak length: warp-radial motion + flick offset magnitude on near layers.
+            let radialStreak = Double(r) * layer.warpStreak
+            let streakLen = CGFloat(radialStreak + offsetSpeedMag * Double(layer.streakGain)) * unit * 0.012
+
+            drawStar(context: context,
+                     at: pos,
+                     center: center,
+                     pointSize: pointSize,
+                     streakLen: streakLen,
+                     color: layer.color,
+                     alpha: alpha)
+        }
+    }
+
+    private func drawStar(context: GraphicsContext,
+                          at pos: CGPoint,
+                          center: CGPoint,
+                          pointSize: CGFloat,
+                          streakLen: CGFloat,
+                          color: Color,
+                          alpha: Double) {
+
+        let a = min(1.0, max(0.0, alpha))
+        let shading = GraphicsContext.Shading.color(color.opacity(a))
+
+        if streakLen > pointSize * 0.9 {
+            // Hyperspace streak: a capsule pointing radially away from the core.
+            let dx = pos.x - center.x
+            let dy = pos.y - center.y
+            let dist = max(hypot(dx, dy), 0.0001)
+            let nx = dx / dist
+            let ny = dy / dist
+            let half = min(streakLen, pointSize * 14) * 0.5
+            let tail = CGPoint(x: pos.x - nx * half, y: pos.y - ny * half)
+            let head = CGPoint(x: pos.x + nx * half, y: pos.y + ny * half)
+            var path = Path()
+            path.move(to: tail)
+            path.addLine(to: head)
+            context.stroke(path,
+                           with: shading,
+                           style: StrokeStyle(lineWidth: pointSize, lineCap: .round))
+        } else {
+            let rect = CGRect(x: pos.x - pointSize / 2,
+                              y: pos.y - pointSize / 2,
+                              width: pointSize,
+                              height: pointSize)
+            context.fill(Path(ellipseIn: rect), with: shading)
+        }
+    }
+
+    // MARK: Helpers
+
+    private func fract(_ v: CGFloat) -> CGFloat {
+        v - floor(v)
+    }
+
+    private func smooth01(_ x: CGFloat) -> CGFloat {
+        let c = min(1, max(0, x))
+        return c * c * (3 - 2 * c)
+    }
+
+    static let spaceGradient = LinearGradient(
+        colors: [
+            Color(red: 0.020, green: 0.024, blue: 0.055),
+            Color(red: 0.039, green: 0.039, blue: 0.047),
+            Color(red: 0.010, green: 0.012, blue: 0.030)
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+    )
+
+    // MARK: DepthStarfieldView_Star generation (deterministic, built once)
+
+    private static func makeLayers() -> [DepthStarfieldView_StarLayer] {
+        var rng = DepthStarfieldView_SeededGenerator(seed: 0xC0FFEE_5EED)
+        let far = DepthStarfieldView_StarLayer(
+            stars: makeStars(count: 130, brightnessRange: 0.20...0.55, rng: &rng),
+            parallax: 0.18,
+            warpSpeed: 0.014,
+            sizeFactor: 0.0085,
+            baseAlpha: 0.70,
+            twinkleRate: 1.6,
+            warpStreak: 0.0,
+            streakGain: 0.0,
+            color: Color(red: 0.78, green: 0.82, blue: 1.00)
+        )
+        let mid = DepthStarfieldView_StarLayer(
+            stars: makeStars(count: 100, brightnessRange: 0.45...0.85, rng: &rng),
+            parallax: 0.55,
+            warpSpeed: 0.030,
+            sizeFactor: 0.0140,
+            baseAlpha: 0.85,
+            twinkleRate: 2.4,
+            warpStreak: 0.9,
+            streakGain: 0.55,
+            color: Color(red: 0.88, green: 0.90, blue: 1.00)
+        )
+        let near = DepthStarfieldView_StarLayer(
+            stars: makeStars(count: 70, brightnessRange: 0.65...1.00, rng: &rng),
+            parallax: 1.0,
+            warpSpeed: 0.058,
+            sizeFactor: 0.0210,
+            baseAlpha: 1.0,
+            twinkleRate: 3.2,
+            warpStreak: 2.2,
+            streakGain: 1.4,
+            color: Color(red: 1.00, green: 0.97, blue: 0.92)
+        )
+        return [far, mid, near]
+    }
+
+    private static func makeStars(count: Int,
+                                  brightnessRange: ClosedRange<Double>,
+                                  rng: inout DepthStarfieldView_SeededGenerator) -> [DepthStarfieldView_Star] {
+        var out: [DepthStarfieldView_Star] = []
+        out.reserveCapacity(count)
+        for _ in 0..<count {
+            let angle = rng.nextUnit() * 2 * Double.pi
+            // Bias r0 so stars are spread along the depth axis.
+            let r0 = CGFloat(rng.nextUnit())
+            let phase = rng.nextUnit() * 2 * Double.pi
+            let bSpan = brightnessRange.upperBound - brightnessRange.lowerBound
+            let brightness = brightnessRange.lowerBound + rng.nextUnit() * bSpan
+            out.append(DepthStarfieldView_Star(
+                dirX: CGFloat(cos(angle)),
+                dirY: CGFloat(sin(angle)),
+                r0: r0,
+                phase: phase,
+                brightness: brightness
+            ))
+        }
+        return out
+    }
+}
+
+// MARK: - Models
+
+private struct DepthStarfieldView_Star {
+    let dirX: CGFloat      // unit direction from vanishing point
+    let dirY: CGFloat
+    let r0: CGFloat        // base radial position [0,1)
+    let phase: Double      // twinkle phase
+    let brightness: Double // [0,1]
+}
+
+private struct DepthStarfieldView_StarLayer {
+    let stars: [DepthStarfieldView_Star]
+    let parallax: CGFloat   // drag depth weight
+    let warpSpeed: Double   // forward stream speed
+    let sizeFactor: CGFloat // dot size relative to min(w,h)
+    let baseAlpha: Double
+    let twinkleRate: Double
+    let warpStreak: Double  // streak from forward warp
+    let streakGain: Double  // streak gain from drag/flick offset
+    let color: Color
+}
+
+// MARK: - Deterministic RNG (LCG) — never produces a re-shuffle on re-render.
+
+private struct DepthStarfieldView_SeededGenerator {
+    private var state: UInt64
+    init(seed: UInt64) { state = seed == 0 ? 0x9E3779B97F4A7C15 : seed }
+
+    mutating func next() -> UInt64 {
+        // SplitMix64
+        state &+= 0x9E3779B97F4A7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        return z ^ (z >> 31)
+    }
+
+    /// Uniform Double in [0,1).
+    mutating func nextUnit() -> Double {
+        Double(next() >> 11) * (1.0 / 9007199254740992.0)
+    }
+}
+"""###,
         "bg-hex-pulse": ###"""
 import SwiftUI
 
@@ -44429,117 +44803,6 @@ private struct CausticLensView_LensGrid: Shape {
         return p
     }
 }
-
-
-// ---- Companion Metal shader (CausticLensView.metal) ----
-// Add this as a .metal file in your target:
-/*
-#include <metal_stdlib>
-#include <SwiftUI/SwiftUI_Metal.h>
-
-using namespace metal;
-
-// Caustic Glass Lens — single-pass refraction + caustics + chrome rim.
-//
-// Implicit args (position, layer) come first; then the Swift-supplied uniforms
-// in declaration order: center, radius, time, size.
-//
-// Inside the lens radius we sample the backdrop *inward* (magnify), add a slight
-// edge-refraction bend, paint swimming underwater caustic light bands, and draw
-// a specular chrome rim. Outside, we return the layer unchanged so the rest of
-// the content stays crisp (and the tile is never blank).
-
-[[ stitchable ]]
-half4 causticLens(float2 pos,
-                  SwiftUI::Layer layer,
-                  float2 center,
-                  float radius,
-                  float time,
-                  float2 size) {
-
-    float2 d = pos - center;
-    float dist = length(d);
-
-    // Outside the glass: passthrough.
-    if (dist >= radius) {
-        return layer.sample(pos);
-    }
-
-    // Normalized radius 0 (center) .. 1 (rim).
-    float r = dist / max(radius, 1.0);
-    float2 dir = (dist > 0.0001) ? (d / dist) : float2(0.0, 0.0);
-
-    // ---- Refraction / magnification -------------------------------------
-    // Base magnification: sample inward so the center enlarges. mag < 1.
-    float baseMag = 0.62;
-    // Edge bend: a glass droplet refracts harder near the rim. Push the sample
-    // coordinate outward as r->1 with a smooth lens profile.
-    float bend = pow(r, 3.0) * 0.34;
-    float mag = baseMag + bend;
-
-    float2 src = center + d * mag;
-
-    // Animated ripple in the sampling so the refracted image subtly breathes.
-    float ripple = sin(r * 18.0 - time * 2.2) * (1.0 - r) * 2.4;
-    src += dir * ripple;
-
-    // Keep the sample coordinate on-screen (avoid transparent reads at edges).
-    src = clamp(src, float2(0.5, 0.5), size - float2(0.5, 0.5));
-
-    half4 refracted = layer.sample(src);
-
-    // ---- Underwater caustic light bands ---------------------------------
-    // Two superimposed sine fields, advected over time, raised to a sharp power
-    // to read as thin focused light filaments swimming inside the lens.
-    float2 uv = (pos - center) / max(radius, 1.0); // -1..1 within lens
-    float t = time;
-
-    float w1 = sin(uv.x * 6.0 + t * 1.3) + sin(uv.y * 5.0 - t * 1.1);
-    float w2 = sin((uv.x + uv.y) * 4.5 + t * 0.9)
-             + sin((uv.x - uv.y) * 5.5 - t * 1.5);
-    float field = (w1 + w2) * 0.25 + 0.5;     // ~0..1
-    field = clamp(field, 0.0, 1.0);
-
-    // Sharpen into bands.
-    float bands = pow(field, 3.0);
-    // Fade caustics toward the rim so they pool in the interior.
-    float interior = smoothstep(1.0, 0.25, r);
-    float caustic = bands * interior;
-
-    // Cool-white caustic tint.
-    half3 causticColor = half3(0.72h, 0.92h, 1.0h);
-    half3 lit = refracted.rgb + causticColor * half(caustic) * 0.85h;
-
-    // Faint cyan body tint so the glass reads as colored water.
-    half3 glassTint = half3(0.55h, 0.85h, 0.95h);
-    lit = mix(lit, lit * glassTint, half(0.18 * interior));
-
-    // ---- Chrome / specular rim ------------------------------------------
-    // Bright thin ring at the edge of the lens.
-    float rimWidth = 0.10;
-    float rim = smoothstep(1.0 - rimWidth, 1.0, r) * smoothstep(1.02, 0.98, r);
-    half3 rimColor = half3(1.0h, 0.98h, 0.92h);
-    lit += rimColor * half(rim) * 1.2h;
-
-    // Directional top-left specular hotspot on the dome.
-    float2 lightDir = normalize(float2(-0.6, -0.8));
-    float spec = clamp(dot(dir, lightDir), 0.0, 1.0);
-    spec = pow(spec, 4.0) * smoothstep(0.45, 1.0, r); // strongest near rim
-    lit += rimColor * half(spec) * 0.6h;
-
-    // Soft inner shadow opposite the light for dome volume.
-    float shade = clamp(dot(dir, -lightDir), 0.0, 1.0);
-    shade = pow(shade, 2.0) * smoothstep(0.5, 1.0, r) * 0.25;
-    lit *= (1.0h - half(shade));
-
-    // Antialias the lens boundary.
-    float edge = smoothstep(radius, radius - 1.5, dist);
-    half3 outside = layer.sample(pos).rgb;
-    half3 finalRGB = mix(outside, lit, half(edge));
-
-    return half4(finalRGB, 1.0h);
-}
-*/
 """###,
         "mtl-chromatic-velocity": ###"""
 import SwiftUI
@@ -44760,38 +45023,6 @@ private struct ChromaticVelocityView_ChromaticSplit: ViewModifier {
         )
     }
 }
-
-
-// ---- Companion Metal shader (ChromaticVelocityView.metal) ----
-// Add this as a .metal file in your target:
-/*
-#include <metal_stdlib>
-#include <SwiftUI/SwiftUI_Metal.h>
-
-using namespace metal;
-
-// Chromatic Velocity — splits the layer's R/G/B channels along `dir` by `split`
-// pixels, sampling the layer three times and recombining. Referenced from SwiftUI
-// via ShaderLibrary.chromaticVelocity in a .layerEffect modifier.
-//
-// position : pixel coordinate of the destination sample
-// layer    : the source layer being sampled (SwiftUI::Layer)
-// split    : per-channel offset distance in pixels (clamped on the Swift side)
-// dir      : unit direction along which to displace R and B (G stays centered)
-[[ stitchable ]]
-half4 chromaticVelocity(float2 position, SwiftUI::Layer layer, float split, float2 dir) {
-    float2 offset = dir * split;
-
-    half4 r = layer.sample(position + offset);
-    half4 g = layer.sample(position);
-    half4 b = layer.sample(position - offset);
-
-    // Average the three alphas so the smear keeps a coherent silhouette.
-    half a = (r.a + g.a + b.a) / 3.0h;
-
-    return half4(r.r, g.g, b.b, a);
-}
-*/
 """###,
         "mtl-crt-poweron": ###"""
 import SwiftUI
@@ -45044,104 +45275,6 @@ private struct CrtPoweronView_TestCardOverlay: View {
         }
     }
 }
-
-
-// ---- Companion Metal shader (CrtPoweronView.metal) ----
-// Add this as a .metal file in your target:
-/*
-#include <metal_stdlib>
-#include <SwiftUI/SwiftUI_Metal.h>
-
-using namespace metal;
-
-// Vintage CRT power-on color effect.
-//
-//   position : user-space point (injected by SwiftUI)
-//   color    : the incoming premultiplied pixel (injected by SwiftUI)
-//   size     : view size in points (uniform) — used to normalize everything
-//   time     : seconds, for the rolling scanlines / sync bar
-//   powerOn  : 0 = collapsed bright line, 1 = full picture
-//
-// colorEffect cannot sample neighbors, so the "collapse to a line" is a
-// vertical visibility mask that blends toward a blown-out white line at the
-// minimum (never a fully-blank frame), then blooms open as powerOn -> 1.
-[[ stitchable ]]
-half4 crtPowerOn(float2 position, half4 color, float2 size, float time, float powerOn) {
-    float2 uv = position / max(size, float2(1.0, 1.0));   // 0..1
-    float2 centered = uv - 0.5;                            // -0.5..0.5
-
-    // Un-premultiply so we can do real color math, then re-premultiply at the end.
-    float a = max(float(color.a), 0.0001);
-    float3 rgb = float3(color.rgb) / a;
-
-    // --- Phosphor tint: lift toward a warm green/amber phosphor glow ---
-    float lum = dot(rgb, float3(0.299, 0.587, 0.114));
-    float3 phosphor = float3(0.55, 1.0, 0.62);            // P1-ish green
-    rgb = mix(rgb, rgb * phosphor + phosphor * 0.04, 0.35);
-
-    // --- Scanlines (horizontal), gently rolling with time ---
-    float lineCount = clamp(size.y * 0.5, 90.0, 320.0);
-    float roll = time * 0.6;
-    float scan = 0.5 + 0.5 * sin((uv.y * lineCount + roll) * 6.2831853);
-    float scanline = mix(0.72, 1.0, scan);                // 0.72..1.0 darkening
-    rgb *= scanline;
-
-    // Subtle vertical RGB phosphor triad (aperture-grille feel)
-    float triad = fract(uv.x * lineCount * 0.5);
-    float3 mask3 = float3(1.0);
-    if (triad < 0.333)      mask3 = float3(1.0, 0.85, 0.85);
-    else if (triad < 0.666) mask3 = float3(0.85, 1.0, 0.85);
-    else                    mask3 = float3(0.85, 0.85, 1.0);
-    rgb *= mix(float3(1.0), mask3, 0.18);
-
-    // --- Rolling sync bar: a soft bright band drifting down the screen ---
-    float barPos = fract(time * 0.09);
-    float d = abs(uv.y - barPos);
-    d = min(d, 1.0 - d);                                  // wrap
-    float bar = exp(-d * d * 220.0);
-    rgb += bar * float3(0.10, 0.16, 0.12);
-
-    // --- Phosphor bloom: lift glow in bright areas ---
-    rgb += pow(lum, 1.5) * 0.10 * phosphor;
-
-    // --- Barrel vignette (darken corners) ---
-    float r2 = dot(centered, centered);
-    float vignette = clamp(1.0 - r2 * 1.35, 0.0, 1.0);
-    vignette = mix(0.30, 1.0, vignette);
-    rgb *= vignette;
-
-    // --- Power-on collapse / bloom mask ---
-    // openHalf is the half-height of the visible band: ~full when on,
-    // shrinking to a thin slit as powerOn -> 0.
-    float p = clamp(powerOn, 0.0, 1.0);
-    float openHalf = mix(0.012, 0.62, smoothstep(0.0, 1.0, p));
-    float dy = abs(centered.y);
-
-    // visible inside the band, fading at its edge
-    float band = 1.0 - smoothstep(openHalf, openHalf + 0.06, dy);
-
-    // Horizontal scan-line brightness: a sharp blown-out white streak at the
-    // vertical center, strongest when collapsed. This is the "never blank" state.
-    float lineGlow = exp(-(centered.y * centered.y) * 1600.0);
-    float collapse = 1.0 - p;                              // 0 on, 1 collapsed
-    float flash = lineGlow * (0.35 + 0.9 * collapse);
-
-    // Horizontal sweep: the picture also pinches horizontally a touch at the
-    // very end of the collapse, blooming back out.
-    float hOpen = mix(0.15, 1.0, smoothstep(0.0, 0.35, p));
-    float hBand = 1.0 - smoothstep(hOpen, hOpen + 0.10, abs(centered.x));
-    float visible = band * mix(0.6, 1.0, hBand);
-
-    // Compose: picture gated by the band, plus the bright white collapse line.
-    float3 outRGB = rgb * visible;
-    outRGB += flash * float3(0.85, 1.0, 0.88);             // blown-out warm-white line
-    outRGB = min(outRGB, float3(1.4));                     // allow slight over-bright bloom
-
-    // Re-premultiply with full opacity (opaque CRT face).
-    float3 finalRGB = clamp(outRGB, 0.0, 1.0);
-    return half4(half3(finalRGB), 1.0h);
-}
-*/
 """###,
         "mtl-develop-pixels": ###"""
 import SwiftUI
@@ -45522,31 +45655,6 @@ private struct DevelopPixelsView_SliderOverlay: View {
 
     private var trackHeight: CGFloat { max(info.radius * 0.5, 3) }
 }
-
-
-// ---- Companion Metal shader (DevelopPixelsView.metal) ----
-// Add this as a .metal file in your target:
-/*
-#include <metal_stdlib>
-#include <SwiftUI/SwiftUI_Metal.h>
-
-using namespace metal;
-
-// Develop: snap each pixel's sample coordinate to the center of a grid cell,
-// then sample the layer there. As `cellSize` animates from large -> 1px the
-// image resolves from coarse mosaic blocks to full resolution.
-//
-// `position` and `layer.sample` are both in local point space, so `cellSize`
-// is supplied in points. cellSize is clamped to >= 1 to avoid floor()/divide
-// producing NaN (which would yield a blank/garbage frame).
-[[ stitchable ]]
-half4 developPixels(float2 position, SwiftUI::Layer layer, float cellSize) {
-    float c = max(cellSize, 1.0);
-    float2 cell = floor(position / c);
-    float2 sampleCoord = (cell + 0.5) * c;
-    return layer.sample(sampleCoord);
-}
-*/
 """###,
         "mtl-foil-tilt": ###"""
 import SwiftUI
@@ -45799,103 +45907,6 @@ private struct FoilTiltView_SparkleMark: Shape {
         return p
     }
 }
-
-
-// ---- Companion Metal shader (FoilTiltView.metal) ----
-// Add this as a .metal file in your target:
-/*
-#include <metal_stdlib>
-#include <SwiftUI/SwiftUI_Metal.h>
-
-using namespace metal;
-
-// Hue (0..1) to RGB. MSL has no built-in hue helper, so do the classic
-// abs(fract(h+k)*6-3)-1 clamp per channel.
-static half3 hue2rgb(half h) {
-    half r = abs(fract(h + 1.0h) * 6.0h - 3.0h) - 1.0h;
-    half g = abs(fract(h + 2.0h / 3.0h) * 6.0h - 3.0h) - 1.0h;
-    half b = abs(fract(h + 1.0h / 3.0h) * 6.0h - 3.0h) - 1.0h;
-    return clamp(half3(r, g, b), 0.0h, 1.0h);
-}
-
-// Holographic foil-stamp diffraction.
-//   position : pixel coords in points (implicit colorEffect arg)
-//   color    : the source pixel (implicit) — its alpha is the sticker mask,
-//              its luminance is the embossed relief texture
-//   size     : view size in points (uniform)
-//   tilt     : virtual viewing-angle vector from drag / idle rock (uniform)
-//   time     : seconds, for a faint flowing shimmer (uniform)
-[[ stitchable ]] half4 foilTilt(float2 position,
-                                half4 color,
-                                float2 size,
-                                float2 tilt,
-                                float time) {
-    // Fully transparent source -> nothing here (keeps the die-cut silhouette).
-    if (color.a < 0.001h) {
-        return color;
-    }
-
-    // Normalized, centered coords in -1..1 (roughly) — independent of tile size.
-    float2 uv = (position / max(size, float2(1.0))) * 2.0 - 1.0;
-    float aspect = size.x / max(size.y, 1.0);
-    uv.x *= aspect;
-
-    // Embossed relief from the source luminance: this is the surface the light
-    // diffracts off, so the rainbow follows the engraved pattern.
-    half lum = dot(color.rgb, half3(0.299h, 0.587h, 0.114h));
-
-    // --- Diffraction angle term ---
-    // The hue is a function of pixel position projected onto the tilt vector
-    // plus the relief, so tilting sweeps the spectrum across the pattern.
-    float proj = dot(uv, float2(tilt.x, tilt.y));
-    float relief = float(lum) * 2.4;
-    float radial = length(uv) * 1.2;
-
-    // Multiple detuned bands give the dense, thin-film "many rainbows" look
-    // of real foil instead of one broad gradient.
-    float phase = proj * 3.2 + relief + radial + time * 0.15;
-    half hue = half(fract(phase * 0.5));
-
-    half3 rainbow = hue2rgb(hue);
-    // A second, higher-frequency band layered in for thin-film richness.
-    half3 rainbow2 = hue2rgb(half(fract(phase * 1.3 + 0.33)));
-    rainbow = mix(rainbow, rainbow2, 0.35h);
-
-    // Boost saturation/vividness — foil is intense, not pastel.
-    half3 foil = pow(rainbow, half3(0.85h));
-
-    // --- Specular glint band ---
-    // A narrow bright streak whose position tracks the tilt, racing across as
-    // you tilt. Driven by the same projection so it stays coherent with the hue.
-    float glintCoord = proj * 2.0 - length(float2(tilt.x, tilt.y)) * 0.6;
-    float glintBand = fract(glintCoord * 0.5 + 0.5) - 0.5;
-    float glint = exp(-(glintBand * glintBand) * 90.0);
-    // A faster-moving secondary glint for sparkle on the high-relief ridges.
-    // Square the centered band directly: pow() with a base that can go
-    // negative is undefined in MSL and can produce NaN (blank pixels).
-    float gd = fract(glintCoord + time * 0.2) - 0.5;
-    float glint2 = exp(-(gd * gd) * 160.0);
-    half glintAmt = half(glint * 0.9 + glint2 * 0.5) * (0.5h + 0.5h * lum);
-
-    // --- Compose ---
-    // Keep EVERY pixel iridescent: never gate the whole output on luminance,
-    // or flat mid-gray regions would go dark. Floor it at 0.4.
-    half shade = 0.40h + 0.60h * lum;
-    half3 rgb = foil * shade;
-
-    // Add the white specular glint on top.
-    rgb += half3(glintAmt);
-
-    // A subtle dark base tint in the valleys to sell the metallic depth.
-    rgb = mix(rgb, rgb * half3(0.55h, 0.58h, 0.70h), (1.0h - lum) * 0.30h);
-
-    rgb = clamp(rgb, 0.0h, 1.0h);
-
-    // Premultiply by the source alpha so the foil only fills the sticker shape,
-    // not the whole rectangular tile.
-    return half4(rgb * color.a, color.a);
-}
-*/
 """###,
         "mtl-halftone-press": ###"""
 import SwiftUI
@@ -46096,84 +46107,6 @@ private struct HalftonePressView_PinchInteraction: ViewModifier {
         min(max(v, minCell), maxCell)
     }
 }
-
-
-// ---- Companion Metal shader (HalftonePressView.metal) ----
-// Add this as a .metal file in your target:
-/*
-#include <metal_stdlib>
-#include <SwiftUI/SwiftUI_Metal.h>
-
-using namespace metal;
-
-// Halftone Press
-// Rotating-grid duotone halftone. For each output pixel:
-//   1. Rotate the pixel about the view center by +angle into "grid space".
-//   2. Snap to the center of its grid cell.
-//   3. Rotate that cell center back by -angle into layer space and sample
-//      the layer there to read the cell's luminance.
-//   4. Dot radius = f(luminance): dark cells -> big dots, light cells -> small.
-//   5. Output duotone: ink inside the dot, paper outside, smoothstep edge.
-//
-// `cellSize` is in points, so the physical dot size is resolution-independent.
-// The sample point is offset from the pixel by at most ~0.71 * cellSize, so the
-// SwiftUI side sets maxSampleOffset to comfortably cover the largest cell.
-
-[[ stitchable ]]
-half4 halftonePress(float2 position,
-                    SwiftUI::Layer layer,
-                    float2 size,
-                    float cellSize,
-                    float angle,
-                    float3 inkColor,
-                    float3 paperColor) {
-    float cell = max(cellSize, 2.0);
-    float2 center = size * 0.5;
-
-    float s = sin(angle);
-    float c = cos(angle);
-
-    // Forward-rotate the pixel about the center into grid space.
-    float2 rel = position - center;
-    float2 g = float2(rel.x * c - rel.y * s,
-                      rel.x * s + rel.y * c);
-
-    // Snap to the cell center in grid space.
-    float2 cellCenterG = (floor(g / cell) + 0.5) * cell;
-
-    // Back-rotate the cell center into layer space to pick the sample point.
-    // Inverse rotation uses (c, +s) / (-s, c).
-    float2 sampleRel = float2(cellCenterG.x * c + cellCenterG.y * s,
-                              -cellCenterG.x * s + cellCenterG.y * c);
-    float2 samplePos = sampleRel + center;
-
-    // Read the cell's tone. Clamp the sample inside the view to avoid edge bleed.
-    float2 clamped = clamp(samplePos, float2(0.0), size);
-    half4 src = layer.sample(clamped);
-
-    // Premultiplied-safe luminance (Rec.709), respecting alpha.
-    half a = max(src.a, half(0.0001));
-    half3 rgb = src.rgb / a;
-    float lum = dot(float3(rgb), float3(0.2126, 0.7152, 0.0722));
-    lum = clamp(lum * float(src.a), 0.0, 1.0);
-
-    // Dot radius from inverted luminance. Max radius slightly over half the cell
-    // so dark regions can fully merge into solid ink. sqrt keeps area perceptual.
-    float darkness = 1.0 - lum;
-    float maxR = cell * 0.72;
-    float radius = sqrt(darkness) * maxR;
-
-    // Distance from this pixel to its cell center, measured in grid space.
-    float dist = distance(g, cellCenterG);
-
-    // Smoothstep edge over ~1px for crisp but anti-aliased dots.
-    float edge = 1.0;
-    float mask = 1.0 - smoothstep(radius - edge, radius + edge, dist);
-
-    float3 outRGB = mix(paperColor, inkColor, mask);
-    return half4(half3(outRGB), 1.0h);
-}
-*/
 """###,
         "mtl-heat-mirage": ###"""
 //
@@ -46524,71 +46457,6 @@ private struct JellyWobbleView_JellyBackdrop: View {
                     radius: 6)
     }
 }
-
-
-// ---- Companion Metal shader (JellyWobbleView.metal) ----
-// Add this as a .metal file in your target:
-/*
-#include <metal_stdlib>
-#include <SwiftUI/SwiftUI_Metal.h>
-using namespace metal;
-
-// Radial damped-sine shockwave that returns the coordinate to sample FROM.
-// pos      : current pixel position in user-space points (same space as origin)
-// time     : seconds elapsed since the impulse fired (NOT wall-clock)
-// origin   : impulse origin in user-space points
-// amplitude: peak displacement in points (already velocity-seeded + clamped by Swift)
-// dir      : normalized fling direction (or float2(0) for a non-directional nudge)
-[[ stitchable ]]
-float2 jellyWobble(float2 pos,
-                   float time,
-                   float2 origin,
-                   float amplitude,
-                   float2 dir) {
-    if (amplitude < 0.01) {
-        return pos;
-    }
-
-    float2 d = pos - origin;
-    float r = length(d);
-
-    // Guard the singularity at the impulse origin.
-    float2 radial = r > 0.001 ? d / r : float2(0.0);
-
-    // The wavefront sweeps outward at `speed`; we envelope the wave around it
-    // but keep the envelope wide so the WHOLE surface sloshes (jelly), with a
-    // gentle traveling crest rather than a hairline ring.
-    float speed = 320.0;          // points / second the crest travels
-    float front = speed * time;   // current crest radius
-    float spread = 220.0;         // envelope width (wide => jelly, not a ring)
-
-    float gx = (r - front) / spread;
-    float envelope = exp(-gx * gx);            // traveling crest
-    float plane = exp(-r / 520.0);             // whole-plane slosh contribution
-
-    // Damped oscillation: rings ride outward and fade over time.
-    float freq = 0.045;                        // spatial frequency (1/points)
-    float omega = 11.0;                        // temporal angular frequency
-    float decay = exp(-time * 2.6);            // settle-down envelope
-    float wave = sin(r * freq - time * omega);
-
-    // Directional inertia: the side the fling points toward sloshes more,
-    // the trailing side recoils. dot in [-1, 1]; bias keeps it always positive
-    // so the radial wobble survives even for a zero-velocity tap.
-    float bias = 0.55 + 0.45 * dot(radial, dir);
-
-    float radialOffset = amplitude * decay * bias *
-                         (0.7 * envelope + 0.35 * plane) * wave;
-
-    // A secondary slosh that drags the surface bodily along the fling axis,
-    // decaying faster so it reads as initial inertia before the rings take over.
-    float dragDecay = exp(-time * 3.4);
-    float dragWave = sin(time * omega * 0.5) * dragDecay;
-    float2 dragOffset = dir * amplitude * 0.5 * dragWave * plane;
-
-    return pos + radial * radialOffset + dragOffset;
-}
-*/
 """###,
         "mtl-mercury-pour": ###"""
 import SwiftUI
@@ -46838,107 +46706,6 @@ private struct MercuryPourView_Bead {
         return out
     }
 }
-
-
-// ---- Companion Metal shader (MercuryPourView.metal) ----
-// Add this as a .metal file in your target:
-/*
-#include <metal_stdlib>
-#include <SwiftUI/SwiftUI_Metal.h>
-using namespace metal;
-
-// Mercury Pour — metaball threshold + chrome specular rim.
-//
-// The view blurs the bright beads in SwiftUI BEFORE this layer effect, so the
-// layer we sample is already a smooth gooey field. Here we only:
-//   1. threshold the blurred luminance with smoothstep → the metal surface,
-//   2. read 4 neighbours to estimate a surface gradient → a fake normal,
-//   3. light that normal with a specular glint + an environment gradient that
-//      is biased by the gravity direction → chrome.
-//
-// Cheap: 5 samples per pixel, modest maxSampleOffset.
-
-static inline half luma(half4 c) {
-    return dot(c.rgb, half3(0.299h, 0.587h, 0.114h));
-}
-
-[[ stitchable ]]
-half4 mercuryPour(float2 pos,
-                  SwiftUI::Layer layer,
-                  float2 size,
-                  float time,
-                  float2 gravity) {
-
-    // Center sample of the pre-blurred field.
-    half4 c = layer.sample(pos);
-    half  l = luma(c) * c.a;
-
-    // --- Metaball threshold (soft edge so the rim reads as metal, not aliased).
-    half edge0 = 0.32h;
-    half edge1 = 0.55h;
-    half surface = smoothstep(edge0, edge1, l);
-
-    if (surface <= 0.001h) {
-        // Outside the metal: faint cool backdrop tint, never fully black so the
-        // tile is legible on every frame.
-        half3 bg = half3(0.035h, 0.045h, 0.07h);
-        return half4(bg, 1.0h);
-    }
-
-    // --- Neighbour samples → gradient of the blurred field (fake surface normal).
-    float o = 3.0;
-    half lx0 = luma(layer.sample(pos + float2(-o, 0.0)));
-    half lx1 = luma(layer.sample(pos + float2( o, 0.0)));
-    half ly0 = luma(layer.sample(pos + float2(0.0, -o)));
-    half ly1 = luma(layer.sample(pos + float2(0.0,  o)));
-
-    half gx = (lx1 - lx0);
-    half gy = (ly1 - ly0);
-    // Normal tilts away from rising luminance; z gives it body.
-    half3 n = normalize(half3(-gx * 2.2h, -gy * 2.2h, 1.0h));
-
-    // --- Lighting. Gravity biases the environment so the sheen shifts as you pour.
-    float2 g = gravity;
-    float glen = length(g);
-    if (glen > 0.0001) { g = g / glen; } else { g = float2(0.0, -1.0); }
-
-    half3 lightDir = normalize(half3(half(g.x) * 0.6h, half(-g.y) * 0.6h, 0.85h));
-    half3 viewDir  = half3(0.0h, 0.0h, 1.0h);
-    half3 halfV    = normalize(lightDir + viewDir);
-
-    half ndl  = max(dot(n, lightDir), 0.0h);
-    half ndh  = max(dot(n, halfV), 0.0h);
-    half spec = pow(ndh, 48.0h);          // tight chrome glint
-    half spec2 = pow(ndh, 9.0h) * 0.5h;   // broader sheen
-
-    // Environment gradient (top bright, bottom dark) rotated a touch by gravity +
-    // a slow time wobble so the chrome surface looks like it reflects a room.
-    half env = 0.5h + 0.5h * n.y;
-    half wob = 0.08h * half(sin(time * 0.8 + n.x * 4.0));
-    env = clamp(env + wob, 0.0h, 1.0h);
-
-    half3 dark   = half3(0.08h, 0.10h, 0.14h);
-    half3 mid    = half3(0.45h, 0.50h, 0.58h);
-    half3 bright = half3(0.85h, 0.90h, 0.97h);
-    half3 chrome = mix(dark, mid, env);
-    chrome = mix(chrome, bright, env * env);
-
-    // Diffuse body + speculars.
-    half3 col = chrome * (0.55h + 0.45h * ndl);
-    col += half3(1.0h, 1.0h, 1.0h) * spec;
-    col += bright * spec2;
-
-    // --- Rim: emphasise the metaball silhouette so merging beads show surface
-    // tension at the contact neck. surface ~ between edge0/edge1 = the rim band.
-    half rim = surface * (1.0h - surface) * 4.0h;
-    col += half3(0.9h, 0.95h, 1.0h) * rim * 0.35h;
-
-    // Composite over the faint backdrop using the threshold as coverage.
-    half3 bg = half3(0.035h, 0.045h, 0.07h);
-    half3 outc = mix(bg, col, surface);
-    return half4(outc, 1.0h);
-}
-*/
 """###,
         "mtl-wax-melt": ###"""
 import SwiftUI
@@ -47157,87 +46924,6 @@ private struct WaxMeltView_WaxPanel: View {
         .padding(10)
     }
 }
-
-
-// ---- Companion Metal shader (WaxMeltView.metal) ----
-// Add this as a .metal file in your target:
-/*
-#include <metal_stdlib>
-#include <SwiftUI/SwiftUI_Metal.h>
-using namespace metal;
-
-// A cheap deterministic hash → [0,1), used per-column so each vertical strand
-// of "wax" drips a different length, giving the molten-strand look.
-static float wm_hash(float x) {
-    return fract(sin(x * 127.1) * 43758.5453);
-}
-
-// Smooth value noise across columns (interpolate between neighbouring hashes)
-// so adjacent columns relate and the drips read as fluid rather than jagged.
-static float wm_columnNoise(float u) {
-    float i = floor(u);
-    float f = fract(u);
-    float a = wm_hash(i);
-    float b = wm_hash(i + 1.0);
-    float s = f * f * (3.0 - 2.0 * f); // smoothstep
-    return mix(a, b, s);
-}
-
-// Distortion entry point.
-// Returns the SOURCE coordinate to sample FROM. To make content droop DOWNWARD,
-// we sample from ABOVE the current pixel (y - drip): each output row pulls in
-// content from higher up, so the picture slides toward the floor.
-//
-// position : view-local points (NOT 0..1 UV)
-// time     : seconds, for a slow live shimmer in the strands
-// melt     : 0 (solid) … 1 (fully molten)
-// size     : view size in points, to normalize the per-column frequency
-[[ stitchable ]]
-float2 waxMelt(float2 position, float time, float melt, float2 size) {
-    if (melt <= 0.0001) {
-        return position;
-    }
-
-    float w = max(size.x, 1.0);
-    float h = max(size.y, 1.0);
-
-    // Normalized horizontal position → a few dozen strand columns across the view.
-    float columns = 26.0;
-    float u = (position.x / w) * columns;
-
-    // Per-column drip weight in [0,1]; mix two octaves + a slow time shimmer so
-    // strands writhe gently while molten.
-    float n = wm_columnNoise(u);
-    float n2 = wm_columnNoise(u * 2.37 + 11.0);
-    float colWeight = mix(n, n2, 0.35);
-    colWeight = mix(0.30, 1.0, colWeight); // keep every column dripping a little
-
-    float shimmer = 0.5 + 0.5 * sin(time * 1.7 + u * 1.3);
-    colWeight *= mix(0.85, 1.0, shimmer);
-
-    // Vertical falloff: top barely moves, bottom sags most (gravity pools the
-    // wax toward the floor).
-    float v = position.y / h;                 // 0 at top … 1 at bottom
-    float gravity = v * v;                    // accelerate downward
-
-    // Eased melt so the onset is gentle then runs.
-    float m = melt * melt * (3.0 - 2.0 * melt);
-
-    // Max strand length scales with melt; capped near the view height so the
-    // furthest sample stays within the maxSampleOffset we declared on the view.
-    float maxDrip = h * 0.92;
-    float drip = maxDrip * m * gravity * colWeight;
-
-    // Sample from above → content moves down.
-    float sourceY = position.y - drip;
-
-    // Subtle horizontal wobble so strands aren't perfectly straight ribbons.
-    float wobble = sin(position.y * 0.06 + u * 2.0 + time * 2.1) * 4.0 * m * colWeight;
-    float sourceX = position.x + wobble;
-
-    return float2(sourceX, sourceY);
-}
-*/
 """###,
         "nav-arc-fan-menu": ###"""
 import SwiftUI

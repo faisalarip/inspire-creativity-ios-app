@@ -41,7 +41,7 @@ def main():
 
     # orphan scan (agent side-writes)
     done = set(json.load(open(INTEGRATED)))
-    expected = set(cl.type_name(i) + ".swift" for i in done) | {
+    expected = {cl.type_name(i) + ext for i in done for ext in (".swift", ".metal")} | {
         "BespokeAnimations.swift", "BespokeCodeSamples.swift",
         "RubberBandSheetMorphView.swift", "GlassShatterSettleView.swift",
         "HeatMirageView.swift", "HeatMirage.metal"}

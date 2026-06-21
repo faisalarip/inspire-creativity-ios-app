@@ -649,6 +649,9 @@ enum BespokeAnimations {
         .init(id: "bg-voronoi-fracture",
               grid: { AnyView(VoronoiFractureView(demo: true)) },
               interactive: { AnyView(VoronoiFractureView(demo: false)) }),
+        .init(id: "bg-depth-starfield",
+              grid: { AnyView(DepthStarfieldView(demo: true)) },
+              interactive: { AnyView(DepthStarfieldView(demo: false)) }),
 // BESPOKE-REGISTRATION-INSERT (Tools/integrate_batch.py appends above this line)
     ]
 

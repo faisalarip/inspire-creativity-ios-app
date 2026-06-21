@@ -42,12 +42,18 @@ extension AnimationRepositoryProtocol {
 /// Curated id lists shared by every repository implementation so the
 /// Discover rows can't drift between the bundled and remote catalogs.
 enum CuratedRows {
-    /// Lead with the (free) aurora backgrounds — they're the visual hook —
-    /// then a couple of popular hand-crafted pieces.
-    static let trendingIDs = ["au-nebula", "au-solar", "au-bokeh",
-                              "liquid-heart", "hologram-card"]
-    static let newlyAddedIDs = ["parallax-card", "glitch-text",
-                                "spring-chain", "liquid-tabs"]
+    /// Discover rows are shuffled so the screen feels fresh on each launch and
+    /// pull-to-refresh. (Previously a fixed curated id list — see git history.)
+    static let trendingCount = 8
+    static let newlyAddedCount = 6
+
+    static func trending(from items: [AnimationItem]) -> [AnimationItem] {
+        Array(items.shuffled().prefix(trendingCount))
+    }
+
+    static func newlyAdded(from items: [AnimationItem]) -> [AnimationItem] {
+        Array(items.shuffled().prefix(newlyAddedCount))
+    }
 }
 
 /// In-memory animation catalog. Data is seeded once at construction.
@@ -90,14 +96,22 @@ final class InMemoryAnimationRepository: AnimationRepositoryProtocol {
     }
 
     func featured() -> AnimationItem {
-        seed.first(where: { $0.isFeatured }) ?? seed[0]
+        seed.randomElement() ?? seed[0]
     }
 
     func trending() -> [AnimationItem] {
-        CuratedRows.trendingIDs.compactMap(find(id:))
+        CuratedRows.trending(from: seed)
     }
 
     func newlyAdded() -> [AnimationItem] {
-        CuratedRows.newlyAddedIDs.compactMap(find(id:))
+        CuratedRows.newlyAdded(from: seed)
+    }
+
+    /// A seeded catalog has nothing to re-fetch, but re-broadcast anyway so
+    /// Discover re-rolls its shuffled rows on pull-to-refresh.
+    @discardableResult
+    func refresh() async -> Bool {
+        NotificationCenter.default.post(name: .animationsUpdated, object: nil)
+        return true
     }
 }

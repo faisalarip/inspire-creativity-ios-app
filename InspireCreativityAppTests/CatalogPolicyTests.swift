@@ -82,31 +82,40 @@ final class CodeAccessTests: XCTestCase {
     }
 }
 
-/// Production runs RemoteAnimationRepository; the aurora-first trending list
-/// (commit cf4252c) must apply there too, not only to the in-memory repo.
-final class TrendingParityTests: XCTestCase {
+/// Discover rows are shuffled for a fresh feel each launch / pull-to-refresh,
+/// so assert the structural contract (count, distinctness, validity, dynamism)
+/// rather than a fixed curated list.
+final class DiscoverRowsTests: XCTestCase {
 
-    /// Lead with free aurora backgrounds (the visual hook), then two popular
-    /// hand-crafted pieces. Single source of truth for both repositories.
-    private let auroraFirstTrending = ["au-nebula", "au-solar", "au-bokeh",
-                                       "liquid-heart", "hologram-card"]
-
-    func testRemoteTrendingLeadsWithAuroras() {
-        let repo = RemoteAnimationRepository(seed: AnimationCatalogSeed.items)
-        XCTAssertEqual(repo.trending().map(\.id), auroraFirstTrending,
-                       "RemoteAnimationRepository.trending() drifted from the curated aurora-first list")
-    }
-
-    func testLocalTrendingLeadsWithAuroras() {
+    func testTrendingIsDistinctValidSample() {
         let repo = InMemoryAnimationRepository()
-        XCTAssertEqual(repo.trending().map(\.id), auroraFirstTrending,
-                       "InMemoryAnimationRepository.trending() drifted from the curated aurora-first list")
+        let catalog = Set(repo.all().map(\.id))
+        let trending = repo.trending()
+        XCTAssertEqual(trending.count, CuratedRows.trendingCount)
+        XCTAssertEqual(Set(trending.map(\.id)).count, trending.count, "trending rows must be distinct")
+        XCTAssertTrue(trending.allSatisfy { catalog.contains($0.id) }, "trending items must exist in the catalog")
     }
 
-    func testNewlyAddedParityAcrossRepositories() {
+    func testNewlyAddedIsDistinctValidSample() {
+        let repo = InMemoryAnimationRepository()
+        let catalog = Set(repo.all().map(\.id))
+        let rows = repo.newlyAdded()
+        XCTAssertEqual(rows.count, CuratedRows.newlyAddedCount)
+        XCTAssertEqual(Set(rows.map(\.id)).count, rows.count, "newlyAdded rows must be distinct")
+        XCTAssertTrue(rows.allSatisfy { catalog.contains($0.id) }, "newlyAdded items must exist in the catalog")
+    }
+
+    /// With 300+ items choosing 8, two shuffled draws are effectively never identical.
+    func testTrendingIsDynamic() {
+        let repo = InMemoryAnimationRepository()
+        XCTAssertNotEqual(repo.trending().map(\.id), repo.trending().map(\.id),
+                          "trending should vary between calls (shuffled)")
+    }
+
+    func testRemoteRowsMatchLocalShape() {
         let remote = RemoteAnimationRepository(seed: AnimationCatalogSeed.items)
         let local = InMemoryAnimationRepository()
-        XCTAssertEqual(remote.newlyAdded().map(\.id), local.newlyAdded().map(\.id),
-                       "newlyAdded() must come from one shared curated list in both repositories")
+        XCTAssertEqual(remote.trending().count, local.trending().count)
+        XCTAssertEqual(remote.newlyAdded().count, local.newlyAdded().count)
     }
 }

@@ -339,17 +339,17 @@ final class RemoteAnimationRepository: AnimationRepositoryProtocol {
     }
 
     func featured() -> AnimationItem {
-        cache.first(where: { $0.isFeatured })
-            ?? cache.first
+        cache.randomElement()
+            ?? AnimationCatalogSeed.items.randomElement()
             ?? AnimationCatalogSeed.items[0]
     }
 
     func trending() -> [AnimationItem] {
-        CuratedRows.trendingIDs.compactMap(find(id:))
+        CuratedRows.trending(from: cache)
     }
 
     func newlyAdded() -> [AnimationItem] {
-        CuratedRows.newlyAddedIDs.compactMap(find(id:))
+        CuratedRows.newlyAdded(from: cache)
     }
 }
 

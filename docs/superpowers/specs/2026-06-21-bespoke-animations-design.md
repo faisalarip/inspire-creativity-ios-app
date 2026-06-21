@@ -1,6 +1,6 @@
 # Spec — 210 Bespoke Interactive Animations
 
-- **Status:** Draft for review
+- **Status:** ✅ COMPLETE — all 210 integrated, build green, tests pass (catalog now 319 total: 109 original + 210 bespoke). Compile-verified across 210; visually spot-checked a sample (gesture/Metal/text/loader) in-sim — see "Verification honesty" in §8.
 - **Date:** 2026-06-21
 - **Scope:** Add 210 net-new, hand-authored, *interactive* SwiftUI animations to the Stagger catalog (currently ~107), each with a self-driving grid preview, a finger-interactive Detail preview, and paste-ready source.
 

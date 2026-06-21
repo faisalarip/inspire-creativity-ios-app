@@ -20,51 +20,20 @@ INTEGRATED = os.path.join(cl.ROOT, "Tools/integrated_ids.json")
 def swift_str(s: str) -> str:
     return json.dumps(" ".join(s.split()), ensure_ascii=False)  # collapse whitespace, escape
 
-_TYPEDECL = re.compile(r'^(?:public |final |private |fileprivate )?(?:struct|class|enum|protocol|actor) ([A-Za-z_][A-Za-z0-9_]*)')
-_HELPER = re.compile(r'^private (?:struct|class|enum|actor) ([A-Za-z_][A-Za-z0-9_]*)', re.M)
+_TOPTYPE = re.compile(r'(?m)^(?:public |final |private |fileprivate )*(?:struct|class|enum|actor)\s+([A-Za-z_]\w*)')
 
-def reserved_symbols():
-    """Top-level type names defined OUTSIDE the bespoke Catalog — a generated
-    helper must not collide with these (module-visible) names."""
-    res = set()
-    base = os.path.join(cl.ROOT, "InspireCreativityApp")
-    for dp, _, fs in os.walk(base):
-        if "Animations/Catalog" in dp:
-            continue
-        for f in fs:
-            if not f.endswith(".swift"):
-                continue
-            for line in open(os.path.join(dp, f), encoding="utf-8", errors="replace"):
-                m = _TYPEDECL.match(line)
-                if m:
-                    res.add(m.group(1))
-    return res
-
-def _privatize_helpers(src, typename):
-    """Mark every top-level declaration `private` EXCEPT the main `<typename>`
-    view, so helper structs/funcs/extensions never collide across the 200+ files."""
-    out = []
-    for line in src.split("\n"):
-        m = re.match(r'^(struct|class|enum|actor|func|extension)\b(.*)$', line)
-        if m:
-            kw = m.group(1)
-            name = None
-            if kw != "extension":
-                nm = re.match(r'\s+([A-Za-z_][A-Za-z0-9_]*)', m.group(2))
-                name = nm.group(1) if nm else None
-            if not (kw != "extension" and name == typename):
-                line = "private " + line
-        out.append(line)
-    return "\n".join(out)
-
-def normalize(src: str, typename: str, reserved: set) -> str:
-    """Auto-fix every systemic compile hazard found across Gates 1-3:
-    1. Strip `#Preview` blocks (ambiguous SwiftUI.Preview vs UIKit.Preview when UIKit imported).
-    2. Rename a local `Color(hex:)` helper's external label to `hexCode` (collides with app HexColor).
-    3. Privatize all top-level helpers except the main view (cross-file name collisions).
-    4. Rename any private helper type that collides with an app-internal symbol (e.g. Chip, BlobShape).
+def normalize(src: str, typename: str) -> str:
+    """Make a generated view file collision-proof AND cascade-proof:
+    1. Strip `#Preview` blocks (ambiguous SwiftUI.Preview vs UIKit.Preview under UIKit).
+    2. Rename a local `Color(hex:)` helper's external label to `hexCode` (app HexColor clash).
+    3. De-privatize NESTED types — they're namespaced by their parent so they never
+       collide, and privacy there only triggers access-level cascade errors.
+    4. Prefix-rename every TOP-LEVEL helper type (!= the main view) to `<typename>_<name>`,
+       guaranteeing global uniqueness — no cross-file or app-symbol collision. Access is
+       left untouched, so no access-level cascades are introduced.
     """
     out = src
+    # 1. strip #Preview blocks (balanced braces)
     while True:
         m = re.search(r'\n[ \t]*(//[^\n]*\n[ \t]*)?#Preview\b', out)
         if not m:
@@ -82,11 +51,15 @@ def normalize(src: str, typename: str, reserved: set) -> str:
                     break
             i += 1
         out = out[:m.start()] + out[i + 1:]
+    # 2. Color(hex:) label
     if 'extension Color' in out and '(hex:' in out:
         out = out.replace('init(hex:', 'init(hexCode hex:').replace('Color(hex:', 'Color(hexCode:')
-    out = _privatize_helpers(out, typename)
-    for name in (set(_HELPER.findall(out)) & reserved):
-        out = re.sub(rf'\b{name}\b', f'{typename}_{name}', out)
+    # 3. de-privatize nested (indented) type declarations
+    out = re.sub(r'(?m)^([ \t]+)(?:private |fileprivate )(struct|enum|class|actor)\b', r'\1\2', out)
+    # 4. prefix-rename top-level helper types for global uniqueness
+    names = {m.group(1) for m in _TOPTYPE.finditer(out) if m.group(1) != typename}
+    for nm in sorted(names, key=len, reverse=True):
+        out = re.sub(rf'\b{nm}\b', f'{typename}_{nm}', out)
     return out.rstrip() + '\n'
 
 def insert_before_marker(path, marker, block):
@@ -107,7 +80,6 @@ def main():
     if isinstance(gen, dict) and "results" in gen:
         gen = gen["results"]
 
-    reserved = reserved_symbols()
     new_files, reg_lines, seed_lines, done_ids, skipped = [], [], [], [], []
     for item in gen:
         if not item:
@@ -116,7 +88,7 @@ def main():
         spec = specs.get(cid)
         if not spec:
             skipped.append(f"{cid} (no spec)"); continue
-        src = normalize((item.get("viewSource") or "").strip(), spec["typeName"], reserved)
+        src = normalize((item.get("viewSource") or "").strip(), spec["typeName"])
         if "struct " not in src or spec["typeName"] not in src:
             skipped.append(f"{cid} (viewSource missing struct {spec['typeName']})"); continue
 

@@ -14766,6 +14766,425 @@ private struct SwipeStampImpressView_StarShape: Shape {
     }
 }
 """###,
+        "ges-tear-receipt": ###"""
+import SwiftUI
+
+// MARK: - TearReceiptView
+// Drag the perforated stub downward to tear it along a procedurally ragged
+// perforation. Past the threshold the freed piece detaches and flutters away
+// while the remainder springs back up. The jagged edge is generated ONCE with a
+// seeded RNG (stable across every frame); only the cut position animates.
+struct TearReceiptView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        if demo {
+            TearReceiptView_DemoReceipt(canvas: size)
+        } else {
+            TearReceiptView_InteractiveReceipt(canvas: size)
+        }
+    }
+}
+
+// MARK: - Seeded deterministic RNG
+// A small, fast, fully deterministic generator. Seeded with a constant so the
+// ragged perforation profile is byte-identical on every view re-init.
+private struct TearReceiptView_SeededRNG: RandomNumberGenerator {
+    private var state: UInt64
+    init(seed: UInt64) { state = seed == 0 ? 0x9E3779B97F4A7C15 : seed }
+    mutating func next() -> UInt64 {
+        // SplitMix64
+        state &+= 0x9E3779B97F4A7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        return z ^ (z >> 31)
+    }
+}
+
+// MARK: - Perforation profile (generated once, normalized)
+// Amplitudes are stored normalized in roughly [-1, 1] and scaled by geometry at
+// draw time, so the same profile reads correctly at 120pt and at full size.
+private enum TearReceiptView_Perf {
+    static let teeth = 26
+
+    // Normalized vertical wobble of the tear line per tooth, in [-1, 1].
+    static let wobble: [CGFloat] = makeWobble()
+
+    // Normalized fiber-fringe length per tooth, in [0.3, 1].
+    static let fringe: [CGFloat] = makeFringe()
+
+    private static func makeWobble() -> [CGFloat] {
+        var rng = TearReceiptView_SeededRNG(seed: 0xBEEF_CAFE_1234)
+        return (0...teeth).map { _ in
+            let r = Double(rng.next() >> 11) / Double(1 << 53) // 0..1
+            return CGFloat(r * 2.0 - 1.0)
+        }
+    }
+
+    private static func makeFringe() -> [CGFloat] {
+        var rng = TearReceiptView_SeededRNG(seed: 0x00FF_1357_9BDF)
+        return (0...teeth).map { _ in
+            let r = Double(rng.next() >> 11) / Double(1 << 53) // 0..1
+            return CGFloat(0.3 + r * 0.7)
+        }
+    }
+}
+
+// MARK: - Palette helpers (no app dependencies)
+private enum TearReceiptView_Paper {
+    static let ink = Color(red: 0.13, green: 0.14, blue: 0.20)
+    static let faint = Color(red: 0.74, green: 0.75, blue: 0.80)
+    static let sheetTop = Color(red: 0.99, green: 0.985, blue: 0.96)
+    static let sheetBottom = Color(red: 0.95, green: 0.94, blue: 0.90)
+    static let edgeShadow = Color(red: 0.0, green: 0.0, blue: 0.0).opacity(0.18)
+    static let accent = Color(red: 0.92, green: 0.32, blue: 0.30)
+}
+
+// MARK: - Ragged perforation edge as an Animatable Shape
+// `animatableData` is the tear progress ONLY (how far the cut has opened, 0...1).
+// The jag arrays are constant stored data and never part of animatableData.
+private struct TearReceiptView_RaggedTearEdge: Shape, Animatable {
+    /// 0 = perforation still closed, 1 = fully separated.
+    var progress: CGFloat
+    /// true = clip the KEPT (upper) sheet; false = clip the FREED (lower) stub.
+    var keepingUpper: Bool
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        // Pure function of rect + stored props + progress. No RNG here.
+        // The ragged edge is anchored at the SHARED SEAM: for the upper sheet
+        // that seam is the bottom of its frame (maxY); for the lower stub it is
+        // the top of its frame (minY). This makes the two halves abut at the
+        // perforation at rest and pull apart only as `progress` rises.
+        let teeth = TearReceiptView_Perf.teeth
+        let stepX = rect.width / CGFloat(teeth)
+        let amp = max(rect.height * 0.06, 6)
+        let fringeMax = max(rect.height * 0.05, 5)
+
+        // As progress rises, the two halves pull apart by `gap`.
+        let gap = progress * (rect.height * 0.5 + 4)
+
+        var p = Path()
+        if keepingUpper {
+            let baseY = rect.maxY
+            p.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            // Travel right-to-left along the ragged cut, pulled UP by gap.
+            for i in stride(from: teeth, through: 0, by: -1) {
+                let x = rect.minX + CGFloat(i) * stepX
+                let wob = TearReceiptView_Perf.wobble[i] * amp
+                let fr = TearReceiptView_Perf.fringe[i] * fringeMax
+                let y = baseY + wob - gap - fr
+                p.addLine(to: CGPoint(x: x, y: y))
+            }
+            p.closeSubpath()
+        } else {
+            let baseY = rect.minY
+            p.move(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+            // Travel left-to-right along the ragged cut, pushed DOWN by gap.
+            for i in stride(from: 0, through: teeth, by: 1) {
+                let x = rect.minX + CGFloat(i) * stepX
+                let wob = TearReceiptView_Perf.wobble[i] * amp
+                let fr = TearReceiptView_Perf.fringe[i] * fringeMax
+                let y = baseY + wob + gap + fr
+                p.addLine(to: CGPoint(x: x, y: y))
+            }
+            p.closeSubpath()
+        }
+        return p
+    }
+}
+
+// MARK: - The dotted perforation guide line (drawn at the seam when closed)
+private struct TearReceiptView_PerforationGuide: Shape {
+    func path(in rect: CGRect) -> Path {
+        // The guide is drawn in a frame the same height as the upper sheet and
+        // top-aligned, so the shared seam sits at the BOTTOM of this rect.
+        let teeth = TearReceiptView_Perf.teeth
+        let stepX = rect.width / CGFloat(teeth)
+        let baseY = rect.maxY
+        let amp = max(rect.height * 0.06, 6)
+        var p = Path()
+        for i in 0...teeth {
+            let x = rect.minX + CGFloat(i) * stepX
+            let y = baseY + TearReceiptView_Perf.wobble[i] * amp
+            if i == 0 { p.move(to: CGPoint(x: x, y: y)) }
+            else { p.addLine(to: CGPoint(x: x, y: y)) }
+        }
+        return p
+    }
+}
+
+// MARK: - Receipt face content (printed rows). Scales with the rect.
+private struct TearReceiptView_ReceiptFace: View {
+    var size: CGSize
+    var header: Bool
+
+    var body: some View {
+        let pad = max(size.width * 0.10, 8)
+        VStack(alignment: .leading, spacing: max(size.height * 0.018, 3)) {
+            if header {
+                HStack(spacing: max(size.width * 0.03, 4)) {
+                    Circle()
+                        .fill(TearReceiptView_Paper.accent)
+                        .frame(width: max(size.width * 0.08, 7),
+                               height: max(size.width * 0.08, 7))
+                    bar(widthFactor: 0.42, tall: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(.bottom, max(size.height * 0.01, 2))
+            }
+            ForEach(0..<rowCount, id: \.self) { idx in
+                HStack(spacing: 0) {
+                    bar(widthFactor: rowWidths[idx % rowWidths.count])
+                    Spacer(minLength: max(size.width * 0.05, 5))
+                    bar(widthFactor: 0.16)
+                }
+            }
+        }
+        .padding(.horizontal, pad)
+        .padding(.vertical, max(size.height * 0.05, 5))
+        .frame(width: size.width, alignment: .leading)
+    }
+
+    private var rowCount: Int {
+        let n = Int(size.height / max(size.height * 0.10, 14))
+        return min(max(n, 2), 6)
+    }
+
+    private let rowWidths: [CGFloat] = [0.50, 0.62, 0.40, 0.55, 0.34, 0.46]
+
+    private func bar(widthFactor: CGFloat, tall: Bool = false) -> some View {
+        RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .fill(tall ? TearReceiptView_Paper.ink : TearReceiptView_Paper.faint)
+            .frame(width: size.width * widthFactor,
+                   height: max(size.height * (tall ? 0.05 : 0.035), tall ? 5 : 3))
+    }
+}
+
+// MARK: - Sheet background (the paper itself with a soft cut shadow)
+private struct TearReceiptView_PaperSheet<Content: View>: View {
+    var size: CGSize
+    var shadowAtBottom: Bool
+    var shadowAtTop: Bool
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: max(size.width * 0.04, 6), style: .continuous)
+                .fill(
+                    LinearGradient(colors: [TearReceiptView_Paper.sheetTop, TearReceiptView_Paper.sheetBottom],
+                                   startPoint: .top, endPoint: .bottom)
+                )
+            content()
+            if shadowAtBottom {
+                LinearGradient(colors: [.clear, TearReceiptView_Paper.edgeShadow],
+                               startPoint: .center, endPoint: .bottom)
+                    .allowsHitTesting(false)
+            }
+            if shadowAtTop {
+                LinearGradient(colors: [TearReceiptView_Paper.edgeShadow, .clear],
+                               startPoint: .top, endPoint: .center)
+                    .allowsHitTesting(false)
+            }
+        }
+        .frame(width: size.width, height: size.height)
+    }
+}
+
+// MARK: - Shared rip renderer
+// Renders the upper (kept) sheet springing up and the lower (freed) stub
+// tearing/fluttering away, given a single `progress` (0...1 tear) and a
+// detach state for the flutter.
+private struct TearReceiptView_RipStack: View {
+    var canvas: CGSize
+    var progress: CGFloat       // 0 closed ... 1 fully torn
+    var detached: Bool          // freed piece is flying away
+    var flutter: CGFloat        // 0...1 flutter timeline for the freed piece
+
+    private var sheetWidth: CGFloat { min(canvas.width * 0.78, canvas.height * 0.62) }
+    private var sheetHeight: CGFloat { min(canvas.height * 0.92, sheetWidth * 1.5) }
+    private var splitY: CGFloat { sheetHeight * 0.58 } // perforation sits here
+
+    var body: some View {
+        ZStack {
+            upperSheet
+            seamGuide
+            lowerStub
+        }
+        .frame(width: sheetWidth, height: sheetHeight)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // The kept top portion. Springs UP slightly as the tear opens. Always opaque.
+    private var upperSheet: some View {
+        let topSize = CGSize(width: sheetWidth, height: splitY)
+        return TearReceiptView_PaperSheet(size: topSize, shadowAtBottom: true, shadowAtTop: false) {
+            TearReceiptView_ReceiptFace(size: topSize, header: true)
+        }
+        .clipShape(TearReceiptView_RaggedTearEdge(progress: progress, keepingUpper: true))
+        .frame(height: sheetHeight, alignment: .top)
+        .offset(y: -progress * (sheetHeight * 0.04))
+    }
+
+    // Dotted perforation, only visible while the seam is still mostly closed.
+    private var seamGuide: some View {
+        let topSize = CGSize(width: sheetWidth, height: splitY)
+        return TearReceiptView_PerforationGuide()
+            .stroke(style: StrokeStyle(lineWidth: max(sheetWidth * 0.012, 1.2),
+                                       lineCap: .round, dash: [3, 4]))
+            .foregroundColor(TearReceiptView_Paper.faint)
+            .frame(width: topSize.width, height: topSize.height)
+            .frame(height: sheetHeight, alignment: .top)
+            .opacity(Double(max(0, 1 - progress * 2.4)))
+            .allowsHitTesting(false)
+    }
+
+    // The freed bottom stub. Tears down, then on detach flutters away & fades.
+    private var lowerStub: some View {
+        let botHeight = sheetHeight - splitY
+        let botSize = CGSize(width: sheetWidth, height: botHeight)
+        // Flutter physics: grow offset, tilt in 3D, spin a touch, fade only THIS piece.
+        let fall = detached ? flutter * (canvas.height * 0.9 + botHeight) : progress * (botHeight * 0.5)
+        let drift = detached ? sin(flutter * .pi * 3) * (sheetWidth * 0.22) : 0
+        let tilt = detached ? Double(flutter) * 26 : 0
+        let spin = detached ? Double(flutter) * 14 : 0
+        let fade = detached ? Double(max(0, 1 - flutter * 1.05)) : 1
+
+        return TearReceiptView_PaperSheet(size: botSize, shadowAtBottom: false, shadowAtTop: false) {
+            TearReceiptView_ReceiptFace(size: botSize, header: false)
+        }
+        .clipShape(TearReceiptView_RaggedTearEdge(progress: progress, keepingUpper: false))
+        .frame(height: sheetHeight, alignment: .bottom)
+        .offset(x: drift, y: fall)
+        .rotation3DEffect(.degrees(tilt), axis: (x: 1, y: 0.15, z: 0.4),
+                          anchor: .top, perspective: 0.7)
+        .rotationEffect(.degrees(spin), anchor: .center)
+        .opacity(fade)
+    }
+}
+
+// MARK: - Interactive variant (demo == false)
+private struct TearReceiptView_InteractiveReceipt: View {
+    var canvas: CGSize
+
+    @State private var progress: CGFloat = 0
+    @State private var detached: Bool = false
+    @State private var flutter: CGFloat = 0
+    @State private var tickCount: Int = 0
+
+    private let threshold: CGFloat = 0.62
+
+    var body: some View {
+        TearReceiptView_RipStack(canvas: canvas, progress: progress, detached: detached, flutter: flutter)
+            .contentShape(Rectangle())
+            .gesture(dragGesture)
+            .sensoryFeedback(.selection, trigger: tickCount)
+            .sensoryFeedback(.success, trigger: detached) { _, now in now }
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                guard !detached else { return }
+                let span = max(canvas.height * 0.45, 60)
+                let raw = max(0, value.translation.height) / span
+                let clamped = min(raw, 1)
+                // Tick haptics as the tear crosses perforation notches.
+                let newTick = Int(clamped * CGFloat(TearReceiptView_Perf.teeth))
+                if newTick != tickCount { tickCount = newTick }
+                progress = clamped
+            }
+            .onEnded { _ in
+                guard !detached else { return }
+                if progress >= threshold {
+                    // Finish the rip, then detach and flutter the freed stub away.
+                    withAnimation(.easeIn(duration: 0.16)) { progress = 1 }
+                    detached = true
+                    withAnimation(.easeIn(duration: 1.05)) { flutter = 1 }
+                    // The kept receipt springs up as the piece leaves.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.15) {
+                        resetForNextTear()
+                    }
+                } else {
+                    // Not far enough — perforation springs back together.
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.6)) {
+                        progress = 0
+                    }
+                }
+            }
+    }
+
+    private func resetForNextTear() {
+        // Re-arm with a gentle reveal so a fresh stub is tearable again.
+        flutter = 0
+        detached = false
+        progress = 1
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.7)) {
+            progress = 0
+        }
+    }
+}
+
+// MARK: - Demo variant (demo == true) — self-driving, never blank
+// Hand-shaped time -> state mapping via TimelineView(.animation) for a clean,
+// flash-free loop reset and a guaranteed-legible kept receipt on every frame.
+private struct TearReceiptView_DemoReceipt: View {
+    var canvas: CGSize
+    private let cycle: Double = 3.4 // seconds
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let phase = (t.truncatingRemainder(dividingBy: cycle)) / cycle
+            let s = state(for: phase)
+            TearReceiptView_RipStack(canvas: canvas,
+                     progress: s.progress,
+                     detached: s.detached,
+                     flutter: s.flutter)
+        }
+    }
+
+    struct LoopState { var progress: CGFloat; var detached: Bool; var flutter: CGFloat }
+
+    // phase 0.00..0.45 : tear opens (intact -> tearing)
+    // phase 0.45..0.80 : freed piece flutters away (the upper sheet stays put)
+    // phase 0.80..1.00 : hold + gentle re-arm so the reset never flashes blank
+    private func state(for phase: Double) -> LoopState {
+        if phase < 0.45 {
+            let p = ease(phase / 0.45)
+            return LoopState(progress: CGFloat(p), detached: false, flutter: 0)
+        } else if phase < 0.80 {
+            let f = (phase - 0.45) / 0.35
+            return LoopState(progress: 1, detached: true, flutter: CGFloat(ease(f)))
+        } else {
+            // Re-arm: a fresh stub eases back into place (progress 1 -> 0).
+            let r = (phase - 0.80) / 0.20
+            let prog = 1 - ease(r)
+            return LoopState(progress: CGFloat(prog), detached: false, flutter: 0)
+        }
+    }
+
+    private func ease(_ x: Double) -> Double {
+        let c = min(max(x, 0), 1)
+        return c * c * (3 - 2 * c) // smoothstep
+    }
+}
+"""###,
         "ges-throw-and-catch-orbit": ###"""
 import SwiftUI
 
@@ -20067,6 +20486,6141 @@ private struct MagneticRadioSnapView_MRSDriver: ViewModifier {
                 }
         } else {
             content
+        }
+    }
+}
+"""###,
+        "mi-magnetic-snap-toggle": ###"""
+import SwiftUI
+
+/// Magnetic Snap Toggle — a draggable toggle whose knob accelerates with
+/// spring overshoot toward the nearest end on release, the track color
+/// sweeping behind it. `demo == true` auto-cycles the magnetic yank, no touch.
+struct MagneticSnapToggleView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let metrics = MagneticSnapToggleView_ToggleMetrics(size: geo.size)
+            Group {
+                if demo {
+                    MagneticSnapToggleView_DemoToggle(metrics: metrics)
+                } else {
+                    MagneticSnapToggleView_InteractiveToggle(metrics: metrics)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Layout metrics (size-relative, recomputed from live geometry)
+
+private struct MagneticSnapToggleView_ToggleMetrics {
+    let trackWidth: CGFloat
+    let trackHeight: CGFloat
+    let knobDiameter: CGFloat
+    let padding: CGFloat
+    let overshootReserve: CGFloat
+    let originX: CGFloat
+    let centerY: CGFloat
+
+    init(size: CGSize) {
+        let maxTrackW = max(size.width - 24, 40)
+        let idealW = min(maxTrackW, size.width * 0.74)
+        let idealH = min(size.height * 0.42, idealW * 0.5)
+        let h = max(min(idealH, idealW * 0.55), 22)
+        self.trackHeight = h
+        self.trackWidth = max(idealW, h * 1.9)
+        self.padding = h * 0.12
+        self.knobDiameter = h - padding * 2
+        // Headroom so a 0.6-damping spring overshoots without poking past the capsule.
+        self.overshootReserve = max(h * 0.16, 4)
+        self.originX = (size.width - trackWidth) / 2
+        self.centerY = size.height / 2
+    }
+
+    /// Horizontal distance the knob center travels between resting ends.
+    var travel: CGFloat {
+        max(trackWidth - knobDiameter - padding * 2 - overshootReserve * 2, 1)
+    }
+
+    /// Knob center X (local to the track) for normalized progress 0...1.
+    func knobCenterX(progress: Double) -> CGFloat {
+        let p = CGFloat(min(max(progress, 0), 1))
+        return padding + overshootReserve + knobDiameter / 2 + travel * p
+    }
+}
+
+// MARK: - Shared visual (track + fill + knob), parameterized by progress
+
+private struct MagneticSnapToggleView_ToggleBody: View {
+    let metrics: MagneticSnapToggleView_ToggleMetrics
+    let progress: Double
+    let isDragging: Bool
+
+    private var clamped: Double { min(max(progress, 0), 1) }
+
+    private var fillColor: Color {
+        let t = clamped
+        return Color(red: lerp(0.20, 0.30, t),
+                     green: lerp(0.22, 0.80, t),
+                     blue: lerp(0.28, 0.46, t))
+    }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            trackBase
+            trackFill
+            knob
+        }
+        .frame(width: metrics.trackWidth, height: metrics.trackHeight)
+        .position(x: metrics.originX + metrics.trackWidth / 2, y: metrics.centerY)
+    }
+
+    private var trackBase: some View {
+        Capsule()
+            .fill(Color(red: 0.13, green: 0.13, blue: 0.17))
+            .overlay(
+                Capsule().stroke(Color(red: 0.30, green: 0.30, blue: 0.36), lineWidth: 1)
+            )
+    }
+
+    private var trackFill: some View {
+        let knobX = metrics.knobCenterX(progress: clamped)
+        let fillW = max(knobX + metrics.knobDiameter / 2 + metrics.padding,
+                        metrics.trackHeight)
+        return Capsule()
+            .fill(
+                LinearGradient(colors: [fillColor.opacity(0.95), fillColor.opacity(0.62)],
+                               startPoint: .leading, endPoint: .trailing)
+            )
+            .frame(width: fillW)
+            .opacity(0.18 + clamped * 0.82)
+            .frame(width: metrics.trackWidth, alignment: .leading)
+            .clipShape(Capsule())
+            .allowsHitTesting(false)
+    }
+
+    private var knob: some View {
+        let d = metrics.knobDiameter
+        let cx = metrics.knobCenterX(progress: clamped)
+        return Circle()
+            .fill(
+                LinearGradient(colors: [Color(red: 1, green: 1, blue: 1),
+                                        Color(red: 0.88, green: 0.90, blue: 0.94)],
+                               startPoint: .top, endPoint: .bottom)
+            )
+            .frame(width: d, height: d)
+            .overlay(
+                Circle().stroke(Color(red: 0, green: 0, blue: 0).opacity(0.06), lineWidth: 1)
+            )
+            .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(0.30),
+                    radius: isDragging ? 5 : 3, x: 0, y: isDragging ? 3 : 2)
+            .scaleEffect(isDragging ? 1.07 : 1.0)
+            .position(x: cx, y: metrics.trackHeight / 2)
+    }
+
+    private func lerp(_ a: Double, _ b: Double, _ t: Double) -> Double { a + (b - a) * t }
+}
+
+// MARK: - Interactive (demo == false)
+
+private struct MagneticSnapToggleView_InteractiveToggle: View {
+    let metrics: MagneticSnapToggleView_ToggleMetrics
+
+    @State private var progress: Double = 0
+    @State private var dragStartProgress: Double = 0
+    @State private var isDragging = false
+    @State private var snapCount: Int = 0       // changes only on landing -> .impact
+    @State private var midCrossings: Int = 0    // changes on live midpoint cross -> .selection
+    @State private var wasPastMid: Bool = false
+
+    var body: some View {
+        MagneticSnapToggleView_ToggleBody(metrics: metrics, progress: progress, isDragging: isDragging)
+            .contentShape(Rectangle())
+            .gesture(dragGesture)
+            .sensoryFeedback(.selection, trigger: midCrossings)
+            .sensoryFeedback(.impact(flexibility: .solid, intensity: 0.85), trigger: snapCount)
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if !isDragging {
+                    isDragging = true
+                    dragStartProgress = progress
+                    wasPastMid = progress >= 0.5
+                }
+                let delta = Double(value.translation.width / max(metrics.travel, 1))
+                progress = min(max(dragStartProgress + delta, 0), 1)
+                let pastMid = progress >= 0.5
+                if pastMid != wasPastMid {
+                    wasPastMid = pastMid
+                    midCrossings += 1
+                }
+            }
+            .onEnded { value in
+                isDragging = false
+                let moved = abs(value.translation.width)
+                let target: Double
+                if moved < 6 {
+                    // No meaningful drag -> treat as a tap, flip to the opposite end.
+                    target = dragStartProgress < 0.5 ? 1 : 0
+                } else {
+                    // Snap to the nearest end by current position (midpoint rule).
+                    target = progress >= 0.5 ? 1 : 0
+                }
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
+                    progress = target
+                }
+                snapCount += 1
+            }
+    }
+}
+
+// MARK: - Demo (demo == true) — self-driving magnetic yank loop
+
+private struct MagneticSnapToggleView_DemoToggle: View {
+    let metrics: MagneticSnapToggleView_ToggleMetrics
+
+    var body: some View {
+        PhaseAnimator(MagneticSnapToggleView_DemoPhase.allCases) { phase in
+            MagneticSnapToggleView_ToggleBody(metrics: metrics, progress: phase.progress, isDragging: phase.dragging)
+        } animation: { phase in
+            phase.animation
+        }
+    }
+}
+
+private enum MagneticSnapToggleView_DemoPhase: CaseIterable {
+    case settleOff, yankOn, holdOn, yankOff, holdOff
+
+    var progress: Double {
+        switch self {
+        case .settleOff: return 0
+        case .yankOn:    return 1
+        case .holdOn:    return 1
+        case .yankOff:   return 0
+        case .holdOff:   return 0
+        }
+    }
+
+    var dragging: Bool {
+        // Lift the knob during the snap legs for a tactile, alive feel.
+        switch self {
+        case .yankOn, .yankOff:             return true
+        case .settleOff, .holdOn, .holdOff: return false
+        }
+    }
+
+    var animation: Animation {
+        switch self {
+        case .settleOff:
+            return .easeInOut(duration: 0.12)
+        case .yankOn:
+            return .spring(response: 0.35, dampingFraction: 0.6).delay(0.15)
+        case .holdOn:
+            return .easeInOut(duration: 0.1).delay(0.95)
+        case .yankOff:
+            return .spring(response: 0.35, dampingFraction: 0.6).delay(0.15)
+        case .holdOff:
+            return .easeInOut(duration: 0.1).delay(0.95)
+        }
+    }
+}
+"""###,
+        "mi-mood-morph-rating": ###"""
+import SwiftUI
+
+// MARK: - Mood-Morph Rating
+// A single face whose mouth path continuously morphs from frown to grin as the
+// rating value changes. MoodMorphRatingView_Eyes widen near the top score. The mouth is an
+// Animatable closed lens (two quadratic curves, constant topology) so the morph
+// stays perfectly smooth. demo == true self-drives a sine sweep; demo == false
+// is a live DragGesture that snaps to the nearest notch on release.
+
+struct MoodMorphRatingView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            content(in: proxy.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        if demo {
+            MoodMorphRatingView_DemoDriver(size: size)
+        } else {
+            MoodMorphRatingView_InteractiveDriver(size: size)
+        }
+    }
+}
+
+// MARK: - Demo driver (self-running, never blank)
+
+private struct MoodMorphRatingView_DemoDriver: View {
+    let size: CGSize
+    private let period: Double = 3.2
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let phase = t.truncatingRemainder(dividingBy: period) / period
+            // 0 -> 1 -> 0 smooth sweep, starts at frown.
+            let morph = (1.0 - cos(2.0 * .pi * phase)) / 2.0
+            MoodMorphRatingView_MoodFace(morph: CGFloat(morph), size: size)
+        }
+    }
+}
+
+// MARK: - Interactive driver (real DragGesture)
+
+private struct MoodMorphRatingView_InteractiveDriver: View {
+    let size: CGSize
+    @State private var morph: CGFloat = 0.0
+    @State private var lastNotch: Int = 0
+
+    private let notches: Int = 5 // 0...4 -> five mood steps
+
+    var body: some View {
+        let layout = MoodMorphRatingView_FaceLayout(size: size)
+        ZStack {
+            MoodMorphRatingView_MoodFace(morph: morph, size: size)
+        }
+        .contentShape(Rectangle())
+        .gesture(dragGesture(track: layout.trackRect))
+        .sensoryFeedback(.selection, trigger: lastNotch)
+        .onAppear {
+            // Start at a legible neutral-ish smile so it is never expressionless.
+            morph = 0.5
+            lastNotch = notchIndex(for: 0.5)
+        }
+    }
+
+    private func dragGesture(track: CGRect) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let raw = (value.location.x - track.minX) / max(track.width, 1)
+                let clamped = min(max(raw, 0.0), 1.0)
+                morph = clamped
+                let idx = notchIndex(for: clamped)
+                if idx != lastNotch { lastNotch = idx }
+            }
+            .onEnded { _ in
+                let idx = notchIndex(for: morph)
+                let snapped = CGFloat(idx) / CGFloat(notches - 1)
+                lastNotch = idx
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.62)) {
+                    morph = snapped
+                }
+            }
+    }
+
+    private func notchIndex(for value: CGFloat) -> Int {
+        let scaled = value * CGFloat(notches - 1)
+        return Int((scaled).rounded())
+    }
+}
+
+// MARK: - Layout
+
+private struct MoodMorphRatingView_FaceLayout {
+    let size: CGSize
+
+    var side: CGFloat { min(size.width, size.height) }
+
+    /// The face sits in the upper portion; a thin track lives below it.
+    var facePadding: CGFloat { side * 0.12 }
+
+    var faceRect: CGRect {
+        let s = side * 0.74
+        let x = (size.width - s) / 2.0
+        let y = (size.height - s) / 2.0 - side * 0.06
+        return CGRect(x: x, y: y, width: s, height: s)
+    }
+
+    var trackRect: CGRect {
+        let f = faceRect
+        let w = f.width * 1.04
+        let x = (size.width - w) / 2.0
+        let h = max(side * 0.05, 6)
+        let y = f.maxY + side * 0.08
+        return CGRect(x: x, y: y, width: w, height: h)
+    }
+}
+
+// MARK: - The face (pure function of `morph`)
+
+private struct MoodMorphRatingView_MoodFace: View {
+    let morph: CGFloat   // 0 = frown, 1 = grin
+    let size: CGSize
+
+    var body: some View {
+        let layout = MoodMorphRatingView_FaceLayout(size: size)
+        ZStack {
+            MoodMorphRatingView_FaceBubble(morph: morph, rect: layout.faceRect)
+            MoodMorphRatingView_Eyes(morph: morph, faceRect: layout.faceRect)
+            MoodMorphRatingView_MouthLayer(morph: morph, faceRect: layout.faceRect)
+            MoodMorphRatingView_NotchTrack(morph: morph, rect: layout.trackRect)
+        }
+    }
+}
+
+// MARK: - Face bubble background
+
+private struct MoodMorphRatingView_FaceBubble: View {
+    let morph: CGFloat
+    let rect: CGRect
+
+    var body: some View {
+        let fill = faceColor(for: morph)
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [fill.0, fill.1],
+                    center: .init(x: 0.35, y: 0.3),
+                    startRadius: 1,
+                    endRadius: rect.width * 0.85
+                )
+            )
+            .overlay(
+                Circle().stroke(
+                    Color(red: 0.0, green: 0.0, blue: 0.0).opacity(0.10),
+                    lineWidth: max(rect.width * 0.012, 0.5)
+                )
+            )
+            .frame(width: rect.width, height: rect.height)
+            .position(x: rect.midX, y: rect.midY)
+            .shadow(color: fill.1.opacity(0.45), radius: rect.width * 0.06, y: rect.width * 0.03)
+    }
+
+    /// Warm/golden at high morph, cool/violet at low morph.
+    private func faceColor(for m: CGFloat) -> (Color, Color) {
+        let t = min(max(m, 0.0), 1.0)
+        // sad: muted periwinkle  -> happy: warm gold
+        let topR = lerp(0.62, 1.00, t)
+        let topG = lerp(0.66, 0.86, t)
+        let topB = lerp(0.92, 0.36, t)
+        let botR = lerp(0.45, 0.98, t)
+        let botG = lerp(0.49, 0.69, t)
+        let botB = lerp(0.82, 0.20, t)
+        return (
+            Color(red: topR, green: topG, blue: topB),
+            Color(red: botR, green: botG, blue: botB)
+        )
+    }
+}
+
+// MARK: - MoodMorphRatingView_Eyes
+
+private struct MoodMorphRatingView_Eyes: View {
+    let morph: CGFloat
+    let faceRect: CGRect
+
+    var body: some View {
+        let eyeY = faceRect.minY + faceRect.height * 0.40
+        let dx = faceRect.width * 0.20
+        let baseSize = faceRect.width * 0.115
+        let widen = topRamp(morph)            // 0 until ~0.7, ramps to 1 by 1.0
+        let scale = 1.0 + widen * 0.55
+        let eyeColor = Color(red: 0.16, green: 0.13, blue: 0.20)
+
+        ZStack {
+            eye(color: eyeColor, size: baseSize)
+                .scaleEffect(scale)
+                .position(x: faceRect.midX - dx, y: eyeY)
+            eye(color: eyeColor, size: baseSize)
+                .scaleEffect(scale)
+                .position(x: faceRect.midX + dx, y: eyeY)
+        }
+    }
+
+    @ViewBuilder
+    private func eye(color: Color, size: CGFloat) -> some View {
+        ZStack {
+            Circle()
+                .fill(color)
+                .frame(width: size, height: size)
+            // Catch-light: brighter as eyes widen for a livelier top score.
+            Circle()
+                .fill(Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.85))
+                .frame(width: size * 0.32, height: size * 0.32)
+                .offset(x: -size * 0.18, y: -size * 0.20)
+        }
+    }
+
+    /// Returns 0 below 0.7, eased ramp to 1 at 1.0.
+    private func topRamp(_ m: CGFloat) -> CGFloat {
+        let start: CGFloat = 0.7
+        guard m > start else { return 0 }
+        let t = (m - start) / (1.0 - start)
+        // smoothstep
+        return t * t * (3 - 2 * t)
+    }
+}
+
+// MARK: - Mouth
+
+private struct MoodMorphRatingView_MouthLayer: View {
+    let morph: CGFloat
+    let faceRect: CGRect
+
+    var body: some View {
+        let mouthColor = Color(red: 0.16, green: 0.10, blue: 0.16)
+        MoodMorphRatingView_MouthShape(morph: morph)
+            .fill(mouthColor)
+            .overlay(
+                MoodMorphRatingView_MouthShape(morph: morph)
+                    .stroke(mouthColor, lineWidth: max(faceRect.width * 0.02, 1))
+            )
+            .frame(width: faceRect.width, height: faceRect.height)
+            .position(x: faceRect.midX, y: faceRect.midY)
+    }
+}
+
+/// A closed-lens mouth made of exactly two quadratic curves + close.
+/// Topology is identical at every `morph`, so the morph animates smoothly.
+private struct MoodMorphRatingView_MouthShape: Shape {
+    var morph: CGFloat // 0 = frown, 1 = grin
+
+    var animatableData: CGFloat {
+        get { morph }
+        set { morph = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let m = min(max(morph, 0.0), 1.0)
+
+        // Mouth band sits in the lower third of the face rect.
+        let cx = rect.midX
+        let baseY = rect.minY + rect.height * 0.66
+        let halfWidth = rect.width * 0.24
+
+        let left = CGPoint(x: cx - halfWidth, y: cornerY(baseY: baseY, rect: rect, m: m))
+        let right = CGPoint(x: cx + halfWidth, y: cornerY(baseY: baseY, rect: rect, m: m))
+
+        // Control point Y for the upper edge and the lower edge.
+        // Frown (m=0): both bow UP (smaller y). Grin (m=1): both bow DOWN (larger y).
+        // The lens always keeps a non-zero thickness so it reads as a mouth.
+        let span = rect.height
+        // Center offset of the whole mouth: frown -> up curve, grin -> down curve.
+        let curveAmt = lerp(-span * 0.11, span * 0.20, m)   // negative = up (frown)
+        let thickness = lerp(span * 0.045, span * 0.085, m) // a touch fuller when grinning
+
+        let upperCtrl = CGPoint(x: cx, y: baseY + curveAmt - thickness)
+        let lowerCtrl = CGPoint(x: cx, y: baseY + curveAmt + thickness)
+
+        var path = Path()
+        path.move(to: left)
+        path.addQuadCurve(to: right, control: upperCtrl)
+        path.addQuadCurve(to: left, control: lowerCtrl)
+        path.closeSubpath()
+        return path
+    }
+
+    /// Corners lift slightly upward toward a grin for a richer smile.
+    private func cornerY(baseY: CGFloat, rect: CGRect, m: CGFloat) -> CGFloat {
+        // grin pulls corners up; frown lets them sit / droop a bit.
+        let lift = lerp(rect.height * 0.02, -rect.height * 0.05, m)
+        return baseY + lift
+    }
+}
+
+// MARK: - Notch track (secondary affordance)
+
+private struct MoodMorphRatingView_NotchTrack: View {
+    let morph: CGFloat
+    let rect: CGRect
+
+    private let notches: Int = 5
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            Capsule()
+                .fill(Color(red: 0.0, green: 0.0, blue: 0.0).opacity(0.16))
+                .frame(width: rect.width, height: rect.height)
+
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 1.00, green: 0.78, blue: 0.30),
+                            Color(red: 0.98, green: 0.55, blue: 0.22)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: max(rect.width * morph, rect.height), height: rect.height)
+
+            HStack(spacing: 0) {
+                ForEach(0..<notches, id: \.self) { i in
+                    Circle()
+                        .fill(Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.55))
+                        .frame(width: rect.height * 0.34, height: rect.height * 0.34)
+                        .frame(maxWidth: .infinity)
+                        .opacity(i == 0 || i == notches - 1 ? 0.0 : 1.0)
+                }
+            }
+            .frame(width: rect.width, height: rect.height)
+        }
+        .frame(width: rect.width, height: rect.height)
+        .position(x: rect.midX, y: rect.midY)
+    }
+}
+
+// MARK: - Helpers
+
+private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat {
+    a + (b - a) * t
+}
+"""###,
+        "mi-mute-morph": ###"""
+import SwiftUI
+
+// MARK: - Mute Wave Morph
+// Tapping the speaker collapses three animated sound waves inward and draws a
+// slash across it; unmuting springs the waves back out. A single fluid morph
+// driven by one `muteProgress` value (0 = audible, 1 = muted).
+
+struct MuteMorphView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            Group {
+                if demo {
+                    MuteMorphView_DemoDriver(side: side)
+                } else {
+                    MuteMorphView_InteractiveDriver(side: side)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Drivers
+
+/// Self-driving loop for tile previews. Never blank: the speaker body is always
+/// drawn; only the waves retract and the slash strokes on across the ~3.2s loop.
+private struct MuteMorphView_DemoDriver: View {
+    let side: CGFloat
+    private let period: Double = 3.2
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let progress = Self.loopProgress(time: t, period: period)
+            MuteMorphView_MuteGlyph(progress: progress, side: side)
+        }
+    }
+
+    /// Ping-pong 0->1->0 with a smoothstep ease and a short hold at each end so
+    /// both the audible and muted states are legible for a beat.
+    static func loopProgress(time: Double, period: Double) -> CGFloat {
+        let phase = (time.truncatingRemainder(dividingBy: period)) / period
+        // First half ramps to muted, second half ramps back.
+        let triangle: Double = phase < 0.5 ? phase * 2.0 : (1.0 - phase) * 2.0
+        // Hold at the extremes by stretching the middle of the ramp.
+        let held = smoothHold(triangle)
+        return CGFloat(smoothstep(held))
+    }
+
+    static func smoothHold(_ x: Double) -> Double {
+        // Push values toward 0 and 1 to create a dwell at each end.
+        let c = min(max(x, 0.0), 1.0)
+        return c * c * (3.0 - 2.0 * c)
+    }
+
+    static func smoothstep(_ x: Double) -> Double {
+        let c = min(max(x, 0.0), 1.0)
+        return c * c * (3.0 - 2.0 * c)
+    }
+}
+
+/// Real interactive component: a tap toggles `isMuted` with a spring.
+private struct MuteMorphView_InteractiveDriver: View {
+    let side: CGFloat
+    @State private var muteProgress: CGFloat = 0
+
+    var body: some View {
+        MuteMorphView_MuteGlyph(progress: muteProgress, side: side)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.62)) {
+                    muteProgress = muteProgress < 0.5 ? 1 : 0
+                }
+            }
+            .sensoryFeedback(.selection, trigger: muteProgress >= 0.5)
+    }
+}
+
+// MARK: - Glyph composition
+
+/// The full speaker glyph. `progress` 0 = waves out / no slash,
+/// 1 = waves retracted / slash fully drawn.
+private struct MuteMorphView_MuteGlyph: View {
+    let progress: CGFloat
+    let side: CGFloat
+
+    private var unit: CGFloat { side }
+
+    private var mutedTint: Color {
+        Color(red: 1.0, green: 0.40, blue: 0.42)
+    }
+    private var bodyTint: Color {
+        // Interpolate audible (cyan-blue) -> muted (red) directly from the
+        // known component endpoints. Self-contained, no UIKit color bridging.
+        Color(
+            red: lerpD(0.45, 1.0, progress),
+            green: lerpD(0.78, 0.40, progress),
+            blue: lerpD(1.0, 0.42, progress)
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            background
+            content
+        }
+        .frame(width: unit, height: unit)
+    }
+
+    private var background: some View {
+        RoundedRectangle(cornerRadius: unit * 0.22, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.10, green: 0.09, blue: 0.13),
+                        Color(red: 0.05, green: 0.05, blue: 0.08)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: unit * 0.22, style: .continuous)
+                    .strokeBorder(bodyTint.opacity(0.18), lineWidth: max(0.6, unit * 0.006))
+            )
+    }
+
+    private var content: some View {
+        ZStack {
+            glow
+            waves
+            speaker
+            slash
+        }
+        .frame(width: unit * 0.62, height: unit * 0.62)
+    }
+
+    // Soft halo behind the glyph; never fully off so the tile stays alive.
+    private var glow: some View {
+        Circle()
+            .fill(bodyTint.opacity(0.16 + 0.10 * (1 - progress)))
+            .blur(radius: unit * 0.06)
+            .scaleEffect(0.9 + 0.10 * (1 - progress))
+    }
+
+    private var speaker: some View {
+        MuteMorphView_SpeakerBody()
+            .fill(bodyTint)
+            .overlay(
+                MuteMorphView_SpeakerBody()
+                    .stroke(Color.white.opacity(0.10), lineWidth: max(0.5, unit * 0.004))
+            )
+            .shadow(color: bodyTint.opacity(0.5 * progress), radius: unit * 0.03)
+    }
+
+    // Three concentric arcs that retract outer-first as progress rises.
+    private var waves: some View {
+        ZStack {
+            ForEach(0..<3, id: \.self) { index in
+                waveArc(index: index)
+            }
+        }
+    }
+
+    private func waveArc(index: Int) -> some View {
+        // Outer arcs retract first: give later indices an earlier collapse.
+        let stagger = CGFloat(index) * 0.22
+        let local = clamp01((progress - stagger) / (1.0 - stagger))
+        let extend = 1.0 - local                 // 1 = fully out, 0 = retracted
+        let lineWidth = max(1.0, unit * 0.034)
+        return MuteMorphView_WaveArc(index: index, extend: extend)
+            .trim(from: 0, to: extend)
+            .stroke(
+                bodyTint.opacity(0.35 + 0.55 * extend),
+                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+            )
+            .scaleEffect(0.82 + 0.18 * extend)   // pull inward toward the cone
+    }
+
+    private var slash: some View {
+        MuteMorphView_SlashLine()
+            .trim(from: 0, to: progress)
+            .stroke(
+                mutedTint,
+                style: StrokeStyle(lineWidth: max(1.2, unit * 0.040), lineCap: .round)
+            )
+            .shadow(color: mutedTint.opacity(0.6 * progress), radius: unit * 0.02)
+    }
+}
+
+// MARK: - Shapes
+
+/// A flat speaker icon: a rectangular driver plus a triangular cone, sitting in
+/// the left third of the rect so the waves have room on the right.
+private struct MuteMorphView_SpeakerBody: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width
+        let h = rect.height
+        let midY = rect.midY
+
+        // Square driver box.
+        let boxLeft = rect.minX + w * 0.06
+        let boxRight = rect.minX + w * 0.30
+        let boxTop = midY - h * 0.14
+        let boxBottom = midY + h * 0.14
+        path.addRoundedRect(
+            in: CGRect(x: boxLeft, y: boxTop, width: boxRight - boxLeft, height: boxBottom - boxTop),
+            cornerSize: CGSize(width: w * 0.02, height: w * 0.02)
+        )
+
+        // Triangular cone flaring out to the right.
+        let coneTop = midY - h * 0.30
+        let coneBottom = midY + h * 0.30
+        let coneRight = rect.minX + w * 0.50
+        path.move(to: CGPoint(x: boxRight - w * 0.01, y: boxTop))
+        path.addLine(to: CGPoint(x: coneRight, y: coneTop))
+        path.addLine(to: CGPoint(x: coneRight, y: coneBottom))
+        path.addLine(to: CGPoint(x: boxRight - w * 0.01, y: boxBottom))
+        path.closeSubpath()
+
+        return path
+    }
+}
+
+/// Concentric right-opening arcs centered on the speaker cone mouth.
+private struct MuteMorphView_WaveArc: Shape {
+    let index: Int
+    var extend: CGFloat  // animatable retract amount, 1 = out, 0 = in
+
+    var animatableData: CGFloat {
+        get { extend }
+        set { extend = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width
+        let h = rect.height
+        // Arc center sits at the cone mouth on the right of the speaker.
+        let center = CGPoint(x: rect.minX + w * 0.50, y: rect.midY)
+        let baseRadius = w * 0.16
+        let step = w * 0.13
+        let radius = baseRadius + CGFloat(index) * step
+        // Spread of each arc narrows slightly as it retracts.
+        let spread: CGFloat = 38 + 6 * extend
+        path.addArc(
+            center: center,
+            radius: max(radius, 0.5),
+            startAngle: .degrees(Double(-spread)),
+            endAngle: .degrees(Double(spread)),
+            clockwise: false
+        )
+        _ = h
+        return path
+    }
+}
+
+/// Diagonal mute slash from upper-left to lower-right across the glyph.
+private struct MuteMorphView_SlashLine: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let inset: CGFloat = rect.width * 0.06
+        path.move(to: CGPoint(x: rect.minX + inset, y: rect.minY + inset))
+        path.addLine(to: CGPoint(x: rect.maxX - inset, y: rect.maxY - inset))
+        return path
+    }
+}
+
+// MARK: - Math helpers
+
+private func clamp01(_ x: CGFloat) -> CGFloat {
+    min(max(x, 0), 1)
+}
+
+/// Linear interpolation between two Double endpoints by a clamped CGFloat t.
+private func lerpD(_ a: Double, _ b: Double, _ t: CGFloat) -> Double {
+    a + (b - a) * Double(clamp01(t))
+}
+"""###,
+        "mi-orbit-badge": ###"""
+import SwiftUI
+
+// MARK: - OrbitBadgeView
+//
+// Micro-interaction: when a count crosses a milestone threshold, the badge
+// spawns a tiny satellite dot that orbits it once trailing a comet streak,
+// then merges back in via scale + opacity.
+//
+// demo == true  -> self-driving loop: count ticks up on a clock, milestone
+//                  crossings fire the orbit automatically (~3.4s cycle).
+// demo == false -> auto loop runs out of the box (spec interaction is "auto");
+//                  additionally, tapping the badge increments the count and a
+//                  milestone crossing fires the orbit, a non-milestone tap gives
+//                  a small reactive bump. The badge + number stay legible always.
+//
+// The comet trail is derived analytically from the current orbit angle inside
+// a Canvas (no mutated point buffer), so it streaks correctly per frame and
+// never warns about modifying state during view update.
+
+struct OrbitBadgeView: View {
+    var demo: Bool = false
+
+    // Interactive state. Only ever written from the tap handler — never from
+    // inside the TimelineView closure.
+    @State private var count: Int = 11
+    @State private var triggerDate: Date? = nil
+    @State private var bumpDate: Date? = nil
+
+    // Timing.
+    private let cycleDuration: Double = 3.4   // demo loop length
+    private let orbitDuration: Double = 1.45  // one full orbit
+    private let mergeDuration: Double = 0.42   // satellite merge tail
+    private let milestoneStep: Int = 5
+
+    var body: some View {
+        GeometryReader { geo in
+            TimelineView(.animation) { timeline in
+                let now = timeline.date.timeIntervalSinceReferenceDate
+                let phase = currentPhase(now: now)
+                content(geo: geo, phase: phase, now: now)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture { handleTap() }
+        .sensoryFeedback(.impact(weight: .medium), trigger: triggerDate)
+        .sensoryFeedback(.selection, trigger: bumpDate)
+    }
+
+    // MARK: - Composition
+
+    @ViewBuilder
+    private func content(geo: GeometryProxy, phase: OrbitBadgeView_OrbitPhase, now: Double) -> some View {
+        let side = min(geo.size.width, geo.size.height)
+        let badgeRadius = side * 0.20
+        let orbitRadius = badgeRadius + side * 0.16
+        let displayedCount = currentCount(now: now)
+
+        ZStack {
+            backdrop(side: side)
+
+            // Comet trail + satellite live behind/around the badge.
+            OrbitBadgeView_CometCanvas(
+                phase: phase,
+                orbitRadius: orbitRadius,
+                dotRadius: side * 0.045
+            )
+            .frame(width: side, height: side)
+
+            OrbitBadgeView_BadgeGlyph(
+                count: displayedCount,
+                radius: badgeRadius,
+                pulse: phase.badgePulse
+            )
+        }
+        .frame(width: geo.size.width, height: geo.size.height)
+    }
+
+    private func backdrop(side: CGFloat) -> some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.16, green: 0.13, blue: 0.24),
+                        Color(red: 0.078, green: 0.063, blue: 0.098)
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: side * 0.62
+                )
+            )
+            .frame(width: side * 1.15, height: side * 1.15)
+            .opacity(0.9)
+    }
+
+    // MARK: - Phase computation (pure — never writes state)
+
+    private func currentPhase(now: Double) -> OrbitBadgeView_OrbitPhase {
+        if demo {
+            let t = now.truncatingRemainder(dividingBy: cycleDuration)
+            // Orbit fires near the start of each cycle; the rest of the cycle is "rest".
+            return phase(forElapsed: t)
+        } else {
+            guard let start = triggerDate?.timeIntervalSinceReferenceDate else {
+                // No milestone tapped yet: keep the tile alive with the auto
+                // loop so an "auto" spec is never static between renders.
+                let t = now.truncatingRemainder(dividingBy: cycleDuration)
+                return phase(forElapsed: t)
+            }
+            let elapsed = now - start
+            if elapsed < 0 || elapsed > orbitDuration + mergeDuration {
+                return restPhase(now: now)
+            }
+            return phase(forElapsed: elapsed)
+        }
+    }
+
+    /// A satellite phase derived from elapsed seconds since the trigger.
+    private func phase(forElapsed elapsed: Double) -> OrbitBadgeView_OrbitPhase {
+        if elapsed < 0 || elapsed > orbitDuration + mergeDuration {
+            return OrbitBadgeView_OrbitPhase.rest
+        }
+
+        if elapsed <= orbitDuration {
+            // Orbiting: ease the angle so it accelerates out and decelerates in.
+            let raw = elapsed / orbitDuration
+            let eased = easeInOut(raw)
+            let angle = eased * (.pi * 2.0) - (.pi / 2.0) // start at top
+            // Satellite springs in at launch, full size while orbiting.
+            let appear = min(1.0, raw / 0.12)
+            return OrbitBadgeView_OrbitPhase(
+                visible: true,
+                angle: angle,
+                trailSpan: 1.0,
+                scale: 0.55 + 0.45 * appear,
+                opacity: appear,
+                badgePulse: badgePulse(raw: raw)
+            )
+        } else {
+            // Merge tail: dot pulls into the badge center, scaling + fading.
+            let mt = (elapsed - orbitDuration) / mergeDuration
+            let mEased = easeOut(min(1.0, mt))
+            let angle = -(.pi / 2.0) + (.pi * 2.0) * 0.0 // back at top
+            return OrbitBadgeView_OrbitPhase(
+                visible: true,
+                angle: angle,
+                trailSpan: 1.0 - mEased,           // trail shrinks as it merges
+                mergeProgress: mEased,
+                scale: 1.0 - 0.7 * mEased,
+                opacity: 1.0 - mEased,
+                badgePulse: 1.0 + 0.18 * (1.0 - mEased)
+            )
+        }
+    }
+
+    private func restPhase(now: Double) -> OrbitBadgeView_OrbitPhase {
+        // At rest, optionally apply a small badge bump from a non-milestone tap.
+        guard !demo, let b = bumpDate?.timeIntervalSinceReferenceDate else {
+            return OrbitBadgeView_OrbitPhase.rest
+        }
+        let dt = now - b
+        let bumpLen = 0.4
+        if dt < 0 || dt > bumpLen { return OrbitBadgeView_OrbitPhase.rest }
+        let p = dt / bumpLen
+        let pulse = 1.0 + 0.14 * sin(p * .pi)
+        return OrbitBadgeView_OrbitPhase(visible: false, angle: 0, trailSpan: 0,
+                          scale: 0, opacity: 0, badgePulse: pulse)
+    }
+
+    private func badgePulse(raw: Double) -> Double {
+        // Subtle anticipation as the satellite launches.
+        1.0 + 0.10 * exp(-pow((raw - 0.04) * 14.0, 2.0))
+    }
+
+    // MARK: - Count (pure — derived, never mutated in closure)
+
+    private func currentCount(now: Double) -> Int {
+        if demo {
+            // Cycle a small, always-legible count that lands on a milestone each
+            // cycle so the viewer actually sees it cross a threshold (the orbit
+            // is driven off the time cycle, so this value is cosmetic).
+            let cycles = Int(now / cycleDuration)
+            return ((cycles % 6) + 1) * milestoneStep // 5,10,...,30 then wraps
+        } else {
+            return count
+        }
+    }
+
+    // MARK: - Interaction
+
+    private func handleTap() {
+        guard !demo else { return }
+        let newCount = count + 1
+        count = newCount
+        if newCount % milestoneStep == 0 {
+            triggerDate = Date()
+        } else {
+            bumpDate = Date()
+        }
+    }
+
+    // MARK: - Easing helpers
+
+    private func easeInOut(_ t: Double) -> Double {
+        t < 0.5 ? 2.0 * t * t : 1.0 - pow(-2.0 * t + 2.0, 2.0) / 2.0
+    }
+
+    private func easeOut(_ t: Double) -> Double {
+        1.0 - pow(1.0 - t, 3.0)
+    }
+}
+
+// MARK: - Phase model
+
+private struct OrbitBadgeView_OrbitPhase {
+    var visible: Bool
+    var angle: Double          // radians around the badge center
+    var trailSpan: Double      // 0...1 length multiplier for the comet streak
+    var mergeProgress: Double = 0
+    var scale: Double
+    var opacity: Double
+    var badgePulse: Double
+
+    static let rest = OrbitBadgeView_OrbitPhase(
+        visible: false, angle: 0, trailSpan: 0,
+        scale: 0, opacity: 0, badgePulse: 1.0
+    )
+}
+
+// MARK: - Comet Canvas (analytic trail — no mutated buffer)
+
+private struct OrbitBadgeView_CometCanvas: View {
+    let phase: OrbitBadgeView_OrbitPhase
+    let orbitRadius: CGFloat
+    let dotRadius: CGFloat
+
+    private let trailSamples: Int = 14
+    private let trailArc: Double = 1.05 // radians of trail behind the dot
+
+    var body: some View {
+        Canvas { context, size in
+            guard phase.visible, phase.opacity > 0.001 else { return }
+            let center = CGPoint(x: size.width / 2.0, y: size.height / 2.0)
+            // Pull radius in as the dot merges toward the badge center.
+            let radius = orbitRadius * (1.0 - 0.85 * phase.mergeProgress)
+
+            drawTrail(context: context, center: center, radius: radius)
+            drawHead(context: context, center: center, radius: radius)
+        }
+    }
+
+    private func point(center: CGPoint, radius: CGFloat, angle: Double) -> CGPoint {
+        CGPoint(
+            x: center.x + radius * CGFloat(cos(angle)),
+            y: center.y + radius * CGFloat(sin(angle))
+        )
+    }
+
+    private func drawTrail(context: GraphicsContext, center: CGPoint, radius: CGFloat) {
+        let span = max(0.0, phase.trailSpan)
+        guard span > 0.01 else { return }
+        let baseColor = Color(red: 1.0, green: 0.78, blue: 0.35)
+
+        for i in 1...trailSamples {
+            let frac = Double(i) / Double(trailSamples) // 0..1 back along trail
+            let back = frac * trailArc * span
+            let a = phase.angle - back
+            let p = point(center: center, radius: radius, angle: a)
+            let fade = (1.0 - frac)
+            let r = dotRadius * (0.78 * fade + 0.12)
+            let alpha = phase.opacity * fade * fade * 0.85
+            guard alpha > 0.004 else { continue }
+
+            let rect = CGRect(
+                x: p.x - r, y: p.y - r,
+                width: r * 2.0, height: r * 2.0
+            )
+            var ctx = context
+            ctx.addFilter(.blur(radius: r * 0.45))
+            ctx.fill(Path(ellipseIn: rect), with: .color(baseColor.opacity(alpha)))
+        }
+    }
+
+    private func drawHead(context: GraphicsContext, center: CGPoint, radius: CGFloat) {
+        let p = point(center: center, radius: radius, angle: phase.angle)
+        let r = dotRadius * CGFloat(max(0.05, phase.scale))
+        let headRect = CGRect(x: p.x - r, y: p.y - r, width: r * 2.0, height: r * 2.0)
+
+        // Soft glow halo.
+        var glow = context
+        glow.addFilter(.blur(radius: r * 1.1))
+        let glowRect = headRect.insetBy(dx: -r * 0.6, dy: -r * 0.6)
+        glow.fill(
+            Path(ellipseIn: glowRect),
+            with: .color(Color(red: 1.0, green: 0.7, blue: 0.3).opacity(phase.opacity * 0.5))
+        )
+
+        // Bright core.
+        context.fill(
+            Path(ellipseIn: headRect),
+            with: .radialGradient(
+                Gradient(colors: [
+                    Color(red: 1.0, green: 0.97, blue: 0.88).opacity(phase.opacity),
+                    Color(red: 1.0, green: 0.74, blue: 0.30).opacity(phase.opacity)
+                ]),
+                center: p,
+                startRadius: 0,
+                endRadius: r
+            )
+        )
+    }
+}
+
+// MARK: - Badge glyph (always legible)
+
+private struct OrbitBadgeView_BadgeGlyph: View {
+    let count: Int
+    let radius: CGFloat
+    let pulse: Double
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 1.0, green: 0.36, blue: 0.42),
+                            Color(red: 0.93, green: 0.22, blue: 0.55)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    Circle()
+                        .strokeBorder(
+                            Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.35),
+                            lineWidth: max(1.0, radius * 0.06)
+                        )
+                )
+                .shadow(
+                    color: Color(red: 0.93, green: 0.22, blue: 0.55).opacity(0.6),
+                    radius: radius * 0.5
+                )
+
+            Text(label)
+                .font(.system(size: radius * 0.9, weight: .heavy, design: .rounded))
+                .minimumScaleFactor(0.4)
+                .lineLimit(1)
+                .foregroundStyle(Color(red: 1.0, green: 1.0, blue: 1.0))
+                .padding(.horizontal, radius * 0.18)
+        }
+        .frame(width: radius * 2.0, height: radius * 2.0)
+        .scaleEffect(pulse)
+        .animation(.spring(response: 0.3, dampingFraction: 0.55), value: count)
+    }
+
+    private var label: String {
+        count > 99 ? "99+" : "\(count)"
+    }
+}
+"""###,
+        "mi-otp-cascade": ###"""
+import SwiftUI
+
+// MARK: - OTP Cascade Entry
+// As each code digit is entered its box flips up to reveal the number with a
+// staggered domino delay; a wrong code shakes the whole row in unison.
+//
+// demo == true  -> a self-driving TimelineView clock auto-types the digits with
+//                  a domino flip stagger, holds, runs a failure shake, then clears
+//                  and loops. The empty box outlines are always visible so no frame
+//                  is ever blank.
+// demo == false -> a real interactive OTP field: a hidden focusable TextField
+//                  captures keystrokes, each new digit flips its box up, and once
+//                  the row is full the code is validated against a fixed target.
+//                  A wrong code shakes the row and clears; the right code tints green.
+
+struct OtpCascadeView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let metrics = OtpCascadeView_OtpMetrics(size: geo.size)
+            ZStack {
+                background
+                Group {
+                    if demo {
+                        OtpCascadeView_OtpCascadeDemo(metrics: metrics)
+                    } else {
+                        OtpCascadeView_OtpCascadeInteractive(metrics: metrics)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var background: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.078, green: 0.063, blue: 0.098),
+                Color(red: 0.043, green: 0.035, blue: 0.063)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+}
+
+// MARK: - Shared layout metrics
+
+private struct OtpCascadeView_OtpMetrics {
+    let size: CGSize
+    let count: Int = 4
+
+    var minSide: CGFloat { min(size.width, size.height) }
+
+    // Box width derived from available width so it works in a 120pt tile and a
+    // large detail area alike. Spacing scales with the box.
+    var boxWidth: CGFloat {
+        let usable = size.width * 0.86
+        let spacingTotal = spacing * CGFloat(count - 1)
+        let raw = (usable - spacingTotal) / CGFloat(count)
+        return max(18, min(raw, size.height * 0.55))
+    }
+
+    var boxHeight: CGFloat { boxWidth * 1.32 }
+
+    var spacing: CGFloat { max(6, size.width * 0.035) }
+
+    var corner: CGFloat { boxWidth * 0.22 }
+
+    var digitFont: CGFloat { boxHeight * 0.52 }
+
+    var captionFont: CGFloat { max(8, minSide * 0.075) }
+}
+
+// MARK: - Palette
+
+private enum OtpCascadeView_OtpPalette {
+    static let slotIdle = Color(red: 0.14, green: 0.12, blue: 0.18)
+    static let slotStroke = Color(red: 0.32, green: 0.28, blue: 0.42)
+    static let slotActive = Color(red: 0.46, green: 0.38, blue: 0.95)
+    static let digit = Color(red: 0.96, green: 0.95, blue: 1.0)
+    static let success = Color(red: 0.36, green: 0.86, blue: 0.58)
+    static let failure = Color(red: 0.98, green: 0.40, blue: 0.44)
+    static let caption = Color(red: 0.62, green: 0.58, blue: 0.74)
+
+    static func slotFill(_ accent: Color, filled: Bool) -> Color {
+        filled ? accent.opacity(0.16) : slotIdle
+    }
+}
+
+// MARK: - A single digit slot
+
+// The empty outline container is ALWAYS rendered as the resting layer; only the
+// digit face on top flips. That guarantees the row is never blank mid-cascade.
+private struct OtpCascadeView_DigitSlot: View {
+    let metrics: OtpCascadeView_OtpMetrics
+    let character: String      // empty string == not yet filled
+    let flip: Double           // 0 == flat down (hidden), 1 == fully revealed
+    let accent: Color          // tint for this slot (active / success / failure)
+    let highlighted: Bool      // active cursor position glow
+
+    private var revealAngle: Double {
+        // -90deg (edge-on, hidden) -> 0deg (face-on, revealed)
+        (1.0 - flip) * -90.0
+    }
+
+    private var faceOpacity: Double {
+        // Fade the face in only over the back half of the flip so the early
+        // edge-on sliver never shows a ghost digit.
+        max(0, min(1, (flip - 0.25) / 0.55))
+    }
+
+    var body: some View {
+        ZStack {
+            container
+            digitFace
+        }
+        .frame(width: metrics.boxWidth, height: metrics.boxHeight)
+    }
+
+    private var container: some View {
+        RoundedRectangle(cornerRadius: metrics.corner, style: .continuous)
+            .fill(OtpCascadeView_OtpPalette.slotFill(accent, filled: !character.isEmpty))
+            .overlay(
+                RoundedRectangle(cornerRadius: metrics.corner, style: .continuous)
+                    .stroke(
+                        highlighted ? accent : OtpCascadeView_OtpPalette.slotStroke,
+                        lineWidth: highlighted ? 2.0 : 1.2
+                    )
+            )
+            .overlay(cursor)
+            .shadow(
+                color: highlighted ? accent.opacity(0.55) : .clear,
+                radius: highlighted ? 8 : 0
+            )
+    }
+
+    @ViewBuilder
+    private var cursor: some View {
+        if highlighted && character.isEmpty {
+            OtpCascadeView_BlinkingCaret(color: accent)
+                .frame(width: 2, height: metrics.boxHeight * 0.42)
+        }
+    }
+
+    @ViewBuilder
+    private var digitFace: some View {
+        if !character.isEmpty {
+            Text(character)
+                .font(.system(size: metrics.digitFont, weight: .bold, design: .rounded))
+                .minimumScaleFactor(0.4)
+                .foregroundStyle(OtpCascadeView_OtpPalette.digit)
+                .opacity(faceOpacity)
+                .rotation3DEffect(
+                    .degrees(revealAngle),
+                    axis: (x: 1, y: 0, z: 0),
+                    anchor: .bottom,
+                    perspective: 0.55
+                )
+        }
+    }
+}
+
+// MARK: - Blinking caret for the active empty slot
+
+private struct OtpCascadeView_BlinkingCaret: View {
+    let color: Color
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let on = (sin(t * 4.5) > -0.2)
+            Capsule()
+                .fill(color)
+                .opacity(on ? 0.95 : 0.12)
+        }
+    }
+}
+
+// MARK: - Row of slots + shared shake
+
+private struct OtpCascadeView_OtpRow: View {
+    let metrics: OtpCascadeView_OtpMetrics
+    let digits: [String]       // exactly metrics.count entries, "" for empty
+    let flips: [Double]        // per-slot reveal 0..1
+    let accent: Color
+    let activeIndex: Int       // -1 == none highlighted
+    let shake: CGFloat         // current horizontal shake offset
+
+    var body: some View {
+        HStack(spacing: metrics.spacing) {
+            ForEach(0..<metrics.count, id: \.self) { i in
+                OtpCascadeView_DigitSlot(
+                    metrics: metrics,
+                    character: safeDigit(i),
+                    flip: safeFlip(i),
+                    accent: accent,
+                    highlighted: i == activeIndex
+                )
+            }
+        }
+        .offset(x: shake)
+    }
+
+    private func safeDigit(_ i: Int) -> String {
+        i < digits.count ? digits[i] : ""
+    }
+
+    private func safeFlip(_ i: Int) -> Double {
+        i < flips.count ? flips[i] : 0
+    }
+}
+
+// MARK: - Demo (self-driving)
+
+private struct OtpCascadeView_OtpCascadeDemo: View {
+    let metrics: OtpCascadeView_OtpMetrics
+
+    // One full loop: type digits, hold, shake, clear, pause.
+    private let period: Double = 3.4
+    private let code = ["4", "8", "1", "6"]
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let p = (t.truncatingRemainder(dividingBy: period)) / period // 0..1
+            let model = phase(for: p)
+
+            VStack(spacing: metrics.boxHeight * 0.28) {
+                OtpCascadeView_OtpRow(
+                    metrics: metrics,
+                    digits: model.digits,
+                    flips: model.flips,
+                    accent: model.accent,
+                    activeIndex: model.activeIndex,
+                    shake: model.shake
+                )
+                caption(model.statusText, color: model.captionColor)
+            }
+        }
+    }
+
+    private func caption(_ text: String, color: Color) -> some View {
+        Text(text)
+            .font(.system(size: metrics.captionFont, weight: .semibold, design: .rounded))
+            .foregroundStyle(color)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+    }
+
+    struct DemoModel {
+        var digits: [String]
+        var flips: [Double]
+        var accent: Color
+        var activeIndex: Int
+        var shake: CGFloat
+        var statusText: String
+        var captionColor: Color
+    }
+
+    // Slice the normalized clock into named windows. This keeps the never-blank
+    // invariant: the empty outlines always render and we only animate the faces.
+    private func phase(for p: Double) -> DemoModel {
+        // Windows (fractions of the loop):
+        //  0.00 - 0.55  typing the 4 digits with a domino stagger
+        //  0.55 - 0.70  hold (all revealed)
+        //  0.70 - 0.90  failure shake
+        //  0.90 - 1.00  clear + brief empty pause
+        let stagger = 0.11
+        let flipWindow = 0.13
+
+        if p < 0.70 {
+            // Typing + hold
+            var flips = [Double](repeating: 0, count: 4)
+            var digits = [String](repeating: "", count: 4)
+            var active = -1
+            for i in 0..<4 {
+                let start = Double(i) * stagger
+                let local = (p - start) / flipWindow
+                let f = max(0, min(1, easeOut(local)))
+                flips[i] = f
+                if f > 0.02 { digits[i] = code[i] }
+                else if active == -1 { active = i }
+            }
+            // If everything started flipping, cursor sits at last unfinished.
+            if active == -1 {
+                for i in 0..<4 where flips[i] < 0.95 { active = i; break }
+            }
+            return DemoModel(
+                digits: digits,
+                flips: flips,
+                accent: OtpCascadeView_OtpPalette.slotActive,
+                activeIndex: active,
+                shake: 0,
+                statusText: "Enter code",
+                captionColor: OtpCascadeView_OtpPalette.caption
+            )
+        } else if p < 0.90 {
+            // Failure shake: full row, all revealed, red tint, damped sine offset.
+            let local = (p - 0.70) / 0.20            // 0..1
+            let amp = metrics.boxWidth * 0.34
+            let decay = exp(-3.0 * local)
+            let shake = CGFloat(sin(local * .pi * 6) * decay) * amp
+            return DemoModel(
+                digits: code,
+                flips: [1, 1, 1, 1],
+                accent: OtpCascadeView_OtpPalette.failure,
+                activeIndex: -1,
+                shake: shake,
+                statusText: "Incorrect code",
+                captionColor: OtpCascadeView_OtpPalette.failure
+            )
+        } else {
+            // Clear: boxes empty out, brief pause before loop restarts.
+            return DemoModel(
+                digits: ["", "", "", ""],
+                flips: [0, 0, 0, 0],
+                accent: OtpCascadeView_OtpPalette.slotActive,
+                activeIndex: 0,
+                shake: 0,
+                statusText: "Enter code",
+                captionColor: OtpCascadeView_OtpPalette.caption
+            )
+        }
+    }
+
+    private func easeOut(_ x: Double) -> Double {
+        let c = max(0, min(1, x))
+        return 1 - pow(1 - c, 2.4)
+    }
+}
+
+// MARK: - Interactive
+
+private struct OtpCascadeView_OtpCascadeInteractive: View {
+    let metrics: OtpCascadeView_OtpMetrics
+
+    private let correctCode = "4816"
+
+    @State private var entry: String = ""
+    @State private var flips: [Double] = [0, 0, 0, 0]
+    @State private var shake: CGFloat = 0
+    @State private var status: Status = .typing
+    @FocusState private var focused: Bool
+
+    enum Status: Equatable {
+        case typing
+        case success
+        case failure
+    }
+
+    private var accent: Color {
+        switch status {
+        case .typing:  return OtpCascadeView_OtpPalette.slotActive
+        case .success: return OtpCascadeView_OtpPalette.success
+        case .failure: return OtpCascadeView_OtpPalette.failure
+        }
+    }
+
+    private var digits: [String] {
+        var out = [String](repeating: "", count: metrics.count)
+        for (i, ch) in entry.prefix(metrics.count).enumerated() {
+            out[i] = String(ch)
+        }
+        return out
+    }
+
+    private var activeIndex: Int {
+        guard status == .typing else { return -1 }
+        return entry.count < metrics.count ? entry.count : -1
+    }
+
+    var body: some View {
+        VStack(spacing: metrics.boxHeight * 0.24) {
+            OtpCascadeView_OtpRow(
+                metrics: metrics,
+                digits: digits,
+                flips: flips,
+                accent: accent,
+                activeIndex: activeIndex,
+                shake: shake
+            )
+            .background(hiddenField)
+            caption
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { focused = true }
+        .onAppear { DispatchQueue.main.async { focused = true } }
+        .sensoryFeedback(.selection, trigger: entry)
+        .sensoryFeedback(.success, trigger: status == .success)
+        .sensoryFeedback(.error, trigger: status == .failure)
+    }
+
+    private var caption: some View {
+        Text(captionText)
+            .font(.system(size: metrics.captionFont, weight: .semibold, design: .rounded))
+            .foregroundStyle(status == .typing ? OtpCascadeView_OtpPalette.caption : accent)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+    }
+
+    private var captionText: String {
+        switch status {
+        case .typing:  return "Tap, type \(correctCode)"
+        case .success: return "Verified"
+        case .failure: return "Incorrect code"
+        }
+    }
+
+    // A real focusable text field, kept invisible behind the boxes. It captures
+    // the OS keyboard so the boxes are driven by genuine input.
+    private var hiddenField: some View {
+        TextField("", text: $entry)
+            .keyboardType(.numberPad)
+            .textContentType(.oneTimeCode)
+            .focused($focused)
+            .foregroundStyle(.clear)
+            .tint(.clear)
+            .frame(width: 1, height: 1)
+            .opacity(0.01)
+            .onChange(of: entry) { old, new in
+                handleChange(old: old, new: new)
+            }
+    }
+
+    private func handleChange(old: String, new: String) {
+        // Sanitize to digits, cap at count.
+        let cleaned = String(new.filter { $0.isNumber }.prefix(metrics.count))
+        if cleaned != new {
+            entry = cleaned
+            return
+        }
+        if status != .typing {
+            // Re-typing after a result resets the row.
+            status = .typing
+            flips = [0, 0, 0, 0]
+        }
+        // Flip up any newly added digit boxes with a domino stagger.
+        if cleaned.count > old.count {
+            for i in old.count..<cleaned.count {
+                let delay = Double(i - old.count) * 0.07
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.62).delay(delay)) {
+                    if i < flips.count { flips[i] = 1 }
+                }
+            }
+        } else if cleaned.count < old.count {
+            for i in cleaned.count..<flips.count {
+                withAnimation(.easeOut(duration: 0.18)) { flips[i] = 0 }
+            }
+        }
+        if cleaned.count == metrics.count {
+            validate(cleaned)
+        }
+    }
+
+    private func validate(_ value: String) {
+        if value == correctCode {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                status = .success
+            }
+        } else {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                status = .failure
+            }
+            runShake()
+        }
+    }
+
+    // Shared row shake via a keyframe-style damped sequence, then clear.
+    private func runShake() {
+        let amp = metrics.boxWidth * 0.32
+        let steps: [(CGFloat, Double)] = [
+            (amp, 0.05), (-amp * 0.8, 0.06), (amp * 0.55, 0.06),
+            (-amp * 0.32, 0.06), (amp * 0.15, 0.06), (0, 0.06)
+        ]
+        var delay: Double = 0
+        for (value, dur) in steps {
+            withAnimation(.easeInOut(duration: dur).delay(delay)) {
+                shake = value
+            }
+            delay += dur
+        }
+        // After the shake settles, clear the row back to empty.
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay + 0.35) {
+            guard status == .failure else { return }
+            withAnimation(.easeOut(duration: 0.2)) {
+                flips = [0, 0, 0, 0]
+            }
+            entry = ""
+            status = .typing
+        }
+    }
+}
+"""###,
+        "mi-particle-assemble-check": ###"""
+import SwiftUI
+
+/// Particle Assemble Check
+/// Dozens of scattered dots fly inward via Canvas and lock into the silhouette
+/// of a checkmark, the last few settling with a springy jitter, then scatter
+/// back out — a self-looping particle assembly.
+///
+/// - `demo == true`  : a free-running loop driven entirely off the TimelineView
+///                     clock (no state) so the tile always looks alive.
+/// - `demo == false` : the same self-driving assembly, plus a tap re-triggers a
+///                     fresh converge → hold cycle from the moment of touch
+///                     (interaction spec is "auto").
+struct ParticleAssembleCheckView: View {
+    var demo: Bool = false
+
+    // Fixed particle budget (spec: ~40–60, reuse one Canvas).
+    private static let particleCount = 52
+
+    // Precomputed ONCE with a seeded RNG — never randomized per frame.
+    private let particles: [Particle] = ParticleAssembleCheckView.makeParticles(
+        count: ParticleAssembleCheckView.particleCount
+    )
+
+    // Loop timing.
+    private let period: Double = 3.4
+
+    // Interactive (demo == false): records the moment of the last tap so we can
+    // measure elapsed time off the same TimelineView clock.
+    @State private var restartDate: Date = .distantPast
+
+    var body: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            TimelineView(.animation) { timeline in
+                let now = timeline.date
+                let progress = phaseProgress(at: now)
+                Canvas { context, size in
+                    draw(context: context, size: size, side: side, progress: progress)
+                }
+                .frame(width: geo.size.width, height: geo.size.height)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .modifier(ParticleAssembleCheckView_TapRestart(enabled: !demo, restartDate: $restartDate))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Progress driver
+
+    /// Returns a normalized 0…1 *assembly* progress where:
+    ///   0.00–0.45 converge, 0.45–0.65 hold assembled,
+    ///   0.65–0.95 scatter, 0.95–1.0 hold scattered.
+    private func phaseProgress(at now: Date) -> CGFloat {
+        let raw: Double
+        if demo {
+            // Free-running loop with no @State — stable across redraws.
+            let t = now.timeIntervalSinceReferenceDate
+            raw = t.truncatingRemainder(dividingBy: period) / period
+        } else {
+            // Interactive: run one cycle from the last tap. Before any tap we
+            // still show a slow ambient loop so the component is never blank.
+            if restartDate == .distantPast {
+                let t = now.timeIntervalSinceReferenceDate
+                raw = t.truncatingRemainder(dividingBy: period) / period
+            } else {
+                let elapsed = now.timeIntervalSince(restartDate)
+                // After one full cycle, settle on the assembled-hold frame.
+                raw = elapsed >= period ? 0.55 : (elapsed / period)
+            }
+        }
+        return CGFloat(raw)
+    }
+
+    // MARK: - Drawing
+
+    private func draw(context: GraphicsContext, size: CGSize, side: CGFloat, progress: CGFloat) {
+        // Map the normalized checkmark box into the available area, centered.
+        let inset = side * 0.16
+        let boxSide = side - inset * 2.0
+        let originX = (size.width - boxSide) / 2.0
+        let originY = (size.height - boxSide) / 2.0
+
+        // assembleAmount: 0 = scattered, 1 = locked into the check.
+        let assemble = assembleAmount(for: progress)
+
+        let dotRadius = max(1.5, side * 0.022)
+
+        // Soft glow halo behind the check when assembled — adds the "lock" beat.
+        if assemble > 0.35 {
+            drawHalo(context: context, size: size, side: side, amount: assemble)
+        }
+
+        for p in particles {
+            // Local arrival timing: late particles start later and overshoot.
+            let local = localProgress(global: assemble, delay: p.delay)
+            let eased = p.isLate ? overshoot(local) : easeOutCubic(local)
+
+            // Scattered start and assembled target, both in absolute coordinates.
+            let start = CGPoint(
+                x: originX + p.scatter.x * boxSide,
+                y: originY + p.scatter.y * boxSide
+            )
+            let target = checkTarget(for: p, originX: originX, originY: originY, boxSide: boxSide)
+
+            var pos = lerpPoint(start, target, eased)
+
+            // Residual springy wobble for the last arrivals as they settle.
+            if p.isLate {
+                let settle = max(0.0, eased - 0.7) / 0.3
+                let wobbleAmp = (1.0 - settle) * side * 0.012
+                let wx = CGFloat(sin(Double(local) * 18.0 + Double(p.phase)))
+                let wy = CGFloat(cos(Double(local) * 16.0 + Double(p.phase)))
+                pos.x += wx * wobbleAmp
+                pos.y += wy * wobbleAmp
+            }
+
+            // Opacity floor so scattered dots stay legible (never blank).
+            let opacity = 0.35 + 0.65 * eased
+            let color = blend(Self.scatteredRGB, Self.assembledRGB, eased).opacity(opacity)
+
+            // Dots grow slightly as they lock in.
+            let r = dotRadius * (0.7 + 0.3 * eased)
+            let rect = CGRect(x: pos.x - r, y: pos.y - r, width: r * 2.0, height: r * 2.0)
+            context.fill(Path(ellipseIn: rect), with: .color(color))
+        }
+    }
+
+    private func drawHalo(context: GraphicsContext, size: CGSize, side: CGFloat, amount: CGFloat) {
+        let center = CGPoint(x: size.width / 2.0, y: size.height / 2.0)
+        let radius = side * 0.42
+        let rect = CGRect(
+            x: center.x - radius, y: center.y - radius,
+            width: radius * 2.0, height: radius * 2.0
+        )
+        let glow = Color(red: 0.36, green: 0.91, blue: 0.62)
+        let shading = GraphicsContext.Shading.radialGradient(
+            Gradient(colors: [glow.opacity(0.22 * amount), glow.opacity(0.0)]),
+            center: center,
+            startRadius: 0,
+            endRadius: radius
+        )
+        context.fill(Path(ellipseIn: rect), with: shading)
+    }
+
+    // MARK: - Geometry
+
+    /// Two-segment checkmark in a normalized [0,1] box.
+    /// A → vertex B → C, BC ≈ 2.5× longer than AB.
+    private static let pointA = CGPoint(x: 0.20, y: 0.55)
+    private static let pointB = CGPoint(x: 0.42, y: 0.74)
+    private static let pointC = CGPoint(x: 0.80, y: 0.28)
+
+    private func checkTarget(for p: Particle, originX: CGFloat, originY: CGFloat, boxSide: CGFloat) -> CGPoint {
+        let n: CGPoint
+        if p.onFirstSegment {
+            n = lerpPoint(Self.pointA, Self.pointB, p.segmentT)
+        } else {
+            n = lerpPoint(Self.pointB, Self.pointC, p.segmentT)
+        }
+        return CGPoint(x: originX + n.x * boxSide, y: originY + n.y * boxSide)
+    }
+
+    // MARK: - Easing helpers
+
+    /// Convert the phased assembly progress into a 0…1 "assembled" amount with a
+    /// hold at the top and a hold at the bottom (never blank).
+    private func assembleAmount(for progress: CGFloat) -> CGFloat {
+        switch progress {
+        case ..<0.45:
+            return easeInOut(progress / 0.45)        // converge
+        case ..<0.65:
+            return 1.0                                // hold assembled
+        case ..<0.95:
+            return 1.0 - easeInOut((progress - 0.65) / 0.30) // scatter
+        default:
+            return 0.0                                // hold scattered
+        }
+    }
+
+    /// Per-particle staggered local progress given a 0…1 delay offset.
+    private func localProgress(global: CGFloat, delay: CGFloat) -> CGFloat {
+        let span: CGFloat = 0.65 // fraction of the move consumed before all started
+        let scaled = (global - delay * span) / (1.0 - span)
+        return min(1.0, max(0.0, scaled))
+    }
+
+    private func easeInOut(_ t: CGFloat) -> CGFloat {
+        let x = min(1.0, max(0.0, t))
+        return x * x * (3.0 - 2.0 * x)
+    }
+
+    private func easeOutCubic(_ t: CGFloat) -> CGFloat {
+        let x = min(1.0, max(0.0, t))
+        let inv = 1.0 - x
+        return 1.0 - inv * inv * inv
+    }
+
+    /// Damped overshoot (back-ease-out style) for the springy late arrivals.
+    private func overshoot(_ t: CGFloat) -> CGFloat {
+        let x = min(1.0, max(0.0, t))
+        let c1: CGFloat = 1.70158
+        let c3: CGFloat = c1 + 1.0
+        let inv = x - 1.0
+        return 1.0 + c3 * inv * inv * inv + c1 * inv * inv
+    }
+
+    private func lerpPoint(_ a: CGPoint, _ b: CGPoint, _ t: CGFloat) -> CGPoint {
+        CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+    }
+
+    // MARK: - Color
+
+    // Palettes stored as plain RGB tuples so blending never depends on
+    // SwiftUI's fragile Color equality.
+    private static let scatteredRGB: (Double, Double, Double) = (0.42, 0.78, 0.96) // cool blue
+    private static let assembledRGB: (Double, Double, Double) = (0.36, 0.91, 0.62) // success green
+
+    private func blend(_ a: (Double, Double, Double), _ b: (Double, Double, Double), _ t: CGFloat) -> Color {
+        let x = Double(min(1.0, max(0.0, t)))
+        return Color(
+            red: a.0 + (b.0 - a.0) * x,
+            green: a.1 + (b.1 - a.1) * x,
+            blue: a.2 + (b.2 - a.2) * x
+        )
+    }
+
+    // MARK: - Particle model & seeded generation
+
+    struct Particle {
+        var scatter: CGPoint     // normalized [0,1] start within the box
+        var segmentT: CGFloat    // 0…1 along its assigned segment
+        var onFirstSegment: Bool // AB vs BC
+        var delay: CGFloat       // 0…1 arrival stagger
+        var phase: CGFloat       // wobble phase
+        var isLate: Bool         // late arrivals overshoot + jitter
+    }
+
+    /// Deterministic per-particle randomness, computed once.
+    private static func makeParticles(count: Int) -> [Particle] {
+        var rng = ParticleAssembleCheckView_SeededGenerator(seed: 0xC0FFEE)
+
+        // Distribute proportional to segment length (BC ≈ 2.5× AB).
+        let abLen = distance(pointA, pointB)
+        let bcLen = distance(pointB, pointC)
+        let firstCount = Int((Double(count) * (abLen / (abLen + bcLen))).rounded())
+
+        var result: [Particle] = []
+        result.reserveCapacity(count)
+
+        for i in 0..<count {
+            let onFirst = i < firstCount
+            let denom = onFirst ? max(1, firstCount) : max(1, count - firstCount)
+            let idx = onFirst ? i : (i - firstCount)
+            // Even spacing along the segment, nudged slightly for organic feel.
+            let baseT = (CGFloat(idx) + 0.5) / CGFloat(denom)
+            let jitterT = (CGFloat(rng.nextUnit()) - 0.5) * 0.06
+            let segT = min(1.0, max(0.0, baseT + jitterT))
+
+            let scatter = CGPoint(
+                x: CGFloat(rng.nextUnit()),
+                y: CGFloat(rng.nextUnit())
+            )
+            let delay = CGFloat(rng.nextUnit())
+            let phase = CGFloat(rng.nextUnit()) * .pi * 2.0
+            // ~30% of particles are "late" settlers.
+            let isLate = rng.nextUnit() > 0.7
+
+            result.append(
+                Particle(
+                    scatter: scatter,
+                    segmentT: segT,
+                    onFirstSegment: onFirst,
+                    delay: delay,
+                    phase: phase,
+                    isLate: isLate
+                )
+            )
+        }
+        return result
+    }
+
+    private static func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let dx = a.x - b.x
+        let dy = a.y - b.y
+        return (dx * dx + dy * dy).squareRoot()
+    }
+}
+
+// MARK: - Deterministic RNG (SplitMix64)
+
+private struct ParticleAssembleCheckView_SeededGenerator {
+    private var state: UInt64
+    init(seed: UInt64) { state = seed }
+
+    mutating func next() -> UInt64 {
+        state &+= 0x9E3779B97F4A7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        return z ^ (z >> 31)
+    }
+
+    /// Returns a Double in [0, 1).
+    mutating func nextUnit() -> Double {
+        Double(next() >> 11) * (1.0 / 9007199254740992.0)
+    }
+}
+
+// MARK: - Tap-to-restart modifier (interactive mode only)
+
+private struct ParticleAssembleCheckView_TapRestart: ViewModifier {
+    let enabled: Bool
+    @Binding var restartDate: Date
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.onTapGesture {
+                restartDate = Date()
+            }
+        } else {
+            content
+        }
+    }
+}
+"""###,
+        "mi-password-reveal": ###"""
+import SwiftUI
+
+// Password Reveal Flip — Micro-interactions
+// Tapping the eye toggles each masked dot flipping in sequence (rotation3DEffect axis:.y,
+// per-index delay) to reveal its character at the 90° midpoint, while the SF Symbol eye
+// blinks open/shut via contentTransition(.symbolEffect(.replace)).
+// demo == true  -> PhaseAnimator self-drives the reveal/hide loop (transaction fires the
+//                  symbolEffect blink + per-dot value-keyed staggered springs).
+// demo == false -> tapping the eye toggles `revealed`, driving the same staggered flips.
+struct PasswordRevealView: View {
+    var demo: Bool = false
+
+    @State private var revealed: Bool = false
+
+    // Fixed demo string — six glyphs so the row reads as a short password.
+    private let chars: [String] = ["S", "w", "i", "f", "t", "!"]
+
+    var body: some View {
+        GeometryReader { geo in
+            content(size: geo.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(size: CGSize) -> some View {
+        if demo {
+            PhaseAnimator([false, true]) { phase in
+                rowAndEye(revealed: phase, size: size)
+            } animation: { _ in
+                // Timed curve (not a spring) so the loop length is deterministic.
+                // ~1.6s per phase -> ~3.2s round-trip, inside the 2.5–4s window.
+                // Longer than the last dot's delay (5 * 0.08) + flip (~0.5s) so the
+                // staggered springs always finish before the phase flips back.
+                .easeInOut(duration: 1.6)
+            }
+        } else {
+            rowAndEye(revealed: revealed, size: size)
+        }
+    }
+
+    // One render function for both modes guarantees parity: the per-dot springs are
+    // keyed on the `revealed` argument, so in demo they fire off the PhaseAnimator's
+    // changing `phase` value.
+    private func rowAndEye(revealed: Bool, size: CGSize) -> some View {
+        let metrics = PasswordRevealView_Metrics(size: size, count: chars.count)
+        return VStack(spacing: metrics.vGap) {
+            dotRow(revealed: revealed, metrics: metrics)
+            eyeButton(revealed: revealed, metrics: metrics)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func dotRow(revealed: Bool, metrics: PasswordRevealView_Metrics) -> some View {
+        HStack(spacing: metrics.hGap) {
+            ForEach(chars.indices, id: \.self) { i in
+                PasswordRevealView_FlipDot(
+                    angle: revealed ? 180 : 0,
+                    char: chars[i],
+                    side: metrics.dot
+                )
+                .animation(
+                    .spring(response: 0.5, dampingFraction: 0.72)
+                        .delay(Double(i) * 0.08),
+                    value: revealed
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func eyeButton(revealed: Bool, metrics: PasswordRevealView_Metrics) -> some View {
+        let symbol = revealed ? "eye.fill" : "eye.slash.fill"
+        Image(systemName: symbol)
+            .font(.system(size: metrics.eye, weight: .semibold))
+            .foregroundStyle(Self.accent)
+            .contentTransition(.symbolEffect(.replace))
+            .symbolEffect(.bounce, value: revealed)
+            .frame(width: metrics.eye * 2.0, height: metrics.eye * 2.0)
+            .background(
+                Circle().fill(Self.eyeWell)
+            )
+            .overlay(
+                Circle().strokeBorder(Self.accent.opacity(0.22), lineWidth: 1)
+            )
+            .contentShape(Circle())
+            .onTapGesture {
+                guard !demo else { return }
+                // withAnimation so the symbolEffect blink + the per-dot flips both
+                // run inside one transaction.
+                withAnimation { self.revealed.toggle() }
+            }
+            .allowsHitTesting(!demo)
+            .accessibilityLabel(revealed ? "Hide password" : "Reveal password")
+    }
+
+    // MARK: - Palette (literal colors, no design-system dependency)
+
+    private static let accent = Color(red: 0.55, green: 0.80, blue: 1.0)
+    private static let eyeWell = Color(red: 0.10, green: 0.10, blue: 0.16)
+}
+
+// MARK: - Layout metrics derived from the container size.
+
+private struct PasswordRevealView_Metrics {
+    let dot: CGFloat
+    let hGap: CGFloat
+    let vGap: CGFloat
+    let eye: CGFloat
+
+    init(size: CGSize, count: Int) {
+        let w = max(size.width, 1)
+        let h = max(size.height, 1)
+        let n = CGFloat(max(count, 1))
+        // Width budget: each dot plus a gap of ~0.35 * dot.
+        let byWidth = w / (n * 1.45)
+        let byHeight = h * 0.34
+        let side = max(8, min(byWidth, byHeight, 64))
+        self.dot = side
+        self.hGap = max(3, side * 0.28)
+        self.vGap = max(8, h * 0.10)
+        self.eye = max(10, min(side * 0.62, 26))
+    }
+}
+
+// MARK: - A single Animatable flipping dot.
+// Conforms to Animatable so `body` re-runs every interpolated frame with the live
+// `angle`; the mask/char swap therefore happens exactly at 90°, frame-synced to the
+// spring with no separate opacity animation to desync.
+
+private struct PasswordRevealView_FlipDot: View, Animatable {
+    var angle: Double
+    let char: String
+    let side: CGFloat
+
+    var animatableData: Double {
+        get { angle }
+        set { angle = newValue }
+    }
+
+    var body: some View {
+        // Past 90° the card is edge-on and we show the reverse (character) face.
+        let showChar = angle >= 90
+
+        return ZStack {
+            maskFace
+                .opacity(showChar ? 0 : 1)
+
+            charFace
+                .opacity(showChar ? 1 : 0)
+                // Un-mirror the back face so revealed text isn't reversed.
+                .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
+        }
+        .frame(width: side, height: side * 1.25)
+        .rotation3DEffect(
+            .degrees(angle),
+            axis: (x: 0, y: 1, z: 0),
+            perspective: 0.4
+        )
+    }
+
+    // Masked state: a faint card with a filled bullet so even an edge-on dot shows a sliver.
+    private var maskFace: some View {
+        cardBackground
+            .overlay(
+                Circle()
+                    .fill(Self.dotInk)
+                    .frame(width: side * 0.40, height: side * 0.40)
+            )
+    }
+
+    // Revealed state: the character on the same card.
+    private var charFace: some View {
+        cardBackground
+            .overlay(
+                Text(char)
+                    .font(.system(size: side * 0.62, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Self.charInk)
+                    .minimumScaleFactor(0.5)
+                    .lineLimit(1)
+            )
+    }
+
+    private var cardBackground: some View {
+        RoundedRectangle(cornerRadius: side * 0.24, style: .continuous)
+            .fill(Self.cardFill)
+            .overlay(
+                RoundedRectangle(cornerRadius: side * 0.24, style: .continuous)
+                    .strokeBorder(Self.cardStroke, lineWidth: 1)
+            )
+    }
+
+    private static let cardFill = Color(red: 0.13, green: 0.14, blue: 0.21)
+    private static let cardStroke = Color(red: 0.30, green: 0.34, blue: 0.46).opacity(0.55)
+    private static let dotInk = Color(red: 0.66, green: 0.72, blue: 0.86)
+    private static let charInk = Color(red: 0.93, green: 0.96, blue: 1.0)
+}
+"""###,
+        "mi-pin-shake-success": ###"""
+import SwiftUI
+
+// PIN Shake-to-Success
+// PIN dots fill as you type; on success they merge into a single dot that
+// expands into a checkmark, on failure they scatter and shake.
+//
+// demo == true  -> self-driving TimelineView loop that auto-fills the dots
+//                  then alternates success (merge -> check) and failure
+//                  (scatter + shake) on a ~3.5s loop. No haptics.
+// demo == false -> a real keypad. Taps fill the dots; a correct PIN merges
+//                  into the check, a wrong PIN shakes and resets. Haptics on.
+
+struct PinShakeSuccessView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            Group {
+                if demo {
+                    PinShakeSuccessView_PinDemoStage(side: side)
+                } else {
+                    PinShakeSuccessView_PinInteractiveStage(side: side, fullSize: geo.size)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Shared model
+
+private enum PinShakeSuccessView_PinOutcome {
+    case success
+    case failure
+}
+
+/// A normalized description of the whole effect at a single instant.
+/// Everything (dots, merge, check, shake) is derived from this so the demo
+/// and interactive paths render through the exact same visual code.
+private struct PinShakeSuccessView_PinVisualState {
+    /// 0..1 fraction of dots that read as "filled".
+    var fillFraction: CGFloat
+    /// 0..1 progress of dots converging to center (success only).
+    var mergeProgress: CGFloat
+    /// 0..1 progress of the central dot growing + check trimming on.
+    var checkProgress: CGFloat
+    /// 0..1 progress of the scatter (failure only).
+    var scatterProgress: CGFloat
+    /// Live horizontal shake offset in points (failure only).
+    var shakeOffset: CGFloat
+    /// Outcome currently being expressed.
+    var outcome: PinShakeSuccessView_PinOutcome
+
+    static let idle = PinShakeSuccessView_PinVisualState(
+        fillFraction: 0, mergeProgress: 0, checkProgress: 0,
+        scatterProgress: 0, shakeOffset: 0, outcome: .success
+    )
+}
+
+private enum PinShakeSuccessView_PinPalette {
+    static let bg = Color(red: 0.078, green: 0.063, blue: 0.098)
+    static let ring = Color(red: 0.42, green: 0.40, blue: 0.52)
+    static let fill = Color(red: 0.66, green: 0.62, blue: 0.95)
+    static let success = Color(red: 0.36, green: 0.84, blue: 0.62)
+    static let failure = Color(red: 0.95, green: 0.42, blue: 0.46)
+    static let ink = Color(red: 0.95, green: 0.95, blue: 0.98)
+}
+
+private let pinCount: Int = 4
+
+// MARK: - Checkmark shape
+
+private struct PinShakeSuccessView_CheckShape: Shape {
+    var trimEnd: CGFloat
+
+    var animatableData: CGFloat {
+        get { trimEnd }
+        set { trimEnd = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let w = rect.width
+        let h = rect.height
+        // A clean check tucked inside the rect.
+        let p0 = CGPoint(x: rect.minX + w * 0.20, y: rect.minY + h * 0.54)
+        let p1 = CGPoint(x: rect.minX + w * 0.42, y: rect.minY + h * 0.74)
+        let p2 = CGPoint(x: rect.minX + w * 0.80, y: rect.minY + h * 0.28)
+        p.move(to: p0)
+        p.addLine(to: p1)
+        p.addLine(to: p2)
+        return p.trimmedPath(from: 0, to: max(0, min(1, trimEnd)))
+    }
+}
+
+// MARK: - Core visual (shared by both paths)
+
+private struct PinShakeSuccessView_PinEffectView: View {
+    let state: PinShakeSuccessView_PinVisualState
+    let side: CGFloat
+
+    private var dotRadius: CGFloat { side * 0.052 }
+    private var spacing: CGFloat { side * 0.072 }
+
+    private var rowWidth: CGFloat {
+        let n = CGFloat(pinCount)
+        return n * (dotRadius * 2) + (n - 1) * spacing
+    }
+
+    var body: some View {
+        ZStack {
+            dotsLayer
+            mergedCore
+        }
+        .frame(width: rowWidth, height: dotRadius * 2)
+        .offset(x: state.shakeOffset)
+    }
+
+    // Persistent ring outlines + fills. The rings NEVER disappear, so no
+    // frame is ever blank.
+    private var dotsLayer: some View {
+        HStack(spacing: spacing) {
+            ForEach(0..<pinCount, id: \.self) { index in
+                singleDot(index: index)
+            }
+        }
+        // Dots fade as they merge into the central core.
+        .opacity(Double(1 - state.mergeProgress * 0.92))
+    }
+
+    private func singleDot(index: Int) -> some View {
+        let filled = isFilled(index)
+        let toCenter = centerOffset(forIndex: index)
+        let scatter = scatterVector(forIndex: index)
+        return ZStack {
+            Circle()
+                .stroke(PinShakeSuccessView_PinPalette.ring, lineWidth: max(1.4, side * 0.012))
+            Circle()
+                .fill(fillColor)
+                .scaleEffect(filled ? 1 : 0.0001)
+                .opacity(filled ? 1 : 0)
+        }
+        .frame(width: dotRadius * 2, height: dotRadius * 2)
+        // Success: slide toward the row center. Failure: fling outward.
+        .offset(
+            x: toCenter.x * state.mergeProgress + scatter.x * state.scatterProgress,
+            y: toCenter.y * state.mergeProgress + scatter.y * state.scatterProgress
+        )
+        .scaleEffect(1 - state.scatterProgress * 0.35)
+        .animation(.spring(response: 0.32, dampingFraction: 0.7), value: filled)
+    }
+
+    // The single dot that the four converge into, which then grows and hosts
+    // the checkmark.
+    private var mergedCore: some View {
+        let grow = 1 + state.checkProgress * 2.6
+        let coreVisible = state.mergeProgress > 0.02
+        return ZStack {
+            Circle()
+                .fill(PinShakeSuccessView_PinPalette.success)
+                .frame(width: dotRadius * 2, height: dotRadius * 2)
+                .scaleEffect(grow)
+                .opacity(coreVisible ? Double(min(1, state.mergeProgress * 1.4)) : 0)
+            PinShakeSuccessView_CheckShape(trimEnd: state.checkProgress)
+                .stroke(
+                    PinShakeSuccessView_PinPalette.ink,
+                    style: StrokeStyle(lineWidth: max(2, side * 0.022),
+                                       lineCap: .round, lineJoin: .round)
+                )
+                .frame(width: dotRadius * 3.0, height: dotRadius * 3.0)
+                .opacity(state.checkProgress > 0.01 ? 1 : 0)
+        }
+    }
+
+    private var fillColor: Color {
+        switch state.outcome {
+        case .success: return PinShakeSuccessView_PinPalette.fill
+        case .failure:
+            // Tint warm red as the failure resolves.
+            return state.scatterProgress > 0.01 ? PinShakeSuccessView_PinPalette.failure : PinShakeSuccessView_PinPalette.fill
+        }
+    }
+
+    private func isFilled(_ index: Int) -> Bool {
+        let threshold = state.fillFraction * CGFloat(pinCount)
+        return CGFloat(index) + 0.999 <= threshold
+    }
+
+    // Vector from a dot's slot to the row center.
+    private func centerOffset(forIndex index: Int) -> CGPoint {
+        let step = dotRadius * 2 + spacing
+        let centerIndex = CGFloat(pinCount - 1) / 2
+        let dx = (centerIndex - CGFloat(index)) * step
+        return CGPoint(x: dx, y: 0)
+    }
+
+    // Deterministic scatter direction so the shudder reads as an explosion.
+    private func scatterVector(forIndex index: Int) -> CGPoint {
+        let dirs: [CGPoint] = [
+            CGPoint(x: -1.0, y: -0.7),
+            CGPoint(x: -0.5, y: 0.9),
+            CGPoint(x: 0.6, y: -0.85),
+            CGPoint(x: 1.1, y: 0.6)
+        ]
+        let d = dirs[index % dirs.count]
+        let mag = side * 0.10
+        return CGPoint(x: d.x * mag, y: d.y * mag)
+    }
+}
+
+// MARK: - Demo path (self-driving tile)
+
+private struct PinShakeSuccessView_PinDemoStage: View {
+    let side: CGFloat
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            PinShakeSuccessView_PinEffectView(state: state(at: t), side: side)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+
+    private let cycle: Double = 3.6
+
+    private func state(at time: TimeInterval) -> PinShakeSuccessView_PinVisualState {
+        let cycleIndex = Int(floor(time / cycle))
+        let local = (time.truncatingRemainder(dividingBy: cycle)) / cycle // 0..1
+        let outcome: PinShakeSuccessView_PinOutcome = (cycleIndex % 2 == 0) ? .success : .failure
+
+        // Phase split inside one cycle:
+        //   0.00 - 0.42  fill dots
+        //   0.42 - 0.78  express outcome
+        //   0.78 - 1.00  hold + reset
+        var s = PinShakeSuccessView_PinVisualState.idle
+        s.outcome = outcome
+
+        if local < 0.42 {
+            let f = local / 0.42
+            s.fillFraction = eased(f)
+        } else if local < 0.78 {
+            s.fillFraction = 1
+            let f = (local - 0.42) / 0.36 // 0..1 across the outcome phase
+            apply(outcome: outcome, f: f, into: &s)
+        } else {
+            // Brief hold of the resolved state, then fade back to filled idle.
+            s.fillFraction = 1
+            apply(outcome: outcome, f: 1, into: &s)
+            let r = (local - 0.78) / 0.22
+            // Ease the resolved state back out so the next cycle starts clean.
+            let fade = eased(min(1, r))
+            s.mergeProgress *= Double(1 - fade)
+            s.checkProgress *= Double(1 - fade)
+            s.scatterProgress *= Double(1 - fade)
+            s.shakeOffset *= CGFloat(1 - fade)
+            s.fillFraction = 1 - eased(min(1, max(0, (r - 0.5) * 2)))
+        }
+        return s
+    }
+
+    private func apply(outcome: PinShakeSuccessView_PinOutcome, f: Double, into s: inout PinShakeSuccessView_PinVisualState) {
+        switch outcome {
+        case .success:
+            // First merge to center, then grow + draw the check.
+            s.mergeProgress = eased(min(1, f * 1.8))
+            let cf = max(0, (f - 0.45) / 0.55)
+            s.checkProgress = eased(min(1, cf))
+        case .failure:
+            // Scatter outward, with a damped-sine shudder riding on top.
+            s.scatterProgress = eased(min(1, f * 1.6))
+            let k: Double = 6.5   // decay
+            let freq: Double = 26 // shake speed
+            let amp = side * 0.05
+            s.shakeOffset = CGFloat(sin(f * freq) * exp(-f * k)) * amp
+        }
+    }
+
+    private func eased(_ x: Double) -> Double {
+        // smoothstep
+        let c = min(1, max(0, x))
+        return c * c * (3 - 2 * c)
+    }
+}
+
+// MARK: - Interactive path (keypad)
+
+private enum PinShakeSuccessView_PinStatus {
+    case typing
+    case success
+    case failure
+}
+
+private struct PinShakeSuccessView_PinInteractiveStage: View {
+    let side: CGFloat
+    let fullSize: CGSize
+
+    private let secret = "1234"
+
+    @State private var entered: String = ""
+    @State private var status: PinShakeSuccessView_PinStatus = .typing
+    @State private var mergeProgress: CGFloat = 0
+    @State private var checkProgress: CGFloat = 0
+    @State private var scatterProgress: CGFloat = 0
+    @State private var shakeOffset: CGFloat = 0
+    @State private var successTick: Int = 0
+    @State private var failureTick: Int = 0
+
+    var body: some View {
+        VStack(spacing: fullSize.height * 0.06) {
+            PinShakeSuccessView_PinEffectView(state: currentState, side: side)
+                .frame(maxWidth: .infinity)
+                .frame(height: side * 0.16)
+
+            if showKeypad {
+                keypad
+                    .frame(maxWidth: fullSize.width * 0.92)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .sensoryFeedback(.success, trigger: successTick)
+        .sensoryFeedback(.error, trigger: failureTick)
+    }
+
+    // Hide the keypad in very small renders (e.g. grid tile) so the dots
+    // stay legible; show it once there is room.
+    private var showKeypad: Bool {
+        fullSize.height > 220 && fullSize.width > 180
+    }
+
+    private var currentState: PinShakeSuccessView_PinVisualState {
+        var s = PinShakeSuccessView_PinVisualState.idle
+        s.fillFraction = CGFloat(entered.count) / CGFloat(pinCount)
+        s.mergeProgress = mergeProgress
+        s.checkProgress = checkProgress
+        s.scatterProgress = scatterProgress
+        s.shakeOffset = shakeOffset
+        s.outcome = (status == .failure) ? .failure : .success
+        return s
+    }
+
+    // MARK: keypad
+
+    private var keypad: some View {
+        let rows: [[String]] = [
+            ["1", "2", "3"],
+            ["4", "5", "6"],
+            ["7", "8", "9"],
+            ["", "0", "<"]
+        ]
+        return VStack(spacing: fullSize.height * 0.018) {
+            ForEach(rows.indices, id: \.self) { r in
+                HStack(spacing: fullSize.width * 0.05) {
+                    ForEach(rows[r].indices, id: \.self) { c in
+                        keyButton(rows[r][c])
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func keyButton(_ label: String) -> some View {
+        if label.isEmpty {
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .frame(height: side * 0.16)
+        } else {
+            Button {
+                handleKey(label)
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.06))
+                        .overlay(Circle().stroke(PinShakeSuccessView_PinPalette.ring.opacity(0.5),
+                                                 lineWidth: 1))
+                    if label == "<" {
+                        Image(systemName: "delete.left")
+                            .font(.system(size: side * 0.05, weight: .medium))
+                            .foregroundStyle(PinShakeSuccessView_PinPalette.ink)
+                    } else {
+                        Text(label)
+                            .font(.system(size: side * 0.06, weight: .semibold,
+                                          design: .rounded))
+                            .foregroundStyle(PinShakeSuccessView_PinPalette.ink)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: side * 0.16)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: input handling
+
+    private func handleKey(_ label: String) {
+        guard status == .typing else {
+            // Tapping after a resolved attempt restarts entry.
+            resetEntry()
+            if label != "<" { append(label) }
+            return
+        }
+        if label == "<" {
+            if !entered.isEmpty { entered.removeLast() }
+            return
+        }
+        append(label)
+    }
+
+    private func append(_ digit: String) {
+        guard entered.count < pinCount else { return }
+        entered.append(digit)
+        if entered.count == pinCount {
+            evaluate()
+        }
+    }
+
+    private func evaluate() {
+        if entered == secret {
+            status = .success
+            successTick &+= 1
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.72)) {
+                mergeProgress = 1
+            }
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.8)
+                .delay(0.18)) {
+                checkProgress = 1
+            }
+        } else {
+            status = .failure
+            failureTick &+= 1
+            withAnimation(.spring(response: 0.30, dampingFraction: 0.6)) {
+                scatterProgress = 1
+            }
+            playShake()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.85) {
+                resetEntry()
+            }
+        }
+    }
+
+    private func playShake() {
+        let amp = side * 0.05
+        let steps: [CGFloat] = [-1, 0.85, -0.6, 0.4, -0.22, 0.1, 0]
+        var delay: Double = 0
+        for v in steps {
+            withAnimation(.easeInOut(duration: 0.06).delay(delay)) {
+                shakeOffset = v * amp
+            }
+            delay += 0.06
+        }
+    }
+
+    private func resetEntry() {
+        withAnimation(.easeOut(duration: 0.25)) {
+            entered = ""
+            status = .typing
+            mergeProgress = 0
+            checkProgress = 0
+            scatterProgress = 0
+            shakeOffset = 0
+        }
+    }
+}
+"""###,
+        "mi-popcorn-emoji": ###"""
+import SwiftUI
+
+// MARK: - PopcornEmojiView
+/// Tapping pops a cluster of emoji that fire upward at staggered times with
+/// slight horizontal drift, each rotating and shrinking like popping kernels.
+///
+/// - `demo == true`  : a self-driving loop auto-fires a fresh burst every few
+///                     seconds, derived purely from the timeline clock (no timers,
+///                     no state mutation during view update).
+/// - `demo == false` : a real interactive component — tap anywhere to pop a
+///                     cluster from the touch point, with haptic feedback.
+struct PopcornEmojiView: View {
+
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            if demo {
+                PopcornEmojiView_DemoPopcorn(size: size)
+            } else {
+                PopcornEmojiView_InteractivePopcorn(size: size)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Shared model
+
+/// Immutable per-kernel seed. All randomness is baked in ONCE at spawn so the
+/// physics is a pure function of elapsed time (no per-frame jitter).
+private struct PopcornEmojiView_Kernel: Identifiable {
+    let id: Int
+    let emoji: String
+    let launchDelay: Double      // seconds before this kernel pops
+    let lifetime: Double         // seconds visible after launch
+    let originX: CGFloat         // 0...1 normalized horizontal start near source
+    let driftX: CGFloat          // -1...1 normalized horizontal drift
+    let power: CGFloat           // 0.7...1.3 launch-velocity multiplier
+    let spin: Double             // radians/second rotation
+    let baseScale: CGFloat       // 0.8...1.25 size multiplier
+}
+
+private enum PopcornEmojiView_PopcornConfig {
+    static let emojis = ["🍿", "🌽", "✨", "🎉", "🧈"]
+    static let kernelsPerBurst = 22
+    static let maxLifetime: Double = 1.9
+    static let loopPeriod: Double = 3.2
+}
+
+/// A live burst: a start date plus its baked kernels.
+private struct PopcornEmojiView_Burst: Identifiable {
+    let id = UUID()
+    let startDate: Date
+    let origin: CGPoint        // tap point in view coordinates
+    let kernels: [PopcornEmojiView_Kernel]
+}
+
+// MARK: - PopcornEmojiView_Kernel generation (seeded, stable)
+
+private func makeKernels(seed: UInt64) -> [PopcornEmojiView_Kernel] {
+    var rng = PopcornEmojiView_SplitMix64(seed: seed)
+    let count = PopcornEmojiView_PopcornConfig.kernelsPerBurst
+    return (0..<count).map { i in
+        let emoji = PopcornEmojiView_PopcornConfig.emojis[Int(rng.next() % UInt64(PopcornEmojiView_PopcornConfig.emojis.count))]
+        let launchDelay: Double = rng.double(in: 0.0...0.55)
+        let lifetime: Double = rng.double(in: 1.0...PopcornEmojiView_PopcornConfig.maxLifetime)
+        let originX: CGFloat = CGFloat(rng.double(in: 0.32...0.68))
+        let driftX: CGFloat = CGFloat(rng.double(in: -1.0...1.0))
+        let power: CGFloat = CGFloat(rng.double(in: 0.72...1.3))
+        let spin: Double = rng.double(in: -7.0...7.0)
+        let baseScale: CGFloat = CGFloat(rng.double(in: 0.8...1.25))
+        return PopcornEmojiView_Kernel(id: i,
+                      emoji: emoji,
+                      launchDelay: launchDelay,
+                      lifetime: lifetime,
+                      originX: originX,
+                      driftX: driftX,
+                      power: power,
+                      spin: spin,
+                      baseScale: baseScale)
+    }
+}
+
+/// Tiny deterministic RNG so a given seed always yields the same burst shape,
+/// keeping the popcorn stable across frames.
+private struct PopcornEmojiView_SplitMix64 {
+    private var state: UInt64
+    init(seed: UInt64) { state = seed &+ 0x9E37_79B9_7F4A_7C15 }
+    mutating func next() -> UInt64 {
+        state = state &+ 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
+    mutating func double(in range: ClosedRange<Double>) -> Double {
+        let unit = Double(next() >> 11) * (1.0 / 9_007_199_254_740_992.0)
+        return range.lowerBound + unit * (range.upperBound - range.lowerBound)
+    }
+}
+
+// MARK: - Physics + drawing (shared by demo & interactive)
+
+private struct PopcornEmojiView_PopcornFrame: View {
+    let size: CGSize
+    /// Each entry: kernels + the elapsed seconds since that burst started.
+    let bursts: [(origin: CGPoint, kernels: [PopcornEmojiView_Kernel], elapsed: Double)]
+    let pulse: Double   // 0...1 source "pop" pulse for the always-on base
+
+    var body: some View {
+        Canvas { context, _ in
+            drawSource(in: &context)
+            drawBursts(in: &context)
+        }
+    }
+
+    // Always-visible popcorn source so the view is never blank between pops.
+    private func drawSource(in context: inout GraphicsContext) {
+        let dim = min(size.width, size.height)
+        let baseFont = dim * 0.34
+        let bounce = 1.0 + 0.12 * sin(pulse * .pi)   // gentle breathing pop
+        let sourcePoint = CGPoint(x: size.width / 2, y: size.height * 0.82)
+
+        var sub = context
+        sub.translateBy(x: sourcePoint.x, y: sourcePoint.y)
+        sub.scaleBy(x: bounce, y: bounce)
+        let resolved = sub.resolve(Text("🍿").font(.system(size: baseFont)))
+        let s = resolved.measure(in: size)
+        sub.draw(resolved, at: CGPoint(x: 0, y: -s.height * 0.1), anchor: .center)
+    }
+
+    private func drawBursts(in context: inout GraphicsContext) {
+        let dim = min(size.width, size.height)
+        let kernelFont = dim * 0.18
+        let v0 = size.height * 0.95        // launch speed (points/sec), screen-relative
+        let gravity = size.height * 1.9    // gravity (points/sec^2)
+        let driftSpan = size.width * 0.45
+
+        // Resolve glyphs once per frame, reuse per kernel.
+        var resolvedCache: [String: GraphicsContext.ResolvedText] = [:]
+        for e in PopcornEmojiView_PopcornConfig.emojis {
+            resolvedCache[e] = context.resolve(Text(e).font(.system(size: kernelFont)))
+        }
+
+        for burst in bursts {
+            for kernel in burst.kernels {
+                let t = burst.elapsed - kernel.launchDelay
+                guard t >= 0, t <= kernel.lifetime else { continue }
+                drawKernel(kernel,
+                           t: t,
+                           burstOrigin: burst.origin,
+                           v0: v0,
+                           gravity: gravity,
+                           driftSpan: driftSpan,
+                           cache: resolvedCache,
+                           context: context)
+            }
+        }
+    }
+
+    private func drawKernel(_ kernel: PopcornEmojiView_Kernel,
+                            t: Double,
+                            burstOrigin: CGPoint,
+                            v0: CGFloat,
+                            gravity: CGFloat,
+                            driftSpan: CGFloat,
+                            cache: [String: GraphicsContext.ResolvedText],
+                            context: GraphicsContext) {
+        guard let glyph = cache[kernel.emoji] else { return }
+
+        let tt = CGFloat(t)
+        let life = CGFloat(kernel.lifetime)
+        let progress = tt / life                       // 0...1 across lifetime
+
+        // Projectile motion: up then gravity pulls it back down.
+        let launch = v0 * kernel.power
+        let dy = -(launch * tt) + 0.5 * gravity * tt * tt
+        let dx = kernel.driftX * driftSpan * tt
+
+        // Origin: blend the burst point with a small per-kernel spread.
+        let spread = (kernel.originX - 0.5) * driftSpan * 0.6
+        let x = burstOrigin.x + spread + dx
+        let y = burstOrigin.y + dy
+
+        // Shrink + fade as the kernel ages, with a quick pop-in at the start.
+        let popIn = min(1.0, tt / 0.09)
+        let shrink = 1.0 - 0.55 * progress
+        let scale = kernel.baseScale * shrink * popIn
+        let fadeStart: CGFloat = 0.6
+        let opacity: Double = progress < fadeStart
+            ? 1.0
+            : Double(max(0.0, 1.0 - (progress - fadeStart) / (1.0 - fadeStart)))
+
+        guard scale > 0.01, opacity > 0.01 else { return }
+
+        let angle = kernel.spin * t
+
+        var sub = context
+        sub.opacity = opacity
+        sub.translateBy(x: x, y: y)
+        sub.rotate(by: .radians(angle))
+        sub.scaleBy(x: scale, y: scale)
+        sub.draw(glyph, at: .zero, anchor: .center)
+    }
+}
+
+// MARK: - Demo (self-driving)
+
+private struct PopcornEmojiView_DemoPopcorn: View {
+    let size: CGSize
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let now = timeline.date.timeIntervalSinceReferenceDate
+            let period = PopcornEmojiView_PopcornConfig.loopPeriod
+            let loopIndex = floor(now / period)
+            let phase = now - loopIndex * period          // 0...period
+
+            // One burst per loop, fired at phase 0, plus the previous loop's tail
+            // so pops overlap and never leave a fully empty frame.
+            let bursts = demoBursts(loopIndex: loopIndex, phase: phase)
+            let pulse = max(0.0, 1.0 - phase / 0.5)        // source pulse at fire
+
+            PopcornEmojiView_PopcornFrame(size: size, bursts: bursts, pulse: pulse)
+        }
+        .accessibilityLabel("Popcorn emoji burst animation")
+    }
+
+    private func demoBursts(loopIndex: Double,
+                            phase: Double) -> [(origin: CGPoint, kernels: [PopcornEmojiView_Kernel], elapsed: Double)] {
+        let origin = CGPoint(x: size.width / 2, y: size.height * 0.74)
+        var result: [(CGPoint, [PopcornEmojiView_Kernel], Double)] = []
+
+        // Current loop's burst.
+        let curSeed = UInt64(bitPattern: Int64(loopIndex)) &* 2_654_435_761
+        result.append((origin, makeKernels(seed: curSeed), phase))
+
+        // Previous loop's burst (its tail still fading early in this loop).
+        let prevElapsed = phase + PopcornEmojiView_PopcornConfig.loopPeriod
+        if prevElapsed <= PopcornEmojiView_PopcornConfig.maxLifetime + 0.6 {
+            let prevSeed = UInt64(bitPattern: Int64(loopIndex - 1)) &* 2_654_435_761
+            result.append((origin, makeKernels(seed: prevSeed), prevElapsed))
+        }
+        return result.map { (origin: $0.0, kernels: $0.1, elapsed: $0.2) }
+    }
+}
+
+// MARK: - Interactive (tap to pop)
+
+private struct PopcornEmojiView_InteractivePopcorn: View {
+    let size: CGSize
+    @State private var bursts: [PopcornEmojiView_Burst] = []
+    @State private var burstCount: Int = 0
+    @State private var lastTap: CGPoint = .zero
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let now = timeline.date
+            let live = liveBursts(now: now)
+            let pulse = sourcePulse(now: now)
+
+            PopcornEmojiView_PopcornFrame(size: size, bursts: live, pulse: pulse)
+        }
+        .contentShape(Rectangle())
+        .gesture(
+            SpatialTapGesture()
+                .onEnded { value in
+                    spawnBurst(at: value.location)
+                }
+        )
+        // Tapping the always-on source is the obvious affordance; a tap anywhere
+        // also works thanks to contentShape above.
+        .sensoryFeedback(.impact(weight: .light), trigger: burstCount)
+        .accessibilityLabel("Tap to pop popcorn emoji")
+    }
+
+    private func liveBursts(now: Date) -> [(origin: CGPoint, kernels: [PopcornEmojiView_Kernel], elapsed: Double)] {
+        bursts.compactMap { burst in
+            let elapsed = now.timeIntervalSince(burst.startDate)
+            guard elapsed <= PopcornEmojiView_PopcornConfig.maxLifetime + 0.6 else { return nil }
+            return (origin: burst.origin, kernels: burst.kernels, elapsed: elapsed)
+        }
+    }
+
+    private func sourcePulse(now: Date) -> Double {
+        guard let recent = bursts.last else { return 0 }
+        let dt = now.timeIntervalSince(recent.startDate)
+        guard dt < 0.5 else { return 0 }
+        return max(0.0, 1.0 - dt / 0.5)
+    }
+
+    private func spawnBurst(at point: CGPoint) {
+        let nowDate = Date()
+        // Prune expired bursts here (cannot mutate inside Canvas).
+        bursts.removeAll { nowDate.timeIntervalSince($0.startDate) > PopcornEmojiView_PopcornConfig.maxLifetime + 0.6 }
+
+        let seed = UInt64(bitPattern: Int64(nowDate.timeIntervalSinceReferenceDate * 1000))
+        let origin = CGPoint(x: point.x, y: point.y)
+        bursts.append(PopcornEmojiView_Burst(startDate: nowDate, origin: origin, kernels: makeKernels(seed: seed)))
+        lastTap = point
+        burstCount &+= 1
+    }
+}
+"""###,
+        "mi-pressure-pop": ###"""
+import SwiftUI
+
+// MARK: - Pressure Pop
+// A long-press fills a radial pressure ring that, on completion, releases with a
+// sudden scale-pop and an outward shockwave puff.
+//
+//  - demo == true  : a self-driving ~3s loop (TimelineView) auto-charges the ring,
+//                    plays the pop + shockwave, then resets. Pure function of phase.
+//  - demo == false : the real interactive component. A long press (0.6s) charges the
+//                    ring; on genuine completion a KeyframeAnimator fires the pop and
+//                    shockwave, with sensory feedback. Early release drains the ring.
+
+struct PressurePopView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            ZStack {
+                if demo {
+                    PressurePopView_DemoLoop(side: side)
+                } else {
+                    PressurePopView_Interactive(side: side)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - PressurePopView_Palette
+
+private enum PressurePopView_Palette {
+    static let backdrop = Color(red: 0.078, green: 0.063, blue: 0.098)
+    static let track = Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.12)
+    static let ringHot = Color(red: 1.0, green: 0.42, blue: 0.45)
+    static let ringWarm = Color(red: 1.0, green: 0.66, blue: 0.36)
+    static let core = Color(red: 1.0, green: 0.52, blue: 0.42)
+    static let coreHi = Color(red: 1.0, green: 0.86, blue: 0.74)
+    static let shock = Color(red: 1.0, green: 0.58, blue: 0.50)
+}
+
+// MARK: - Demo (self-driving, pure function of one phase t)
+
+private struct PressurePopView_DemoLoop: View {
+    let side: CGFloat
+    private let period: Double = 3.0
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let t = phase(context.date)
+            let f = frame(for: t)
+            PressurePopView_PopBody(
+                side: side,
+                ringProgress: f.ring,
+                corePop: f.pop,
+                shockScale: f.shockScale,
+                shockOpacity: f.shockOpacity,
+                glow: f.glow
+            )
+        }
+    }
+
+    private func phase(_ date: Date) -> Double {
+        let secs = date.timeIntervalSinceReferenceDate
+        return (secs.truncatingRemainder(dividingBy: period)) / period
+    }
+
+    // One normalized cycle phase 0->1 drives every quantity, so the loop is stateless.
+    private func frame(for t: Double) -> PressurePopView_PopFrame {
+        // Charge phase: 0.0 ..< 0.55  ring fills 0 -> 1
+        // Pop phase:    0.55 ..< 0.78 core punches out, shockwave expands & fades
+        // Rest phase:   0.78 ..< 1.0  everything calm, ring empty, core idle-breathes
+        if t < 0.55 {
+            let p = t / 0.55
+            let eased = easeInOut(p)
+            // subtle anticipatory squeeze as it nears full charge
+            let tension = pow(eased, 3.0) * 0.06
+            return PressurePopView_PopFrame(
+                ring: eased,
+                pop: 1.0 - tension,
+                shockScale: 0.2,
+                shockOpacity: 0.0,
+                glow: eased * 0.6
+            )
+        } else if t < 0.78 {
+            let p = (t - 0.55) / 0.23
+            // pop: quick overshoot then settle (1 -> 1.32 -> 1.0)
+            let pop = 1.0 + popCurve(p) * 0.32
+            let shock = 0.25 + easeOut(p) * 1.15
+            let shockOpacity = (1.0 - p) * 0.7
+            return PressurePopView_PopFrame(
+                ring: 1.0 - easeOut(p),          // ring discharges as it pops
+                pop: pop,
+                shockScale: shock,
+                shockOpacity: shockOpacity,
+                glow: 0.6 * (1.0 - p) + 0.4
+            )
+        } else {
+            let p = (t - 0.78) / 0.22
+            // gentle idle breathe so the core is never static/blank during rest
+            let breathe = sin(p * .pi * 2.0) * 0.018
+            return PressurePopView_PopFrame(
+                ring: 0.0,
+                pop: 1.0 + breathe,
+                shockScale: 0.2,
+                shockOpacity: 0.0,
+                glow: 0.18 + breathe * 2.0
+            )
+        }
+    }
+
+    private func easeInOut(_ x: Double) -> Double {
+        x < 0.5 ? 2 * x * x : 1 - pow(-2 * x + 2, 2) / 2
+    }
+    private func easeOut(_ x: Double) -> Double { 1 - pow(1 - x, 3) }
+    // 0 -> 1 -> 0 with a snappy front for the pop overshoot
+    private func popCurve(_ x: Double) -> Double {
+        let s = sin(x * .pi)
+        return s * (1.0 - x * 0.35)
+    }
+}
+
+private struct PressurePopView_PopFrame {
+    let ring: Double
+    let pop: Double
+    let shockScale: Double
+    let shockOpacity: Double
+    let glow: Double
+}
+
+// MARK: - PressurePopView_Interactive (long-press charges; completion fires the pop)
+
+private struct PressurePopView_Interactive: View {
+    let side: CGFloat
+
+    @State private var charging: Bool = false
+    @State private var ringProgress: CGFloat = 0
+    @State private var popCount: Int = 0
+
+    var body: some View {
+        // KeyframeAnimator(trigger:) plays the pop + shockwave once per genuine
+        // completion only — never on early release.
+        KeyframeAnimator(
+            initialValue: PressurePopView_PopAnim(),
+            trigger: popCount
+        ) { anim in
+            PressurePopView_PopBody(
+                side: side,
+                ringProgress: Double(ringProgress),
+                corePop: anim.pop,
+                shockScale: anim.shockScale,
+                shockOpacity: anim.shockOpacity,
+                glow: glowValue(anim)
+            )
+            .contentShape(Circle())
+            .onLongPressGesture(
+                minimumDuration: 0.6,
+                maximumDistance: 60
+            ) {
+                // perform: fires only on a real long-press completion
+                popCount += 1
+            } onPressingChanged: { pressing in
+                charging = pressing
+                withAnimation(.linear(duration: pressing ? 0.6 : 0.16)) {
+                    ringProgress = pressing ? 1 : 0
+                }
+            }
+        } keyframes: { _ in
+            // core scale-pop
+            KeyframeTrack(\.pop) {
+                SpringKeyframe(1.34, duration: 0.18, spring: .snappy)
+                SpringKeyframe(1.0, duration: 0.42, spring: .bouncy)
+            }
+            // shockwave expansion
+            KeyframeTrack(\.shockScale) {
+                CubicKeyframe(0.3, duration: 0.0)
+                CubicKeyframe(1.45, duration: 0.55)
+            }
+            // shockwave fade
+            KeyframeTrack(\.shockOpacity) {
+                CubicKeyframe(0.75, duration: 0.0)
+                CubicKeyframe(0.0, duration: 0.55)
+            }
+        }
+        // Haptics live only in the interactive path so a grid of demo tiles is silent.
+        .sensoryFeedback(.impact(weight: .medium, intensity: 0.9), trigger: popCount)
+    }
+
+    private func glowValue(_ anim: PressurePopView_PopAnim) -> Double {
+        // a touch of glow while charging, and a flash during the pop
+        let chargeGlow = Double(ringProgress) * 0.6
+        let popGlow = max(0.0, anim.shockOpacity * 0.6)
+        return min(1.0, chargeGlow + popGlow + 0.16)
+    }
+}
+
+private struct PressurePopView_PopAnim {
+    var pop: Double = 1.0
+    var shockScale: Double = 0.3
+    var shockOpacity: Double = 0.0
+}
+
+// MARK: - Shared visual body
+
+private struct PressurePopView_PopBody: View {
+    let side: CGFloat
+    let ringProgress: Double
+    let corePop: Double
+    let shockScale: Double
+    let shockOpacity: Double
+    let glow: Double
+
+    private var ringDiameter: CGFloat { side * 0.62 }
+    private var coreDiameter: CGFloat { side * 0.34 }
+    private var lineWidth: CGFloat { max(3, side * 0.052) }
+
+    var body: some View {
+        ZStack {
+            PressurePopView_Palette.backdrop
+
+            shockwave
+            trackRing
+            progressRing
+            core
+        }
+    }
+
+    // expanding outward puff — fully faded between pops, so it is never the only visible thing
+    private var shockwave: some View {
+        Circle()
+            .stroke(
+                PressurePopView_Palette.shock.opacity(shockOpacity),
+                lineWidth: lineWidth * 0.7
+            )
+            .frame(width: ringDiameter, height: ringDiameter)
+            .scaleEffect(CGFloat(shockScale))
+            .blur(radius: 0.5)
+    }
+
+    // always-visible faint track
+    private var trackRing: some View {
+        Circle()
+            .stroke(PressurePopView_Palette.track, lineWidth: lineWidth)
+            .frame(width: ringDiameter, height: ringDiameter)
+    }
+
+    // the charging fill
+    private var progressRing: some View {
+        Circle()
+            .trim(from: 0, to: CGFloat(min(max(ringProgress, 0), 1)))
+            .stroke(
+                AngularGradient(
+                    colors: [PressurePopView_Palette.ringWarm, PressurePopView_Palette.ringHot, PressurePopView_Palette.ringWarm],
+                    center: .center
+                ),
+                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+            )
+            .frame(width: ringDiameter, height: ringDiameter)
+            .rotationEffect(.degrees(-90))
+            .shadow(color: PressurePopView_Palette.ringHot.opacity(glow * 0.8),
+                    radius: lineWidth * glow)
+    }
+
+    // the central core that pops — always present (idle breathe in demo rest)
+    private var core: some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [PressurePopView_Palette.coreHi, PressurePopView_Palette.core],
+                    center: .init(x: 0.4, y: 0.36),
+                    startRadius: 0,
+                    endRadius: coreDiameter * 0.7
+                )
+            )
+            .overlay(
+                Circle()
+                    .stroke(Color.white.opacity(0.18 + glow * 0.25), lineWidth: 1)
+            )
+            .frame(width: coreDiameter, height: coreDiameter)
+            .scaleEffect(CGFloat(corePop))
+            .shadow(color: PressurePopView_Palette.core.opacity(0.35 + glow * 0.4),
+                    radius: coreDiameter * 0.25 * CGFloat(glow + 0.4))
+    }
+}
+"""###,
+        "mi-punchout-check": ###"""
+import SwiftUI
+
+// MARK: - Punch-Out Check
+// A filled chip flips on its Y axis and a checkmark appears as negative space
+// punched THROUGH the card (blendMode(.destinationOut) inside a compositingGroup),
+// with light leaking through the cut edges via a gradient stroke layered on top.
+//
+// demo == true  -> a self-driving TimelineView loop: flips front -> punched (with a
+//                  legible dwell so the check can be read) -> back, forever.
+// demo == false -> tap toggles the flip with a spring settle (interaction == tap).
+//
+// The back face is counter-mirrored (scaleEffect(x:-1)) so the asymmetric checkmark
+// reads FORWARD at the resting punched state rather than backwards.
+struct PunchoutCheckView: View {
+    var demo: Bool = false
+
+    @State private var flipped: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height) * 0.62
+            let chip = max(40, side)
+
+            ZStack {
+                if demo {
+                    autoDrivenChip(size: chip)
+                } else {
+                    interactiveChip(size: chip)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(backdrop)
+    }
+
+    // MARK: Backdrop (persistent so the hole has something to leak through, and the
+    // tile is never truly empty even at the edge-on flip frame).
+    private var backdrop: some View {
+        ZStack {
+            RadialGradient(
+                colors: [
+                    Color(red: 0.10, green: 0.09, blue: 0.16),
+                    Color(red: 0.05, green: 0.05, blue: 0.09)
+                ],
+                center: .center,
+                startRadius: 2,
+                endRadius: 260
+            )
+            // Faint glow that shows through the punched check.
+            Circle()
+                .fill(Color(red: 0.45, green: 0.85, blue: 0.62).opacity(0.10))
+                .blur(radius: 40)
+                .frame(width: 120, height: 120)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+// MARK: - Auto-driven (demo) loop
+private extension PunchoutCheckView {
+    func autoDrivenChip(size: CGFloat) -> some View {
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let angle = loopAngle(at: t)
+            chipFace(size: size, angle: angle)
+        }
+    }
+
+    // Time -> angle in degrees over a ~4s loop with flat dwells so each
+    // legible state (solid front, punched back) holds long enough to read.
+    //
+    // Segments (period = 4.0s):
+    //   0.00 .. 0.60  hold front (angle 0)
+    //   0.60 .. 1.50  flip to punched (0 -> 180), easeInOut
+    //   1.50 .. 2.60  dwell punched (angle 180)   <- check is legible here
+    //   2.60 .. 3.50  flip back (180 -> 0), easeInOut
+    //   3.50 .. 4.00  hold front (angle 0)
+    func loopAngle(at time: TimeInterval) -> Double {
+        let period: Double = 4.0
+        let p = time.truncatingRemainder(dividingBy: period)
+
+        if p < 0.60 {
+            return 0
+        } else if p < 1.50 {
+            let local = (p - 0.60) / 0.90
+            return 180.0 * easeInOut(local)
+        } else if p < 2.60 {
+            return 180
+        } else if p < 3.50 {
+            let local = (p - 2.60) / 0.90
+            return 180.0 * (1.0 - easeInOut(local))
+        } else {
+            return 0
+        }
+    }
+
+    func easeInOut(_ x: Double) -> Double {
+        let c = min(max(x, 0), 1)
+        return c * c * (3.0 - 2.0 * c)
+    }
+}
+
+// MARK: - Interactive (tap) variant
+private extension PunchoutCheckView {
+    func interactiveChip(size: CGFloat) -> some View {
+        let angle: Double = flipped ? 180 : 0
+        return chipFace(size: size, angle: angle)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.62)) {
+                    flipped.toggle()
+                }
+            }
+            .sensoryFeedback(.impact(weight: .light), trigger: flipped)
+    }
+}
+
+// MARK: - The flipping chip (shared)
+private extension PunchoutCheckView {
+    /// Renders the chip at a given Y-rotation. Two faces:
+    ///  - Front (angle < 90): a solid, un-punched chip.
+    ///  - Back  (angle >= 90): the punched chip, counter-mirrored so the check reads forward.
+    func chipFace(size: CGFloat, angle: Double) -> some View {
+        let showingBack = angle >= 90
+        // How far "settled" into the back state we are (0 at edge-on, 1 fully punched)
+        // used to ramp the edge light leaking through the cut.
+        let settle = backSettle(angle: angle)
+
+        return ZStack {
+            // Soft drop shadow / pad behind the card so depth reads during the flip.
+            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                .fill(Color.black.opacity(0.28))
+                .frame(width: size, height: size)
+                .blur(radius: 14)
+                .offset(y: size * 0.08)
+                .opacity(0.9)
+
+            // FRONT FACE — solid chip, visible on the first half of the flip.
+            frontFace(size: size)
+                .opacity(showingBack ? 0 : 1)
+
+            // BACK FACE — punched chip + leaking edge light, counter-mirrored
+            // so the asymmetric check is not reversed at rest.
+            backFace(size: size, settle: settle)
+                .scaleEffect(x: -1, y: 1) // un-mirror the back of a Y-flip
+                .opacity(showingBack ? 1 : 0)
+        }
+        .rotation3DEffect(
+            .degrees(angle),
+            axis: (x: 0, y: 1, z: 0),
+            perspective: 0.55
+        )
+    }
+
+    /// 0 at the 90-degree edge-on frame, ramping to 1 by ~150 degrees, so the
+    /// light through the cut edges fades in as the card settles into the check.
+    func backSettle(angle: Double) -> Double {
+        guard angle > 90 else { return 0 }
+        let v = (angle - 90.0) / 60.0
+        return min(max(v, 0), 1)
+    }
+}
+
+// MARK: - Faces
+private extension PunchoutCheckView {
+    func frontFace(size: CGFloat) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                .fill(chipGradient)
+            // Glossy top sheen for a tactile, physical card feel.
+            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.22), Color.clear],
+                        startPoint: .top,
+                        endPoint: .center
+                    )
+                )
+            RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+        }
+        .frame(width: size, height: size)
+    }
+
+    func backFace(size: CGFloat, settle: Double) -> some View {
+        ZStack {
+            // The punched card: fill + check-shaped hole, composited flat BEFORE
+            // it sits in the rotated context. The hole clears alpha so the tile
+            // background (and glow) leaks through.
+            ZStack {
+                RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                    .fill(chipGradientBack)
+                RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.18), Color.clear],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
+                PunchoutCheckView_CheckShape()
+                    .path(in: checkRect(size: size))
+                    .fill(Color.black)
+                    .blendMode(.destinationOut) // punch the hole
+            }
+            .compositingGroup() // REQUIRED for destinationOut to cut the layers above
+            .overlay(
+                RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+            )
+
+            // Light leaking through the CUT EDGES — layered OUTSIDE the
+            // compositingGroup (otherwise destinationOut would erase it too).
+            PunchoutCheckView_CheckShape()
+                .path(in: checkRect(size: size))
+                .stroke(edgeLightGradient, lineWidth: max(1.5, size * 0.018))
+                .blur(radius: 0.6)
+                .opacity(0.35 + 0.65 * settle)
+                .shadow(color: Color(red: 0.55, green: 1.0, blue: 0.72).opacity(0.5 * settle), radius: 4)
+        }
+        .frame(width: size, height: size)
+    }
+
+    func checkRect(size: CGFloat) -> CGRect {
+        let inset = size * 0.26
+        return CGRect(x: inset, y: inset, width: size - inset * 2, height: size - inset * 2)
+    }
+}
+
+// MARK: - Palette
+private extension PunchoutCheckView {
+    var chipGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.32, green: 0.78, blue: 0.55),
+                Color(red: 0.16, green: 0.55, blue: 0.42)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    var chipGradientBack: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.28, green: 0.72, blue: 0.52),
+                Color(red: 0.12, green: 0.46, blue: 0.36)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    var edgeLightGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.75, green: 1.0, blue: 0.85),
+                Color(red: 0.40, green: 0.95, blue: 0.70),
+                Color(red: 0.85, green: 1.0, blue: 0.92)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+// MARK: - Checkmark shape (asymmetric — the counter-mirror correctness gate)
+private struct PunchoutCheckView_CheckShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let w = rect.width
+        let h = rect.height
+        // Three points of a tick, expressed as fractions of the rect.
+        let p1 = CGPoint(x: rect.minX + w * 0.08, y: rect.minY + h * 0.55)
+        let p2 = CGPoint(x: rect.minX + w * 0.38, y: rect.minY + h * 0.84)
+        let p3 = CGPoint(x: rect.minX + w * 0.92, y: rect.minY + h * 0.18)
+        p.move(to: p1)
+        p.addLine(to: p2)
+        p.addLine(to: p3)
+        // Give the punched hole real thickness by tracing back with an offset,
+        // so destinationOut clears a band rather than a hairline.
+        let t = min(w, h) * 0.16
+        let p3b = CGPoint(x: p3.x, y: p3.y + t)
+        let p2b = CGPoint(x: p2.x, y: p2.y + t * 0.55)
+        let p1b = CGPoint(x: p1.x, y: p1.y + t)
+        p.addLine(to: p3b)
+        p.addLine(to: p2b)
+        p.addLine(to: p1b)
+        p.closeSubpath()
+        return p
+    }
+}
+"""###,
+        "mi-radio-ink": ###"""
+import SwiftUI
+
+/// Ink-Fill Radio — selecting an option drops a spreading ink blot that fills
+/// the circle from the touch point while the previously selected option drains
+/// away. Self-contained, no app dependencies. iOS 17+.
+struct RadioInkView: View {
+
+    /// demo == true  -> self-driving PhaseAnimator loop cycling the selection.
+    /// demo == false -> real interactive radio group (tap to select, ink blooms
+    ///                  from the tap point).
+    var demo: Bool = false
+
+    // MARK: Options
+
+    struct InkOption: Identifiable {
+        let id: Int
+        let glyph: String
+    }
+
+    private let options: [InkOption] = [
+        InkOption(id: 0, glyph: "A"),
+        InkOption(id: 1, glyph: "B"),
+        InkOption(id: 2, glyph: "C")
+    ]
+
+    // MARK: Palette (literal colors only)
+
+    private let paper = Color(red: 0.078, green: 0.082, blue: 0.094)
+    private let inkCore = Color(red: 0.44, green: 0.52, blue: 0.98)
+    private let inkEdge = Color(red: 0.30, green: 0.36, blue: 0.86)
+    private let ringIdle = Color(red: 0.36, green: 0.38, blue: 0.46)
+    private let ringActive = Color(red: 0.62, green: 0.68, blue: 1.00)
+    private let labelColor = Color(red: 0.80, green: 0.82, blue: 0.90)
+
+    // MARK: Interactive state
+
+    @State private var selectedIndex: Int = 0
+    /// Normalized drop origin per option (where the ink soaks in from).
+    @State private var dropAnchors: [UnitPoint] = [.top, .top, .top]
+
+    var body: some View {
+        GeometryReader { geo in
+            let metrics = RadioInkView_Metrics(size: geo.size, count: options.count)
+
+            if demo {
+                demoBody(metrics: metrics)
+            } else {
+                interactiveBody(metrics: metrics)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(paper)
+    }
+
+    // MARK: Demo (self-driving) path
+
+    private func demoBody(metrics: RadioInkView_Metrics) -> some View {
+        // PhaseAnimator (auto-cycling init) walks the active index
+        // 0 -> 1 -> 2 -> (wrap to 0) on a continuous loop. Each phase change
+        // animates the bloom/drain via radioRow's internal easeOut keyed on
+        // isSelected.
+        PhaseAnimator(options.map(\.id)) { active in
+            optionStack(metrics: metrics,
+                        activeIndex: active,
+                        anchorFor: { _ in .top })
+        } animation: { _ in
+            .easeInOut(duration: 1.1).delay(0.15)
+        }
+    }
+
+    // MARK: Interactive path
+
+    private func interactiveBody(metrics: RadioInkView_Metrics) -> some View {
+        optionStack(metrics: metrics,
+                    activeIndex: selectedIndex,
+                    anchorFor: { index in dropAnchors[safe: index] ?? .top })
+        .sensoryFeedback(.selection, trigger: selectedIndex)
+    }
+
+    // MARK: Shared layout
+
+    private func optionStack(metrics: RadioInkView_Metrics,
+                             activeIndex: Int,
+                             anchorFor: @escaping (Int) -> UnitPoint) -> some View {
+        VStack(spacing: metrics.rowSpacing) {
+            ForEach(options) { option in
+                row(option: option,
+                    metrics: metrics,
+                    isSelected: option.id == activeIndex,
+                    anchor: anchorFor(option.id))
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(metrics.outerPadding)
+    }
+
+    private func row(option: InkOption,
+                     metrics: RadioInkView_Metrics,
+                     isSelected: Bool,
+                     anchor: UnitPoint) -> some View {
+        HStack(spacing: metrics.labelGap) {
+            radioRow(diameter: metrics.diameter,
+                     isSelected: isSelected,
+                     anchor: anchor)
+
+            if metrics.showLabels {
+                Text(option.glyph)
+                    .font(.system(size: metrics.labelSize, weight: .semibold, design: .rounded))
+                    .foregroundStyle(isSelected ? ringActive : labelColor)
+                    .animation(.easeOut(duration: 0.35), value: isSelected)
+            }
+
+            if metrics.showLabels { Spacer(minLength: 0) }
+        }
+        .contentShape(Rectangle())
+        .modifier(RadioInkView_TapToSelect(enabled: !demo,
+                              optionID: option.id,
+                              diameter: metrics.diameter,
+                              onSelect: { id, unit in
+                                  dropAnchors[safe2: id] = unit
+                                  withAnimation(.easeOut(duration: 0.55)) {
+                                      selectedIndex = id
+                                  }
+                              }))
+    }
+
+    // MARK: Radio (ring + ink bloom). Shared by both paths.
+
+    private func radioRow(diameter: CGFloat,
+                          isSelected: Bool,
+                          anchor: UnitPoint) -> some View {
+        let inkScale: CGFloat = isSelected ? 1.0 : 0.0
+        let inkOpacity: Double = isSelected ? 1.0 : 0.0
+        let overshoot: CGFloat = diameter * 2.4   // >= 2x so an off-center
+                                                  // bloom still reaches the rim.
+
+        return ZStack {
+            // Idle disc so the radio always reads, never fully blank.
+            Circle()
+                .fill(paper)
+                .overlay(
+                    Circle()
+                        .fill(Color(red: 0.13, green: 0.135, blue: 0.16))
+                )
+
+            // Ink bloom — oversized, clipped to the radio circle, scaling out
+            // from the drop anchor with an easeOut soak. Drains on deselect.
+            inkBlob(size: overshoot)
+                .scaleEffect(inkScale, anchor: anchor)
+                .opacity(inkOpacity)
+                .frame(width: diameter, height: diameter)
+                .clipShape(Circle())
+
+            // Always-drawn ring sits outside the ink for legibility.
+            Circle()
+                .strokeBorder(isSelected ? ringActive : ringIdle,
+                              lineWidth: max(1.5, diameter * 0.07))
+        }
+        .frame(width: diameter, height: diameter)
+        // The single source of the bloom/drain curve for BOTH paths.
+        .animation(.easeOut(duration: 0.55), value: isSelected)
+        .animation(.easeOut(duration: 0.55), value: anchor)
+    }
+
+    private func inkBlob(size: CGFloat) -> some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [inkCore, inkEdge],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: size * 0.5
+                )
+            )
+            .overlay(
+                Circle()
+                    .stroke(inkCore.opacity(0.35), lineWidth: size * 0.02)
+                    .blur(radius: size * 0.02)
+            )
+            .frame(width: size, height: size)
+    }
+}
+
+// MARK: - Tap capture (records normalized drop origin within the radio)
+
+private struct RadioInkView_TapToSelect: ViewModifier {
+    let enabled: Bool
+    let optionID: Int
+    let diameter: CGFloat
+    let onSelect: (Int, UnitPoint) -> Void
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.gesture(
+                SpatialTapGesture(coordinateSpace: .local)
+                    .onEnded { value in
+                        onSelect(optionID, unitPoint(from: value.location))
+                    }
+            )
+        } else {
+            content
+        }
+    }
+
+    /// Map the tap point (in the row's local space) to a UnitPoint roughly
+    /// inside the radio circle, which sits at the leading edge of the row.
+    private func unitPoint(from location: CGPoint) -> UnitPoint {
+        let x = (location.x / max(diameter, 1)).clampedUnit()
+        let y = (location.y / max(diameter, 1)).clampedUnit()
+        return UnitPoint(x: x, y: y)
+    }
+}
+
+// MARK: - RadioInkView_Metrics
+
+private struct RadioInkView_Metrics {
+    let diameter: CGFloat
+    let rowSpacing: CGFloat
+    let labelGap: CGFloat
+    let labelSize: CGFloat
+    let outerPadding: CGFloat
+    let showLabels: Bool
+
+    init(size: CGSize, count: Int) {
+        let minSide = min(size.width, size.height)
+        let isCompact = minSide < 160
+
+        // Diameter scales off available height across the rows.
+        let perRow = size.height / CGFloat(max(count, 1))
+        let raw = min(perRow * 0.46, size.width * 0.34)
+        diameter = max(14, min(raw, 64))
+
+        rowSpacing = max(8, diameter * 0.55)
+        labelGap = max(8, diameter * 0.35)
+        labelSize = max(11, diameter * 0.52)
+        outerPadding = isCompact ? diameter * 0.4 : diameter * 0.8
+        // Hide labels in very small tiles so the radios dominate and read.
+        showLabels = size.width >= 96
+    }
+}
+
+// MARK: - Small helpers
+
+private extension CGFloat {
+    func clampedUnit() -> CGFloat { Swift.min(1, Swift.max(0, self)) }
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}
+
+private extension Array where Element == UnitPoint {
+    subscript(safe2 index: Int) -> UnitPoint {
+        get { indices.contains(index) ? self[index] : .top }
+        set { if indices.contains(index) { self[index] = newValue } }
+    }
+}
+"""###,
+        "mi-reaction-tray-roll": ###"""
+import SwiftUI
+
+/// Reaction Tray Roll
+/// A long-press opens a row of emoji that arc up and scale into place in a
+/// staggered spring sequence; sliding across magnifies the hovered one like a
+/// fisheye macOS Dock / iMessage reaction tray.
+///
+/// - `demo == true`  : self-driving. The tray arcs open, holds, and a virtual
+///                     cursor sweeps the row back and forth so the fisheye rides
+///                     on its own. The loop is continuous at the wrap — never blank.
+/// - `demo == false` : the real interactive component. LongPress opens the tray,
+///                     a sequenced drag feeds the fisheye, release commits the
+///                     hovered emoji.
+struct ReactionTrayRollView: View {
+    var demo: Bool = false
+
+    // Interactive state (ignored in demo mode).
+    @State private var isOpen: Bool = false
+    @State private var cursorX: CGFloat? = nil
+    @State private var hoveredIndex: Int? = nil
+    @State private var committedIndex: Int? = nil
+
+    private let emojis: [String] = ["👍", "❤️", "😂", "😮", "😢", "🙏"]
+
+    var body: some View {
+        GeometryReader { proxy in
+            content(in: proxy.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        if demo {
+            demoContent(in: size)
+        } else {
+            interactiveContent(in: size)
+        }
+    }
+
+    // MARK: - Demo (self-driving)
+
+    private func demoContent(in size: CGSize) -> some View {
+        let metrics = ReactionTrayRollView_Metrics(size: size, count: emojis.count)
+        return TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let openAmount: Double = openAmountForDemo(t)
+            let cursor: CGFloat = demoCursorX(t, metrics: metrics)
+            let hovered = nearestIndex(to: cursor, metrics: metrics)
+
+            ZStack {
+                backdrop
+                ReactionTrayRollView_TrayRow(
+                    emojis: emojis,
+                    metrics: metrics,
+                    openAmount: openAmount,
+                    cursorX: cursor,
+                    hoveredIndex: hovered,
+                    committedIndex: nil
+                )
+            }
+        }
+    }
+
+    /// Arc the tray open, hold, then arc back out — continuous at both ends of
+    /// the loop so there is no single-frame collapse at the wrap.
+    private func openAmountForDemo(_ t: TimeInterval) -> Double {
+        let period: Double = 3.4
+        let phase = (t.truncatingRemainder(dividingBy: period)) / period // 0..1
+        let intro = min(1.0, phase / 0.18)                                // arc in
+        let outro: Double = phase < 0.85
+            ? 1.0
+            : max(0.0, 1.0 - (phase - 0.85) / 0.15)                       // arc out
+        return easeOutBack(intro) * outro
+    }
+
+    /// Triangle-wave cursor that sweeps a touch beyond each end-emoji center so
+    /// the end items reach full boost and the turnaround feels natural. The
+    /// position is continuous across the loop wrap.
+    private func demoCursorX(_ t: TimeInterval, metrics: ReactionTrayRollView_Metrics) -> CGFloat {
+        let period: Double = 3.4
+        let phase = (t.truncatingRemainder(dividingBy: period)) / period // 0..1
+        let tri = phase < 0.5 ? (phase * 2.0) : (2.0 - phase * 2.0)       // 0->1->0
+        let smooth = smoothstep(tri)
+        let overshoot = metrics.spacing * 0.55
+        let lo = metrics.firstCenterX - overshoot
+        let hi = metrics.lastCenterX + overshoot
+        return lo + (hi - lo) * CGFloat(smooth)
+    }
+
+    // MARK: - Interactive
+
+    private func interactiveContent(in size: CGSize) -> some View {
+        let metrics = ReactionTrayRollView_Metrics(size: size, count: emojis.count)
+        let openAmount: Double = isOpen ? 1.0 : 0.0
+
+        return ZStack {
+            backdrop
+
+            // Idle affordance shown when closed; fades out as the tray opens.
+            idleAffordance(metrics: metrics)
+                .opacity(1.0 - openAmount)
+
+            ReactionTrayRollView_TrayRow(
+                emojis: emojis,
+                metrics: metrics,
+                openAmount: openAmount,
+                cursorX: cursorX,
+                hoveredIndex: hoveredIndex,
+                committedIndex: committedIndex
+            )
+            .allowsHitTesting(false)
+            // Keep the faint resting emoji from leaking behind the idle pill.
+            .opacity(isOpen ? 1.0 : 0.0)
+        }
+        .contentShape(Rectangle())
+        .gesture(trayGesture(metrics: metrics))
+        .sensoryFeedback(.selection, trigger: hoveredIndex)
+        .sensoryFeedback(.impact(weight: .medium), trigger: committedIndex)
+    }
+
+    private func idleAffordance(metrics: ReactionTrayRollView_Metrics) -> some View {
+        VStack(spacing: metrics.itemSize * 0.18) {
+            Capsule()
+                .fill(trayFill)
+                .overlay(
+                    Capsule().stroke(trayStroke, lineWidth: 1)
+                )
+                .overlay(
+                    Text(committedIndex.map { emojis[$0] } ?? "👍")
+                        .font(.system(size: metrics.itemSize * 0.62))
+                )
+                .frame(width: metrics.itemSize * 1.7, height: metrics.itemSize * 1.05)
+            Text("Hold")
+                .font(.system(size: max(8, metrics.itemSize * 0.24), weight: .semibold, design: .rounded))
+                .foregroundStyle(Color(red: 0.62, green: 0.60, blue: 0.70))
+        }
+        .position(x: metrics.size.width / 2, y: metrics.rowBaselineY)
+    }
+
+    // MARK: - Gesture
+
+    private func trayGesture(metrics: ReactionTrayRollView_Metrics) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.28)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onChanged { value in
+                switch value {
+                case .first(true):
+                    open()
+                case .second(true, let drag):
+                    if !isOpen { open() }
+                    if let drag {
+                        let x = clampedX(drag.location.x, metrics: metrics)
+                        cursorX = x
+                        hoveredIndex = nearestIndex(to: x, metrics: metrics)
+                    }
+                default:
+                    break
+                }
+            }
+            .onEnded { _ in
+                if let h = hoveredIndex {
+                    committedIndex = h
+                }
+                close()
+            }
+    }
+
+    private func open() {
+        guard !isOpen else { return }
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.7)) {
+            isOpen = true
+        }
+    }
+
+    private func close() {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.78)) {
+            isOpen = false
+            cursorX = nil
+            hoveredIndex = nil
+        }
+    }
+
+    private func clampedX(_ x: CGFloat, metrics: ReactionTrayRollView_Metrics) -> CGFloat {
+        min(max(x, 0), metrics.size.width)
+    }
+
+    // MARK: - Shared geometry helpers
+
+    private func nearestIndex(to x: CGFloat, metrics: ReactionTrayRollView_Metrics) -> Int {
+        var best = 0
+        var bestDist = CGFloat.greatestFiniteMagnitude
+        for i in 0..<emojis.count {
+            let d = abs(metrics.centerX(i) - x)
+            if d < bestDist {
+                bestDist = d
+                best = i
+            }
+        }
+        return best
+    }
+
+    // MARK: - Palette
+
+    private var backdrop: some View {
+        // Tint #141019 with a soft vignette so the tile reads on its own.
+        RadialGradient(
+            colors: [
+                Color(red: 0.118, green: 0.094, blue: 0.149),
+                Color(red: 0.078, green: 0.063, blue: 0.098)
+            ],
+            center: .center,
+            startRadius: 2,
+            endRadius: 220
+        )
+    }
+
+    private var trayFill: Color {
+        Color(red: 0.18, green: 0.16, blue: 0.24).opacity(0.92)
+    }
+
+    private var trayStroke: Color {
+        Color(red: 0.42, green: 0.40, blue: 0.55).opacity(0.55)
+    }
+}
+
+// MARK: - Layout metrics
+
+private struct ReactionTrayRollView_Metrics {
+    let size: CGSize
+    let count: Int
+    let itemSize: CGFloat
+    let spacing: CGFloat
+    let rowWidth: CGFloat
+    let rowOriginX: CGFloat
+    let rowBaselineY: CGFloat
+
+    init(size: CGSize, count: Int) {
+        self.size = size
+        self.count = count
+
+        let w = max(size.width, 1)
+        let h = max(size.height, 1)
+
+        // Derive item size so the whole row (with magnification headroom) fits
+        // even a ~120pt tile. Width is the binding constraint with 6 items.
+        let byWidth = w / (CGFloat(count) + 1.4)
+        let byHeight = h * 0.40
+        let item = max(8, min(byWidth, byHeight))
+        self.itemSize = item
+
+        let gap = item * 0.30
+        self.spacing = item + gap
+        self.rowWidth = spacing * CGFloat(count - 1)
+        self.rowOriginX = (w - rowWidth) / 2
+        // Sit a touch below center; emoji grow upward from this baseline.
+        self.rowBaselineY = h * 0.58
+    }
+
+    var firstCenterX: CGFloat { centerX(0) }
+    var lastCenterX: CGFloat { centerX(count - 1) }
+
+    func centerX(_ index: Int) -> CGFloat {
+        rowOriginX + spacing * CGFloat(index)
+    }
+}
+
+// MARK: - Tray row (single render path for both modes)
+
+private struct ReactionTrayRollView_TrayRow: View {
+    let emojis: [String]
+    let metrics: ReactionTrayRollView_Metrics
+    let openAmount: Double
+    let cursorX: CGFloat?
+    let hoveredIndex: Int?
+    let committedIndex: Int?
+
+    var body: some View {
+        // The tray pill bows up behind the emoji.
+        ZStack {
+            trayPill
+            ForEach(emojis.indices, id: \.self) { index in
+                emojiItem(index)
+            }
+        }
+    }
+
+    private var trayPill: some View {
+        let padX = metrics.itemSize * 0.62
+        let pillW = metrics.rowWidth + metrics.itemSize + padX
+        let pillH = metrics.itemSize * 1.45
+        let lift = metrics.itemSize * 0.18
+        return Capsule()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.22, green: 0.20, blue: 0.30).opacity(0.96),
+                        Color(red: 0.15, green: 0.13, blue: 0.21).opacity(0.96)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay(
+                Capsule().stroke(
+                    Color(red: 0.46, green: 0.44, blue: 0.60).opacity(0.45),
+                    lineWidth: 1
+                )
+            )
+            .shadow(color: Color.black.opacity(0.35 * openAmount), radius: 10, y: 5)
+            .frame(width: pillW, height: pillH)
+            .scaleEffect(
+                x: 0.6 + 0.4 * CGFloat(openAmount),
+                y: 0.5 + 0.5 * CGFloat(openAmount),
+                anchor: .bottom
+            )
+            .opacity(openAmount)
+            .position(
+                x: metrics.size.width / 2,
+                y: metrics.rowBaselineY - metrics.itemSize * 0.30 - lift * CGFloat(openAmount)
+            )
+    }
+
+    private func emojiItem(_ index: Int) -> some View {
+        let p = itemProgress(index)                     // 0..1 arc-in
+        let baseX = metrics.centerX(index)
+        let fisheye = fisheyeBoost(forCenterX: baseX)   // 0..1 nearness
+        let scale = itemScale(progress: p, fisheye: fisheye)
+        let lift = itemLift(progress: p, fisheye: fisheye)
+        let isHover = (hoveredIndex == index)
+        let isCommitted = (committedIndex == index)
+
+        return Text(emojis[index])
+            .font(.system(size: metrics.itemSize * 0.92))
+            .scaleEffect(scale, anchor: .bottom)
+            .background(
+                Circle()
+                    .fill(Color.white.opacity(isCommitted ? 0.10 : 0))
+                    .frame(width: metrics.itemSize * 1.3, height: metrics.itemSize * 1.3)
+            )
+            .overlay(alignment: .top) {
+                hoverLabel(index)
+                    .opacity(isHover ? fisheye : 0)
+            }
+            .shadow(
+                color: Color.black.opacity(0.30 * fisheye),
+                radius: 4 * fisheye,
+                y: 2
+            )
+            .position(
+                x: baseX,
+                y: metrics.rowBaselineY - lift
+            )
+            .opacity(itemOpacity(progress: p))
+    }
+
+    private func hoverLabel(_ index: Int) -> some View {
+        Text(emojis[index])
+            .font(.system(size: metrics.itemSize * 0.55))
+            .padding(.horizontal, metrics.itemSize * 0.22)
+            .padding(.vertical, metrics.itemSize * 0.10)
+            .background(
+                Capsule().fill(Color(red: 0.10, green: 0.09, blue: 0.14).opacity(0.95))
+            )
+            .offset(y: -metrics.itemSize * 1.5)
+            .fixedSize()
+    }
+
+    // MARK: progress + fisheye math
+
+    /// Staggered arc-in: derive each item's local progress from the single
+    /// openAmount plus an index offset, so demo and interactive behave alike.
+    private func itemProgress(_ index: Int) -> Double {
+        let count = Double(metrics.count)
+        let span: Double = 1.6
+        let raw = openAmount * (count + span) - Double(index)
+        return min(max(raw / span, 0), 1)
+    }
+
+    /// Gaussian nearness 0..1 of an item center to the cursor.
+    private func fisheyeBoost(forCenterX x: CGFloat) -> Double {
+        guard let cursor = cursorX else { return 0 }
+        let sigma = max(metrics.spacing * 1.05, 1)
+        let d = Double(abs(x - cursor) / sigma)
+        return exp(-d * d)
+    }
+
+    private func itemScale(progress p: Double, fisheye: Double) -> CGFloat {
+        let arc = 0.55 + 0.45 * easeOutBack(p)   // grows in from 0.55 -> 1.0
+        let boost = 1.0 + 0.85 * fisheye          // up to +85% under the cursor
+        return CGFloat(arc * boost)
+    }
+
+    private func itemLift(progress p: Double, fisheye: Double) -> CGFloat {
+        let base = metrics.itemSize * 0.55 * CGFloat(easeOutBack(p))
+        let hover = metrics.itemSize * 0.42 * CGFloat(fisheye)
+        return base + hover
+    }
+
+    private func itemOpacity(progress p: Double) -> CGFloat {
+        // Never fully invisible once any open begins; clamp a legible floor.
+        CGFloat(min(1.0, 0.15 + p * 1.1))
+    }
+}
+
+// MARK: - Easing (file-private free functions)
+
+private func easeOutBack(_ x: Double) -> Double {
+    let c1: Double = 1.70158
+    let c3: Double = c1 + 1.0
+    let t = x - 1.0
+    return 1.0 + c3 * t * t * t + c1 * t * t
+}
+
+private func smoothstep(_ x: Double) -> Double {
+    let t = min(max(x, 0), 1)
+    return t * t * (3.0 - 2.0 * t)
+}
+"""###,
+        "mi-ribbon-drop-bookmark": ###"""
+import SwiftUI
+
+/// Ribbon Drop Bookmark
+///
+/// A cloth ribbon unfurls downward from the top edge with a pendulum swing and a
+/// swallowtail-notched bottom, settling with a gentle sway when saved.
+///
+/// - `demo == true`  : self-driving PhaseAnimator loop that toggles the saved state,
+///                     dropping the ribbon with a pendulum swing, settling, then
+///                     retracting — on a ~3.4s cycle so the tile always looks alive.
+/// - `demo == false` : real interactive component. Tapping toggles `isSaved`, which
+///                     triggers the same spring-driven drop-and-sway with a real
+///                     pendulum kick that springs back to rest.
+struct RibbonDropBookmarkView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            ZStack {
+                background(size: size)
+
+                if demo {
+                    demoLoop(size: size)
+                } else {
+                    interactive(size: size)
+                }
+            }
+            .frame(width: size.width, height: size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Demo (self-driving)
+
+    private func demoLoop(size: CGSize) -> some View {
+        PhaseAnimator(RibbonDropBookmarkView_RibbonPhase.allCases) { phase in
+            stage(
+                size: size,
+                progress: phase.progress,
+                swing: phase.swing
+            )
+        } animation: { phase in
+            switch phase {
+            case .hidden:
+                return .easeInOut(duration: 0.55)
+            case .dropping:
+                // Springy drop produces the pendulum overshoot + sway.
+                return .spring(response: 0.5, dampingFraction: 0.55)
+            case .settled:
+                return .spring(response: 0.5, dampingFraction: 0.7)
+            }
+        }
+    }
+
+    // MARK: - Interactive
+
+    private func interactive(size: CGSize) -> some View {
+        RibbonDropBookmarkView_InteractiveRibbon(size: size) { progress, swing in
+            stage(size: size, progress: progress, swing: swing)
+        }
+    }
+
+    // MARK: - Shared stage
+
+    private func stage(size: CGSize, progress: CGFloat, swing: CGFloat) -> some View {
+        let metrics = RibbonDropBookmarkView_RibbonMetrics(size: size)
+        return RibbonDropBookmarkView_RibbonPiece(metrics: metrics, progress: progress, swing: swing)
+    }
+
+    // MARK: - Backdrop (always visible — never a blank frame)
+
+    private func background(size: CGSize) -> some View {
+        let metrics = RibbonDropBookmarkView_RibbonMetrics(size: size)
+        return ZStack {
+            // Journal page.
+            RoundedRectangle(cornerRadius: metrics.pageCorner, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.98, green: 0.97, blue: 0.94),
+                            Color(red: 0.93, green: 0.91, blue: 0.86)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: metrics.pageCorner, style: .continuous)
+                        .stroke(Color(red: 0.0, green: 0.0, blue: 0.0).opacity(0.06), lineWidth: 1)
+                )
+                .frame(width: metrics.pageWidth, height: metrics.pageHeight)
+                .shadow(color: Color(red: 0.0, green: 0.0, blue: 0.0).opacity(0.12),
+                        radius: metrics.pageWidth * 0.04, x: 0, y: metrics.pageWidth * 0.02)
+
+            // Faint ruled lines for journal feel.
+            RibbonDropBookmarkView_RuledLines(metrics: metrics)
+
+            // Top rail the ribbon hangs from — a persistent visual anchor so the
+            // retracted state still reads as "a bookmark slot", never empty.
+            RibbonDropBookmarkView_TopRail(metrics: metrics)
+        }
+    }
+}
+
+// MARK: - Phases
+
+private enum RibbonDropBookmarkView_RibbonPhase: CaseIterable {
+    case hidden
+    case dropping
+    case settled
+
+    /// How far the ribbon has unfurled (0 hidden ... 1 fully down).
+    var progress: CGFloat {
+        switch self {
+        case .hidden:   return 0.0
+        case .dropping: return 1.0
+        case .settled:  return 1.0
+        }
+    }
+
+    /// Initial pendulum swing (radians) injected at the moment of dropping; the
+    /// spring resolves it back toward 0 producing the sway.
+    var swing: CGFloat {
+        switch self {
+        case .hidden:   return 0.0
+        case .dropping: return 0.16   // kicks to the side, then springs home
+        case .settled:  return 0.0
+        }
+    }
+}
+
+// MARK: - Interactive wrapper
+
+private struct RibbonDropBookmarkView_InteractiveRibbon<Content: View>: View {
+    let size: CGSize
+    let content: (CGFloat, CGFloat) -> Content
+
+    @State private var isSaved: Bool = false
+    @State private var swing: CGFloat = 0
+
+    var body: some View {
+        let progress: CGFloat = isSaved ? 1.0 : 0.0
+
+        return content(progress, swing)
+            // Spring on the saved transition drives the vertical drop overshoot.
+            .animation(.spring(response: 0.5, dampingFraction: 0.55), value: isSaved)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                toggle()
+            }
+            .sensoryFeedback(.impact(weight: .light), trigger: isSaved)
+            .overlay(alignment: .bottom) {
+                hint
+            }
+    }
+
+    private func toggle() {
+        isSaved.toggle()
+        // Kick the pendulum to one side, then spring it back to rest — this is
+        // the named "sway". Dropping swings one way; retracting swings the other.
+        swing = isSaved ? 0.16 : -0.12
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.55)) {
+            swing = 0
+        }
+    }
+
+    private var hint: some View {
+        Text(isSaved ? "Saved" : "Tap to save")
+            .font(.system(size: max(9, size.width * 0.05), weight: .semibold, design: .rounded))
+            .foregroundStyle(Color(red: 0.32, green: 0.28, blue: 0.24).opacity(0.7))
+            .padding(.bottom, size.height * 0.05)
+            .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Metrics
+
+private struct RibbonDropBookmarkView_RibbonMetrics {
+    let size: CGSize
+
+    var pageWidth: CGFloat { size.width * 0.78 }
+    var pageHeight: CGFloat { size.height * 0.86 }
+    var pageCorner: CGFloat { min(pageWidth, pageHeight) * 0.06 }
+
+    /// Ribbon geometry.
+    var ribbonWidth: CGFloat { pageWidth * 0.2 }
+    /// Full length of the ribbon when fully unfurled, measured from the top rail.
+    var ribbonLength: CGFloat { pageHeight * 0.74 }
+    /// Horizontal position (centre x) of the ribbon — tucked toward the right.
+    var ribbonCenterX: CGFloat { size.width / 2 + pageWidth * 0.22 }
+    /// The top attachment point (where the ribbon hangs from the rail).
+    var topY: CGFloat { (size.height - pageHeight) / 2 }
+    var railHeight: CGFloat { pageHeight * 0.05 }
+    /// Depth of the swallowtail V notch at the bottom.
+    var swallowtail: CGFloat { ribbonWidth * 0.55 }
+}
+
+// MARK: - Backdrop pieces
+
+private struct RibbonDropBookmarkView_RuledLines: View {
+    let metrics: RibbonDropBookmarkView_RibbonMetrics
+
+    var body: some View {
+        let count = 5
+        let top = metrics.topY + metrics.pageHeight * 0.22
+        let spacing = metrics.pageHeight * 0.13
+        return ZStack {
+            ForEach(0..<count, id: \.self) { i in
+                Rectangle()
+                    .fill(Color(red: 0.55, green: 0.5, blue: 0.42).opacity(0.18))
+                    .frame(width: metrics.pageWidth * 0.78, height: 1)
+                    .position(
+                        x: metrics.size.width / 2,
+                        y: top + CGFloat(i) * spacing
+                    )
+            }
+        }
+    }
+}
+
+private struct RibbonDropBookmarkView_TopRail: View {
+    let metrics: RibbonDropBookmarkView_RibbonMetrics
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: metrics.railHeight / 2, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.36, green: 0.30, blue: 0.27),
+                        Color(red: 0.22, green: 0.18, blue: 0.16)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: metrics.pageWidth * 0.92, height: metrics.railHeight)
+            .overlay(
+                Capsule()
+                    .fill(Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.22))
+                    .frame(width: metrics.pageWidth * 0.86, height: metrics.railHeight * 0.28)
+                    .offset(y: -metrics.railHeight * 0.2)
+            )
+            .position(x: metrics.size.width / 2, y: metrics.topY + metrics.railHeight / 2)
+            .shadow(color: Color(red: 0.0, green: 0.0, blue: 0.0).opacity(0.18),
+                    radius: 2, x: 0, y: 1)
+    }
+}
+
+// MARK: - Ribbon piece
+
+private struct RibbonDropBookmarkView_RibbonPiece: View {
+    let metrics: RibbonDropBookmarkView_RibbonMetrics
+    let progress: CGFloat   // 0 retracted ... 1 unfurled
+    let swing: CGFloat      // pendulum angle in radians
+
+    var body: some View {
+        let p = clamp01(progress)
+        let visibleLength = lengthForProgress(p)
+        let angle = Angle(radians: Double(swing))
+
+        ribbonBody(length: visibleLength)
+            // Anchor the rotation at the TOP attachment point so it reads as a
+            // hanging piece of cloth swinging like a pendulum, not a spinning bar.
+            .rotationEffect(angle, anchor: .top)
+            // Position the top edge at the rail; the body grows downward.
+            .position(
+                x: metrics.ribbonCenterX,
+                y: railBottomY + visibleLength / 2
+            )
+            // Always keep at least the nub visible so no frame is blank.
+            .opacity(1.0)
+    }
+
+    // The visible ribbon as a single shape (rectangle + swallowtail notch),
+    // gradient-filled with a soft cloth sheen and edge shadow.
+    private func ribbonBody(length: CGFloat) -> some View {
+        let shape = RibbonDropBookmarkView_SwallowtailRibbon(
+            cornerInset: metrics.ribbonWidth * 0.12,
+            notchDepth: notchDepth(for: length)
+        )
+        return shape
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.82, green: 0.16, blue: 0.22),
+                        Color(red: 0.66, green: 0.09, blue: 0.16),
+                        Color(red: 0.78, green: 0.14, blue: 0.20)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .overlay(
+                // Centre-line sheen for the folded-cloth highlight.
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.clear,
+                                Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.28),
+                                Color.clear
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .blendMode(.screen)
+            )
+            .overlay(
+                shape
+                    .stroke(Color(red: 0.4, green: 0.04, blue: 0.08).opacity(0.4), lineWidth: 0.75)
+            )
+            .frame(width: metrics.ribbonWidth, height: max(length, 0.001))
+            .shadow(color: Color(red: 0.3, green: 0.02, blue: 0.05).opacity(0.35),
+                    radius: metrics.ribbonWidth * 0.18,
+                    x: metrics.ribbonWidth * 0.12, y: length * 0.02)
+    }
+
+    // MARK: helpers
+
+    private var railBottomY: CGFloat {
+        metrics.topY + metrics.railHeight * 0.5
+    }
+
+    private func lengthForProgress(_ p: CGFloat) -> CGFloat {
+        // Always show a small nub even when retracted so the slot reads as
+        // occupied; full length at p == 1.
+        let nub = metrics.railHeight * 1.1
+        return nub + (metrics.ribbonLength - nub) * p
+    }
+
+    private func notchDepth(for length: CGFloat) -> CGFloat {
+        // Notch only fully forms once enough ribbon has dropped.
+        let full = metrics.swallowtail
+        let denom = metrics.ribbonLength * 0.4
+        guard denom > 0 else { return 0 }
+        let ratio = clamp01((length - metrics.railHeight * 2) / denom)
+        return full * ratio
+    }
+
+    private func clamp01(_ v: CGFloat) -> CGFloat {
+        min(1, max(0, v))
+    }
+}
+
+// MARK: - Swallowtail ribbon shape
+
+/// A rectangle with a V notch cut up into its bottom edge (swallowtail), plus
+/// gently inset top corners so the cloth reads as soft rather than a hard bar.
+private struct RibbonDropBookmarkView_SwallowtailRibbon: Shape {
+    var cornerInset: CGFloat
+    var notchDepth: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width
+        let h = rect.height
+        let notch = min(notchDepth, h * 0.5)
+        let inset = min(cornerInset, w * 0.4)
+
+        // Start top-left (slightly inset for a soft shoulder).
+        path.move(to: CGPoint(x: rect.minX + inset, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - inset, y: rect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.minY + inset),
+            control: CGPoint(x: rect.maxX, y: rect.minY)
+        )
+        // Right edge down to bottom-right.
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        // Up into the V notch centre.
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY - notch))
+        // Down to bottom-left.
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        // Left edge up to the soft top-left shoulder.
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + inset))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + inset, y: rect.minY),
+            control: CGPoint(x: rect.minX, y: rect.minY)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+"""###,
+        "mi-rolodex-quantity": ###"""
+import SwiftUI
+
+// Rolodex Quantity — a vertical cylinder of numbers you can fling.
+// Each row is offset + rotated about the X axis and faded by its angular
+// distance from center to fake a curved 3D drum. A flick seeds a
+// friction-decayed offset (a dt-based integrator stepped inside
+// .onChange(of: context.date)) that coasts and springs to a snapped value.
+struct RolodexQuantityView: View {
+    var demo: Bool = false
+
+    // Inclusive value range shown on the drum.
+    private let minValue: Int = 0
+    private let maxValue: Int = 99
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            ZStack {
+                background(size: size)
+                if demo {
+                    RolodexQuantityView_DemoDrum(size: size,
+                             minValue: minValue,
+                             maxValue: maxValue,
+                             render: { offset in
+                                 drum(offset: offset, size: size)
+                             })
+                } else {
+                    RolodexQuantityView_InteractiveDrum(size: size,
+                                    minValue: minValue,
+                                    maxValue: maxValue,
+                                    render: { offset in
+                                        drum(offset: offset, size: size)
+                                    })
+                }
+            }
+            .frame(width: size.width, height: size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Derived metrics (all relative to the tile size)
+
+    private func metrics(_ size: CGSize) -> (rowPitch: CGFloat, font: CGFloat, radius: CGFloat) {
+        let dim = min(size.width, size.height)
+        let pitch = max(dim * 0.26, 16)
+        let font = max(dim * 0.30, 17)
+        let radius = max(dim * 0.42, 22)
+        return (pitch, font, radius)
+    }
+
+    // MARK: - Pure renderer: continuous offset -> 3D number column
+
+    @ViewBuilder
+    private func drum(offset: Double, size: CGSize) -> some View {
+        let m = metrics(size)
+        let center = Int(offset.rounded())
+        // How many rows above/below center to draw (cull past ~90°).
+        let span = 4
+        ZStack {
+            ForEach(-span...span, id: \.self) { delta in
+                let value = center + delta
+                if value >= minValue && value <= maxValue {
+                    numberRow(value: value,
+                              offset: offset,
+                              metrics: m,
+                              size: size)
+                }
+            }
+            sheen(size: size, metrics: m)
+            selectionFrame(size: size, metrics: m)
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    @ViewBuilder
+    private func numberRow(value: Int,
+                           offset: Double,
+                           metrics m: (rowPitch: CGFloat, font: CGFloat, radius: CGFloat),
+                           size: CGSize) -> some View {
+        // Distance (in row units) of this value from the centered offset.
+        let rel: CGFloat = CGFloat(Double(value) - offset)
+        // Angle on the cylinder; clamp so projection never folds past the rim.
+        let rawAngle: CGFloat = rel * 40.0
+        let angle: CGFloat = max(-92, min(92, rawAngle))
+        let rad = angle * .pi / 180
+        // Project onto the drum: vertical position follows sin, depth follows cos.
+        let yPos = sin(rad) * m.radius
+        let depth = cos(rad)
+        let opacity = max(0.0, Double(depth)) * 0.9 + 0.1
+        let scale = 0.55 + 0.45 * max(0.0, depth)
+
+        Text("\(value)")
+            .font(.system(size: m.font, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(numberColor(depth: depth))
+            .scaleEffect(scale)
+            .rotation3DEffect(.degrees(Double(angle)),
+                              axis: (x: 1, y: 0, z: 0),
+                              anchor: .center,
+                              perspective: 0.6)
+            .opacity(opacity)
+            .offset(y: yPos)
+    }
+
+    private func numberColor(depth: CGFloat) -> Color {
+        // Center reads brightest; rim rows fade toward a dim slate.
+        let t = max(0.0, min(1.0, Double(depth)))
+        let r = 0.55 + 0.40 * t
+        let g = 0.58 + 0.40 * t
+        let b = 0.66 + 0.32 * t
+        return Color(red: r, green: g, blue: b)
+    }
+
+    // MARK: - Chrome
+
+    private func background(size: CGSize) -> some View {
+        let dim = min(size.width, size.height)
+        return RoundedRectangle(cornerRadius: dim * 0.16, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.09, green: 0.10, blue: 0.14),
+                        Color(red: 0.05, green: 0.06, blue: 0.09)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: dim * 0.16, style: .continuous)
+                    .strokeBorder(Color(red: 1, green: 1, blue: 1).opacity(0.05),
+                                  lineWidth: 1)
+            )
+            .padding(dim * 0.04)
+    }
+
+    // Top + bottom fade so numbers dissolve into the drum edges.
+    private func sheen(size: CGSize, metrics m: (rowPitch: CGFloat, font: CGFloat, radius: CGFloat)) -> some View {
+        let dim = min(size.width, size.height)
+        return RoundedRectangle(cornerRadius: dim * 0.16, style: .continuous)
+            .fill(
+                LinearGradient(
+                    stops: [
+                        .init(color: Color(red: 0.05, green: 0.06, blue: 0.09).opacity(0.9), location: 0.0),
+                        .init(color: .clear, location: 0.30),
+                        .init(color: .clear, location: 0.70),
+                        .init(color: Color(red: 0.05, green: 0.06, blue: 0.09).opacity(0.9), location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .padding(dim * 0.04)
+            .allowsHitTesting(false)
+    }
+
+    // Center selection band that frames the snapped value.
+    private func selectionFrame(size: CGSize, metrics m: (rowPitch: CGFloat, font: CGFloat, radius: CGFloat)) -> some View {
+        let bandHeight = m.font * 1.25
+        let bandWidth = min(size.width, size.height) * 0.66
+        return RoundedRectangle(cornerRadius: bandHeight * 0.28, style: .continuous)
+            .fill(Color(red: 0.40, green: 0.52, blue: 1.0).opacity(0.10))
+            .overlay(
+                RoundedRectangle(cornerRadius: bandHeight * 0.28, style: .continuous)
+                    .strokeBorder(Color(red: 0.45, green: 0.58, blue: 1.0).opacity(0.35),
+                                  lineWidth: 1.5)
+            )
+            .frame(width: bandWidth, height: bandHeight)
+            .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Demo driver (self-driving, no @State physics)
+
+private struct RolodexQuantityView_DemoDrum<Content: View>: View {
+    let size: CGSize
+    let minValue: Int
+    let maxValue: Int
+    let render: (Double) -> Content
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            render(offset(at: context.date))
+        }
+    }
+
+    // Pure function of time: a ~3.4s loop that flings, coasts, eases to a
+    // snapped value, holds, then flings again. Never leaves the value range.
+    private func offset(at date: Date) -> Double {
+        let period: Double = 3.4
+        let t = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
+        let span = Double(maxValue - minValue)
+
+        // Phase 1 (0..0.55): a decelerating fling that sweeps ~14 values.
+        // Phase 2 (0.55..1): hold on the snapped value with a tiny settle.
+        let base: Double = 6
+        let sweep: Double = 14
+        let value: Double
+        if t < 0.55 {
+            let p = t / 0.55
+            let eased = 1 - pow(1 - p, 3) // easeOutCubic = coasting feel
+            value = base + sweep * eased
+        } else {
+            let p = (t - 0.55) / 0.45
+            // Small spring-like overshoot then settle onto the integer target.
+            let target = base + sweep
+            let snapped = (base + sweep).rounded()
+            let settle = sin(p * .pi * 2) * 0.35 * (1 - p)
+            value = target * (1 - p) + snapped * p + settle
+        }
+        return min(Double(maxValue), max(Double(minValue), value))
+    }
+}
+
+// MARK: - Interactive driver (drag + friction integrator)
+
+private struct RolodexQuantityView_InteractiveDrum<Content: View>: View {
+    let size: CGSize
+    let minValue: Int
+    let maxValue: Int
+    let render: (Double) -> Content
+
+    // Continuous drum position (in value units). offset == value at center.
+    @State private var offset: Double = 6
+    @State private var dragStartOffset: Double = 6
+    @State private var velocity: Double = 0          // value-units / sec
+    @State private var coasting: Bool = false
+    @State private var lastTick: Date? = nil
+    @State private var lastIndex: Int = 6
+    @State private var hapticTrigger: Int = 0
+    @State private var isDragging: Bool = false
+
+    var body: some View {
+        // Paused timeline keeps the integrator idle at rest.
+        TimelineView(.animation(paused: !coasting)) { context in
+            render(offset)
+                .onChange(of: context.date) { _, newDate in
+                    step(to: newDate)
+                }
+        }
+        .contentShape(Rectangle())
+        .gesture(dragGesture)
+        .sensoryFeedback(.selection, trigger: hapticTrigger)
+        .onAppear { lastIndex = Int(offset.rounded()) }
+    }
+
+    private var pitch: CGFloat {
+        max(min(size.width, size.height) * 0.26, 16)
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                // First event of a fresh touch: grab the drum wherever it
+                // actually is (mid-coast or mid-spring-snap) so translation==0
+                // maps to the current position and there is no jump.
+                if !isDragging {
+                    isDragging = true
+                    coasting = false
+                    lastTick = nil
+                    velocity = 0
+                    dragStartOffset = offset
+                }
+                // Dragging down moves to lower values; map points -> value units.
+                let deltaValues = Double(-value.translation.height / pitch)
+                offset = clampOffset(dragStartOffset + deltaValues)
+                fireHapticIfCrossed()
+            }
+            .onEnded { value in
+                isDragging = false
+                // Predicted end gives a velocity-like fling without relying on
+                // DragGesture.Value.velocity (predictedEndTranslation is iOS 13+).
+                let predicted = Double(-value.predictedEndTranslation.height / pitch)
+                let actual = Double(-value.translation.height / pitch)
+                let fling = predicted - actual // extra distance the flick implies
+                // Convert remaining fling into an initial velocity (per second).
+                let v0 = fling * 3.5
+                if abs(v0) < 0.6 {
+                    // Degenerate / tap: snap to nearest with a spring.
+                    snapToNearest()
+                } else {
+                    velocity = v0
+                    lastTick = nil
+                    coasting = true
+                }
+            }
+    }
+
+    // dt-based friction integrator. Framerate-independent.
+    private func step(to date: Date) {
+        guard coasting else { return }
+        guard let last = lastTick else { lastTick = date; return }
+        let dt = date.timeIntervalSince(last)
+        lastTick = date
+        guard dt > 0, dt < 0.25 else { return }
+
+        let frictionPerSec: Double = 0.10 // velocity retained per second
+        velocity *= pow(frictionPerSec, dt)
+        offset = clampOffset(offset + velocity * dt)
+        fireHapticIfCrossed()
+
+        // Clamp at the rails: kill momentum so it can't grind the edge.
+        if offset <= Double(minValue) || offset >= Double(maxValue) {
+            velocity = 0
+        }
+
+        if abs(velocity) < 0.4 {
+            coasting = false
+            lastTick = nil
+            snapToNearest()
+        }
+    }
+
+    private func snapToNearest() {
+        let target = Double(min(maxValue, max(minValue, Int(offset.rounded()))))
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+            offset = target
+        }
+        dragStartOffset = target
+        fireHapticIfCrossed()
+    }
+
+    private func clampOffset(_ v: Double) -> Double {
+        min(Double(maxValue), max(Double(minValue), v))
+    }
+
+    private func fireHapticIfCrossed() {
+        let idx = Int(offset.rounded())
+        if idx != lastIndex {
+            lastIndex = idx
+            hapticTrigger &+= 1
+        }
+    }
+}
+"""###,
+        "mi-scrubber-wave": ###"""
+import SwiftUI
+
+/// Waveform Scrubber — dragging across an audio waveform parts the bars around the
+/// playhead and ripples a height-wave outward from the touch point.
+///
+/// - `demo == true`  → a self-driving TimelineView sweeps the playhead 0→1→0 on a
+///   loop so the tile is always alive (bars are always rendered at their baseline).
+/// - `demo == false` → a real DragGesture sets the playhead; per-bar parting +
+///   height bulge are computed from distance to the playhead with a falloff, with
+///   `sensoryFeedback(.selection)` ticking as the bar under the finger changes.
+///   The playhead is left wherever the finger releases (no spring back).
+struct ScrubberWaveView: View {
+    var demo: Bool = false
+
+    // Persistent interactive playhead (normalized 0...1). Release leaves it in place.
+    @State private var playhead: CGFloat = 0.5
+    @State private var isDragging: Bool = false
+    // Touch-down moment, used for a short bounded amplitude "kick" on grab.
+    @State private var touchStart: Date = .distantPast
+    // Integer bar index under the playhead — drives selection haptics on change.
+    @State private var activeBar: Int = -1
+
+    private let barCount: Int = 42
+
+    var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Content router
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        if demo {
+            demoContent(in: size)
+        } else {
+            interactiveContent(in: size)
+        }
+    }
+
+    // MARK: - Demo (self-driving)
+
+    private func demoContent(in size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let head = Self.sweep(t)
+            waveformCanvas(size: size, head: head, boost: 0.0)
+        }
+    }
+
+    // MARK: - Interactive
+
+    private func interactiveContent(in size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let boost = touchBoost(now: timeline.date)
+            waveformCanvas(size: size, head: playhead, boost: boost)
+        }
+        .contentShape(Rectangle())
+        .gesture(dragGesture(in: size))
+        .sensoryFeedback(.selection, trigger: activeBar)
+    }
+
+    private func dragGesture(in size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if !isDragging {
+                    isDragging = true
+                    touchStart = Date()
+                }
+                let w = max(size.width, 1)
+                let x = min(max(value.location.x, 0), w)
+                playhead = x / w
+                let idx = Int((playhead * CGFloat(barCount - 1)).rounded())
+                if idx != activeBar { activeBar = idx }
+            }
+            .onEnded { _ in
+                // Release leaves the playhead — no spring back to zero.
+                isDragging = false
+            }
+    }
+
+    /// A short, bounded amplitude boost right after touch-down so the wave "kicks"
+    /// when you grab it, then decays. Returns 0 in steady state.
+    private func touchBoost(now: Date) -> CGFloat {
+        guard isDragging else { return 0 }
+        let elapsed = now.timeIntervalSince(touchStart)
+        guard elapsed >= 0, elapsed < 0.6 else { return 0 }
+        let decay = 1.0 - (elapsed / 0.6)
+        return CGFloat(decay) * 0.35
+    }
+
+    // MARK: - Shared waveform draw path
+
+    /// Single Canvas that draws every bar. `head` is the normalized playhead,
+    /// `boost` is an optional transient extra amplitude near the playhead.
+    private func waveformCanvas(size: CGSize, head: CGFloat, boost: CGFloat) -> some View {
+        Canvas { context, canvasSize in
+            drawWaveform(into: context, size: canvasSize, head: head, boost: boost)
+        }
+    }
+
+    private func drawWaveform(into context: GraphicsContext, size: CGSize, head: CGFloat, boost: CGFloat) {
+        let w = size.width
+        let h = size.height
+        guard w > 1, h > 1 else { return }
+
+        let inset: CGFloat = w * 0.06
+        let usableW = w - inset * 2
+        let midY = h * 0.5
+        let maxBarH = h * 0.72
+        let minBarH = h * 0.12
+        let slotW = usableW / CGFloat(barCount)
+        let barW = min(slotW * 0.5, 6)
+
+        let headX = inset + head * usableW
+
+        // Parting + bulge influence radius in slot-units.
+        let radius: CGFloat = 4.0
+
+        for i in 0..<barCount {
+            let baseX = inset + (CGFloat(i) + 0.5) * slotW
+            // Distance from this bar to the playhead, in slot units.
+            let dxSlots = (baseX - headX) / slotW
+            let absD = abs(dxSlots)
+
+            // Cosine bell centered on the playhead → height bulge that rides along.
+            let bell = bellFalloff(distance: absD, radius: radius)
+
+            // Horizontal parting: bars near the head push away from it.
+            let partStrength = bell * slotW * 0.85
+            let dir: CGFloat = dxSlots == 0 ? 0 : (dxSlots > 0 ? 1 : -1)
+            let partOffset = dir * partStrength
+
+            // Base amplitude is deterministic (precomputed once) — never per-frame random.
+            let amp = Self.amplitudes[i]
+            let bulge = 1.0 + bell * (1.35 + boost)
+            var barH = (minBarH + (maxBarH - minBarH) * amp) * bulge
+            barH = min(barH, h * 0.94)
+
+            let x = baseX + partOffset
+            let rect = CGRect(
+                x: x - barW / 2,
+                y: midY - barH / 2,
+                width: barW,
+                height: barH
+            )
+            let path = Path(roundedRect: rect, cornerRadius: barW / 2)
+
+            // Bars at/behind the playhead read as "played" (warm), ahead are cool.
+            let played = baseX <= headX
+            let color = barColor(played: played, bell: bell)
+            context.fill(path, with: .color(color))
+        }
+
+        drawPlayhead(into: context, x: headX, height: h)
+    }
+
+    private func drawPlayhead(into context: GraphicsContext, x: CGFloat, height: CGFloat) {
+        let topPad = height * 0.08
+        let lineRect = CGRect(x: x - 1.25, y: topPad, width: 2.5, height: height - topPad * 2)
+        let line = Path(roundedRect: lineRect, cornerRadius: 1.25)
+        context.fill(line, with: .color(playheadColor))
+
+        // Soft glow halo so the playhead reads on any background.
+        let haloR = height * 0.07
+        let haloRect = CGRect(x: x - haloR, y: height * 0.5 - haloR, width: haloR * 2, height: haloR * 2)
+        context.fill(Path(ellipseIn: haloRect), with: .color(playheadColor.opacity(0.18)))
+
+        // Knob at top of the playhead line.
+        let knobR = max(height * 0.045, 3)
+        let knobRect = CGRect(x: x - knobR, y: topPad - knobR, width: knobR * 2, height: knobR * 2)
+        context.fill(Path(ellipseIn: knobRect), with: .color(playheadColor))
+    }
+
+    // MARK: - Color helpers (RGB literals only — no design-system / UIKit deps)
+
+    private typealias RGB = (r: CGFloat, g: CGFloat, b: CGFloat)
+
+    private var playheadColor: Color {
+        Color(red: 0.99, green: 0.86, blue: 0.42)
+    }
+
+    private func barColor(played: Bool, bell: CGFloat) -> Color {
+        let warm: RGB = (0.98, 0.74, 0.36)
+        let cool: RGB = (0.40, 0.44, 0.58)
+        let bright: RGB = (1.0, 0.97, 0.85)
+        let base = played ? warm : cool
+        let amount = min(bell, 1.0) * 0.45
+        let m = mix(base, bright, amount)
+        return Color(red: Double(m.r), green: Double(m.g), blue: Double(m.b))
+    }
+
+    private func mix(_ a: RGB, _ b: RGB, _ amount: CGFloat) -> RGB {
+        let t = min(max(amount, 0), 1)
+        return (
+            a.r + (b.r - a.r) * t,
+            a.g + (b.g - a.g) * t,
+            a.b + (b.b - a.b) * t
+        )
+    }
+
+    // MARK: - Falloff math
+
+    /// Smooth bell-shaped falloff: peak 1 at distance 0, ~0 beyond `radius`.
+    private func bellFalloff(distance: CGFloat, radius: CGFloat) -> CGFloat {
+        guard radius > 0 else { return 0 }
+        let x = distance / radius
+        if x >= 1 { return 0 }
+        let c = (cos(.pi * x) + 1) * 0.5 // cosine bell, no exp() needed
+        return c * c
+    }
+
+    // MARK: - Static, precomputed data
+
+    /// Triangle sweep 0→1→0 over a ~3.2s loop for demo mode.
+    private static func sweep(_ t: TimeInterval) -> CGFloat {
+        let period: TimeInterval = 3.2
+        let phase = (t.truncatingRemainder(dividingBy: period)) / period // 0...1
+        let tri = phase < 0.5 ? (phase * 2) : (2 - phase * 2) // 0→1→0
+        let eased = tri * tri * (3 - 2 * tri) // smoothstep — lingers at the ends
+        return CGFloat(eased)
+    }
+
+    /// Deterministic per-bar base amplitudes (0...1), computed ONCE. Stable across
+    /// every frame — only position/height *modulation* is animated, never the source.
+    private static let amplitudes: [CGFloat] = {
+        var out: [CGFloat] = []
+        out.reserveCapacity(42)
+        for i in 0..<42 {
+            let f = Double(i)
+            // Layered sinusoids → an organic, audio-like envelope. Fully deterministic.
+            let a = sin(f * 0.55) * 0.5 + 0.5
+            let b = sin(f * 1.30 + 1.7) * 0.5 + 0.5
+            let c = sin(f * 0.21 + 0.4) * 0.5 + 0.5
+            var v = a * 0.45 + b * 0.30 + c * 0.25
+            // Gentle overall arc so the middle reads a touch louder.
+            let arc = sin(f / 41.0 * .pi)
+            v = v * (0.55 + 0.45 * arc)
+            out.append(CGFloat(min(max(v, 0.08), 1.0)))
+        }
+        return out
+    }()
+}
+"""###,
+        "mi-slide-to-confirm": ###"""
+import SwiftUI
+import Foundation
+
+// MARK: - Slide to Confirm
+// A handle is dragged along a track that fills behind it with a liquid sheen.
+// Reaching the end snaps it shut and morphs the arrow into a checkmark.
+// demo == true  -> self-driving PhaseAnimator loop (slide -> lock -> reset).
+// demo == false -> real DragGesture, clamped, with spring snap + haptics.
+struct SlideToConfirmView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        let metrics = SlideToConfirmView_Metrics(size: size)
+
+        ZStack {
+            if demo {
+                demoTrack(metrics: metrics)
+            } else {
+                SlideToConfirmView_InteractiveTrack(metrics: metrics)
+            }
+        }
+        .frame(width: metrics.trackWidth, height: metrics.trackHeight)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Demo (auto-driving)
+
+    @ViewBuilder
+    private func demoTrack(metrics: SlideToConfirmView_Metrics) -> some View {
+        // Phases: rest -> slid-to-end (locked) -> hold -> reset.
+        // Never lands on a blank frame; the held phase shows the checkmark.
+        PhaseAnimator([SlideToConfirmView_DemoPhase.rest, .filling, .locked, .hold]) { phase in
+            SlideToConfirmView_TrackBody(
+                metrics: metrics,
+                progress: phase.progress,
+                locked: phase.locked
+            )
+        } animation: { phase in
+            switch phase {
+            case .rest:    return .easeInOut(duration: 0.35)
+            case .filling: return .easeInOut(duration: 1.3)
+            case .locked:  return .spring(response: 0.35, dampingFraction: 0.6)
+            case .hold:    return .easeInOut(duration: 0.9)
+            }
+        }
+    }
+}
+
+// MARK: - Phase model
+
+private enum SlideToConfirmView_DemoPhase: CaseIterable {
+    case rest, filling, locked, hold
+
+    var progress: Double {
+        switch self {
+        case .rest:    return 0.0
+        case .filling: return 0.92
+        case .locked:  return 1.0
+        case .hold:    return 1.0
+        }
+    }
+
+    var locked: Bool {
+        switch self {
+        case .rest, .filling: return false
+        case .locked, .hold:  return true
+        }
+    }
+}
+
+// MARK: - SlideToConfirmView_Metrics
+
+private struct SlideToConfirmView_Metrics {
+    let trackWidth: CGFloat
+    let trackHeight: CGFloat
+    let handleDiameter: CGFloat
+    let inset: CGFloat
+
+    init(size: CGSize) {
+        let pad: CGFloat = max(8, size.width * 0.06)
+        let w = max(60, size.width - pad * 2)
+        // Cap height so it never becomes a giant bar in a large detail area.
+        let h = min(max(size.height * 0.34, 44), min(64, w * 0.32))
+        self.trackWidth = w
+        self.trackHeight = h
+        self.inset = max(3, h * 0.09)
+        self.handleDiameter = h - inset * 2
+    }
+
+    // Center-x travel range of the handle.
+    var handleMinX: CGFloat { inset + handleDiameter / 2 }
+    var handleMaxX: CGFloat { trackWidth - inset - handleDiameter / 2 }
+    var travel: CGFloat { max(1, handleMaxX - handleMinX) }
+
+    func handleCenterX(progress: Double) -> CGFloat {
+        handleMinX + travel * CGFloat(progress)
+    }
+}
+
+// MARK: - Interactive
+
+private struct SlideToConfirmView_InteractiveTrack: View {
+    let metrics: SlideToConfirmView_Metrics
+
+    @State private var progress: Double = 0
+    @State private var locked: Bool = false
+    @State private var dragging: Bool = false
+    // Increments on each successful lock so .success haptic re-fires.
+    @State private var successTick: Int = 0
+
+    var body: some View {
+        SlideToConfirmView_TrackBody(metrics: metrics, progress: progress, locked: locked)
+            .contentShape(Rectangle())
+            .gesture(drag)
+            .sensoryFeedback(.success, trigger: successTick)
+            .sensoryFeedback(.impact(weight: .light), trigger: crossingStep)
+    }
+
+    // Fires a light tick as the handle crosses quarter steps while dragging.
+    private var crossingStep: Int {
+        guard dragging else { return -1 }
+        return Int(progress * 4)
+    }
+
+    private var drag: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                guard !locked else { return }
+                dragging = true
+                let x = value.location.x
+                let clamped = min(max(x, metrics.handleMinX), metrics.handleMaxX)
+                progress = Double((clamped - metrics.handleMinX) / metrics.travel)
+            }
+            .onEnded { _ in
+                dragging = false
+                if progress > 0.9 {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
+                        progress = 1.0
+                        locked = true
+                    }
+                    successTick += 1
+                    // Auto-reset so the control can be tried again.
+                    scheduleReset()
+                } else {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                        progress = 0.0
+                    }
+                }
+            }
+    }
+
+    private func scheduleReset() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                progress = 0.0
+                locked = false
+            }
+        }
+    }
+}
+
+// MARK: - Track body (shared renderer)
+
+private struct SlideToConfirmView_TrackBody: View {
+    let metrics: SlideToConfirmView_Metrics
+    let progress: Double
+    let locked: Bool
+
+    private var palette: SlideToConfirmView_Palette { SlideToConfirmView_Palette() }
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            trackBase
+            fill
+            label
+            handle
+        }
+        .frame(width: metrics.trackWidth, height: metrics.trackHeight)
+    }
+
+    // MARK: Base groove
+
+    private var trackBase: some View {
+        Capsule()
+            .fill(palette.trackBase)
+            .overlay(
+                Capsule()
+                    .stroke(palette.trackStroke, lineWidth: 1)
+            )
+    }
+
+    // MARK: Liquid fill + sheen
+
+    private var fill: some View {
+        // Fill follows the handle's trailing edge (handle center + radius).
+        let fillWidth = metrics.handleCenterX(progress: progress)
+            + metrics.handleDiameter / 2
+
+        return TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            Capsule()
+                .fill(palette.fillGradient)
+                .overlay(sheen(time: t))
+                .frame(width: max(metrics.trackHeight, fillWidth))
+                .clipShape(Capsule())
+        }
+        .frame(width: metrics.trackWidth, alignment: .leading)
+        .opacity(0.95)
+    }
+
+    private func sheen(time: Double) -> some View {
+        // A moving diagonal highlight that travels across the filled area.
+        let phase = (time.truncatingRemainder(dividingBy: 2.2)) / 2.2
+        let span: CGFloat = metrics.trackWidth
+        let x = -span + CGFloat(phase) * (span * 2)
+
+        return LinearGradient(
+            colors: [
+                Color.white.opacity(0.0),
+                Color.white.opacity(0.35),
+                Color.white.opacity(0.0)
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        .frame(width: span * 0.55)
+        .offset(x: x)
+        .blendMode(.screen)
+        .allowsHitTesting(false)
+    }
+
+    // MARK: Label
+
+    private var label: some View {
+        // Fades out as the slide progresses; gone once locked.
+        Text(locked ? "Confirmed" : "Slide to confirm")
+            .font(.system(size: metrics.trackHeight * 0.3, weight: .semibold, design: .rounded))
+            .foregroundStyle(labelColor)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .frame(width: metrics.trackWidth, alignment: .center)
+            .opacity(labelOpacity)
+            .animation(.easeOut(duration: 0.25), value: locked)
+    }
+
+    private var labelColor: Color {
+        locked ? Color.white : palette.labelRest
+    }
+
+    private var labelOpacity: Double {
+        if locked { return 1.0 }
+        // Fade the prompt out as the handle covers it.
+        return max(0.0, 1.0 - progress * 1.6)
+    }
+
+    // MARK: Handle
+
+    private var handle: some View {
+        let d = metrics.handleDiameter
+        let centerX = metrics.handleCenterX(progress: progress)
+
+        return ZStack {
+            Circle()
+                .fill(palette.handleFill)
+                .overlay(
+                    Circle().stroke(palette.handleStroke, lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.35), radius: 3, x: 0, y: 1)
+            glyph
+        }
+        .frame(width: d, height: d)
+        .scaleEffect(locked ? 1.06 : 1.0)
+        .offset(x: centerX - d / 2)
+        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: locked)
+    }
+
+    private var glyph: some View {
+        Image(systemName: locked ? "checkmark" : "arrow.right")
+            .font(.system(size: metrics.handleDiameter * 0.42, weight: .bold))
+            .foregroundStyle(palette.glyph)
+            .contentTransition(.symbolEffect(.replace))
+    }
+}
+
+// MARK: - SlideToConfirmView_Palette (no app dependencies; literal colors)
+
+private struct SlideToConfirmView_Palette {
+    let trackBase = Color(red: 0.13, green: 0.11, blue: 0.18)
+    let trackStroke = Color(red: 0.32, green: 0.28, blue: 0.42).opacity(0.7)
+    let labelRest = Color(red: 0.78, green: 0.76, blue: 0.86).opacity(0.85)
+    let handleFill = Color(red: 0.97, green: 0.97, blue: 1.0)
+    let handleStroke = Color(red: 0.70, green: 0.66, blue: 0.85).opacity(0.5)
+    let glyph = Color(red: 0.36, green: 0.20, blue: 0.78)
+
+    var fillGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.42, green: 0.28, blue: 0.92),
+                Color(red: 0.55, green: 0.36, blue: 0.98),
+                Color(red: 0.36, green: 0.52, blue: 0.99)
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+}
+"""###,
+        "mi-staggered-star-rating": ###"""
+import SwiftUI
+
+/// Staggered Star Rating
+///
+/// Drag across the row to fill stars left-to-right. Each newly filled star
+/// pops with a staggered spring that ripples behind your finger, and the
+/// whole row tints warmer as the score rises.
+///
+/// - `demo == true`  : self-driving PhaseAnimator loop that ramps the rating
+///                     up and back down so the tile looks alive untouched.
+/// - `demo == false` : a real interactive rating control driven by a single
+///                     DragGesture (which also covers taps).
+struct StaggeredStarRatingView: View {
+    var demo: Bool = false
+
+    private let starCount: Int = 5
+
+    // The live rating. During interaction this tracks the finger continuously;
+    // in demo mode it is driven by the PhaseAnimator phase.
+    @State private var rating: Double = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        // .frame here keeps the GeometryReader from collapsing in a tile.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        if demo {
+            demoBody(in: size)
+        } else {
+            interactiveBody(in: size)
+        }
+    }
+
+    // MARK: - Demo (self-driving)
+
+    @ViewBuilder
+    private func demoBody(in size: CGSize) -> some View {
+        // Integer phases give a crisp per-star pop at each step; a continuous
+        // ramp would smear the left-to-right stagger. Using the auto-looping
+        // PhaseAnimator initializer (no trigger) so the tile cycles forever.
+        let phases: [Double] = [0, 1, 2, 3, 4, 5, 4, 3, 2, 1]
+        PhaseAnimator(phases) { phase in
+            row(rating: phase, in: size)
+        } animation: { _ in
+            .spring(response: 0.45, dampingFraction: 0.65)
+        }
+    }
+
+    // MARK: - Interactive
+
+    @ViewBuilder
+    private func interactiveBody(in size: CGSize) -> some View {
+        let metrics = StaggeredStarRatingView_StarMetrics(size: size, count: starCount)
+        row(rating: rating, in: size)
+            .contentShape(Rectangle())
+            .gesture(dragGesture(metrics: metrics))
+            // Gate haptics to interactive use so a grid of demo tiles
+            // doesn't buzz the device continuously.
+            .sensoryFeedback(.selection, trigger: Int(rating.rounded()))
+    }
+
+    private func dragGesture(metrics: StaggeredStarRatingView_StarMetrics) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                rating = rating(forX: value.location.x, metrics: metrics)
+            }
+            .onEnded { value in
+                let raw = rating(forX: value.location.x, metrics: metrics)
+                // Snap to nearest half-star with a settling spring.
+                let snapped = (raw * 2).rounded() / 2
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
+                    rating = snapped
+                }
+            }
+    }
+
+    /// Maps an x position within the row to a 0...count rating.
+    private func rating(forX x: CGFloat, metrics: StaggeredStarRatingView_StarMetrics) -> Double {
+        let local = x - metrics.leadingInset
+        guard metrics.rowWidth > 0 else { return 0 }
+        let frac = Double(local / metrics.rowWidth)
+        let clamped = min(max(frac, 0), 1)
+        return clamped * Double(starCount)
+    }
+
+    // MARK: - Row
+
+    @ViewBuilder
+    private func row(rating: Double, in size: CGSize) -> some View {
+        let metrics = StaggeredStarRatingView_StarMetrics(size: size, count: starCount)
+        HStack(spacing: metrics.spacing) {
+            ForEach(0..<starCount, id: \.self) { index in
+                StaggeredStarRatingView_StarCell(
+                    fill: fillFraction(rating: rating, index: index),
+                    isFilled: isFilled(rating: rating, index: index),
+                    fillColor: warmthColor(rating: rating),
+                    side: metrics.starSide,
+                    delay: Double(index) * 0.05
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Derived values
+
+    /// Continuous 0...1 fill for a star — tracks the finger live.
+    private func fillFraction(rating: Double, index: Int) -> CGFloat {
+        let raw = rating - Double(index)
+        return CGFloat(min(max(raw, 0), 1))
+    }
+
+    /// Discrete "this star counts as lit" — the spring/pop is keyed to this so
+    /// the ripple lags behind the live fill instead of fighting the finger.
+    private func isFilled(rating: Double, index: Int) -> Bool {
+        rating - Double(index) >= 0.5
+    }
+
+    /// Pale gold -> warm amber as the score climbs. Interpolates the raw RGB
+    /// components directly so there is no UIKit/UIColor dependency.
+    private func warmthColor(rating: Double) -> Color {
+        let t = min(max(rating / Double(starCount), 0), 1)
+        // soft gold
+        let cr: Double = 1.00, cg: Double = 0.82, cb: Double = 0.36
+        // warm amber-red
+        let wr: Double = 1.00, wg: Double = 0.42, wb: Double = 0.27
+        return Color(
+            red: cr + (wr - cr) * t,
+            green: cg + (wg - cg) * t,
+            blue: cb + (wb - cb) * t
+        )
+    }
+}
+
+// MARK: - Layout metrics
+
+private struct StaggeredStarRatingView_StarMetrics {
+    let starSide: CGFloat
+    let spacing: CGFloat
+    let leadingInset: CGFloat
+    let rowWidth: CGFloat
+
+    init(size: CGSize, count: Int) {
+        let n = CGFloat(max(count, 1))
+        // Size a star so the full row fits a tiny tile and a large detail area.
+        let byWidth = size.width / (n + 1.5)
+        let byHeight = size.height * 0.62
+        let side = max(min(byWidth, byHeight), 8)
+        self.starSide = side
+        self.spacing = side * 0.22
+        let totalRow = side * n + spacing * (n - 1)
+        self.rowWidth = totalRow
+        self.leadingInset = max((size.width - totalRow) / 2, 0)
+    }
+}
+
+// MARK: - Single star
+
+private struct StaggeredStarRatingView_StarCell: View {
+    var fill: CGFloat        // 0...1 continuous fill (tracks finger)
+    var isFilled: Bool       // discrete lit state (drives the pop)
+    var fillColor: Color
+    var side: CGFloat
+    var delay: Double
+
+    var body: some View {
+        ZStack {
+            // Empty outline — always legible, never blank.
+            StaggeredStarRatingView_StarShape()
+                .stroke(
+                    Color(red: 0.42, green: 0.40, blue: 0.50),
+                    style: StrokeStyle(lineWidth: max(side * 0.05, 1), lineJoin: .round)
+                )
+                .background(
+                    StaggeredStarRatingView_StarShape().fill(Color(red: 0.16, green: 0.16, blue: 0.22))
+                )
+
+            // Filled portion, masked to a leading rectangle whose width
+            // tracks the live fill fraction.
+            StaggeredStarRatingView_StarShape()
+                .fill(fillGradient)
+                .overlay(glint)
+                .mask(alignment: .leading) {
+                    Rectangle()
+                        .frame(width: side * fill)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+        }
+        .frame(width: side, height: side)
+        // The spring overshoot IS the pop; the per-index delay makes it ripple
+        // left-to-right. Keyed to the discrete bool so it never lags the finger.
+        .scaleEffect(isFilled ? 1.0 : 0.86, anchor: .center)
+        .shadow(
+            color: fillColor.opacity(isFilled ? 0.55 : 0),
+            radius: side * 0.12, x: 0, y: 0
+        )
+        .animation(
+            .spring(response: 0.34, dampingFraction: 0.5).delay(delay),
+            value: isFilled
+        )
+        // Fill width itself follows the finger near-instantly.
+        .animation(.linear(duration: 0.06), value: fill)
+    }
+
+    private var fillGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                fillColor.opacity(0.95),
+                fillColor
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var glint: some View {
+        StaggeredStarRatingView_StarShape()
+            .fill(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.55), Color.white.opacity(0.0)],
+                    startPoint: .topLeading,
+                    endPoint: .center
+                )
+            )
+            .blendMode(.screen)
+            .opacity(0.7)
+    }
+}
+
+// MARK: - Star geometry
+
+private struct StaggeredStarRatingView_StarShape: Shape {
+    var points: Int = 5
+    var innerRatio: CGFloat = 0.42
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let outer = min(rect.width, rect.height) / 2
+        let inner = outer * innerRatio
+        let step = CGFloat.pi / CGFloat(max(points, 1))
+        // Start at the top tip.
+        var angle = -CGFloat.pi / 2
+        for i in 0..<(max(points, 1) * 2) {
+            let radius = (i % 2 == 0) ? outer : inner
+            let pt = CGPoint(
+                x: center.x + cos(angle) * radius,
+                y: center.y + sin(angle) * radius
+            )
+            if i == 0 {
+                path.move(to: pt)
+            } else {
+                path.addLine(to: pt)
+            }
+            angle += step
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+"""###,
+        "mi-stretch-pill-switch": ###"""
+import SwiftUI
+
+// MARK: - Stretch Pill Switch
+//
+// On toggle the knob stretches into an elongated capsule mid-travel then
+// squashes back to a circle on arrival; the track inherits the same elastic
+// deformation. The stretch is a per-frame function of a single progress scalar
+// (stretch = sin(progress * .pi), peaking mid-travel), so it is computed inside
+// Animatable conformances rather than interpolated endpoint-to-endpoint.
+//
+// demo == true  -> TimelineView(.animation) ping-pongs progress on a ~3s loop.
+// demo == false -> a tap toggles isOn; withAnimation(.spring(bounce:0.5))
+//                  drives `progress`, fed through an Animatable knob Shape +
+//                  Animatable track-squash modifier that recompute each frame.
+
+struct StretchPillSwitchView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        if demo {
+            StretchPillSwitchView_DemoSwitch(size: size)
+        } else {
+            StretchPillSwitchView_InteractiveSwitch(size: size)
+        }
+    }
+}
+
+// MARK: - Shared geometry / palette
+
+private enum StretchPillSwitchView_PillPalette {
+    static let offTrack = Color(red: 0.20, green: 0.20, blue: 0.26)
+    static let onTrackTop = Color(red: 0.36, green: 0.78, blue: 0.55)
+    static let onTrackBottom = Color(red: 0.20, green: 0.62, blue: 0.42)
+    static let knobTop = Color(red: 0.99, green: 0.99, blue: 1.00)
+    static let knobBottom = Color(red: 0.86, green: 0.88, blue: 0.93)
+    static let glow = Color(red: 0.45, green: 0.95, blue: 0.68)
+}
+
+private struct StretchPillSwitchView_PillMetrics {
+    let trackWidth: CGFloat
+    let trackHeight: CGFloat
+    let diameter: CGFloat
+    let inset: CGFloat
+    let origin: CGPoint   // top-left of the track within the canvas
+
+    init(canvas: CGSize) {
+        // Size everything off the smaller dimension so it reads at 120pt and large.
+        let minDim = min(canvas.width, canvas.height)
+        let h = minDim * 0.42
+        let w = h * 1.85
+        trackHeight = h
+        trackWidth = w
+        inset = h * 0.11
+        diameter = h - inset * 2
+        origin = CGPoint(x: (canvas.width - w) / 2.0,
+                         y: (canvas.height - h) / 2.0)
+    }
+
+    // Track tint blends from off-grey to green as progress rises.
+    func trackColor(progress p: CGFloat) -> Color {
+        let t = max(0, min(1, p))
+        let off = StretchPillSwitchView_PillPalette.offTrack
+        let on = StretchPillSwitchView_PillPalette.onTrackBottom
+        func mix(_ a: Double, _ b: Double) -> Double { a + (b - a) * Double(t) }
+        let comp = on.componentsApprox
+        let offComp = off.componentsApprox
+        return Color(red: mix(offComp.r, comp.r),
+                     green: mix(offComp.g, comp.g),
+                     blue: mix(offComp.b, comp.b))
+    }
+}
+
+private extension Color {
+    // Coarse component readback for the off/on track blend. Hard-coded fall-back
+    // values keep this dependency-free and deterministic.
+    var componentsApprox: (r: Double, g: Double, b: Double) {
+        if self == StretchPillSwitchView_PillPalette.offTrack { return (0.20, 0.20, 0.26) }
+        return (0.20, 0.62, 0.42)
+    }
+}
+
+// stretch peaks at mid-travel, zero (clean circle) at both ends.
+private func stretchAmount(progress p: CGFloat) -> CGFloat {
+    max(0, sin(p * .pi))
+}
+
+// MARK: - Animatable knob shape
+//
+// progress 0..1 = travel from left rest to right rest. The capsule width grows
+// toward the destination edge (taffy "reaches ahead") while the trailing edge
+// lags, then both resolve to a circle on arrival. animatableData = progress so
+// the interpolated value is re-evaluated every frame.
+
+private struct StretchPillSwitchView_KnobShape: Shape {
+    var progress: CGFloat
+    var metrics: StretchPillSwitchView_PillMetrics
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let m = metrics
+        let d = m.diameter
+        let stretch = stretchAmount(progress: progress)
+
+        // Centre travel between the two rest centres.
+        let leftCenter = m.inset + d / 2.0
+        let rightCenter = m.trackWidth - m.inset - d / 2.0
+        let center = leftCenter + (rightCenter - leftCenter) * progress
+
+        // Taffy: extra length splits asymmetrically toward the travel direction.
+        let maxStretch = d * 0.85
+        let extra = stretch * maxStretch
+        // direction: +1 moving right, -1 moving left (based on travel sign)
+        let dir: CGFloat = progress >= 0.5 ? 1.0 : -1.0
+        let lead = extra * 0.62      // leading edge reaches ahead
+        let trail = extra * 0.38     // trailing edge lags
+
+        let halfBase = d / 2.0
+        let leadingX = center + dir * (halfBase + lead)
+        let trailingX = center - dir * (halfBase + trail)
+        let minX = min(leadingX, trailingX)
+        let maxX = max(leadingX, trailingX)
+
+        let capsuleRect = CGRect(x: minX,
+                                 y: m.trackHeight / 2.0 - d / 2.0,
+                                 width: maxX - minX,
+                                 height: d)
+        return Capsule(style: .circular).path(in: capsuleRect)
+    }
+}
+
+// MARK: - Animatable track squash
+//
+// Vertical scale shrinks at mid-travel (inheriting the knob's elastic
+// deformation) and returns to full height at the ends. animatableData = progress
+// so the scale is recomputed per frame, not tweened endpoint-to-endpoint.
+
+private struct StretchPillSwitchView_TrackSquash: ViewModifier, Animatable {
+    var progress: CGFloat
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let stretch = stretchAmount(progress: progress)
+        let yScale = 1.0 - stretch * 0.15   // floor ~0.85, tasteful
+        // Knob bulging widens the track a hair horizontally for cohesion.
+        let xScale = 1.0 + stretch * 0.025
+        return content.scaleEffect(x: xScale, y: yScale, anchor: .center)
+    }
+}
+
+// MARK: - Reusable visual stack
+
+private struct StretchPillSwitchView_PillBody: View {
+    var progress: CGFloat
+    var metrics: StretchPillSwitchView_PillMetrics
+
+    var body: some View {
+        let m = metrics
+        ZStack(alignment: .topLeading) {
+            track
+            knob
+        }
+        .frame(width: m.trackWidth, height: m.trackHeight, alignment: .topLeading)
+    }
+
+    private var track: some View {
+        let m = metrics
+        let p = max(0, min(1, progress))
+        return ZStack {
+            Capsule(style: .circular)
+                .fill(m.trackColor(progress: p))
+            // Green sheen fades in with progress.
+            Capsule(style: .circular)
+                .fill(
+                    LinearGradient(
+                        colors: [StretchPillSwitchView_PillPalette.onTrackTop, StretchPillSwitchView_PillPalette.onTrackBottom],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+                .opacity(Double(p))
+            Capsule(style: .circular)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        }
+        .frame(width: m.trackWidth, height: m.trackHeight)
+        .modifier(StretchPillSwitchView_TrackSquash(progress: progress))
+        .shadow(color: StretchPillSwitchView_PillPalette.glow.opacity(Double(stretchAmount(progress: progress)) * 0.35),
+                radius: 8)
+    }
+
+    private var knob: some View {
+        let m = metrics
+        return StretchPillSwitchView_KnobShape(progress: progress, metrics: m)
+            .fill(
+                LinearGradient(
+                    colors: [StretchPillSwitchView_PillPalette.knobTop, StretchPillSwitchView_PillPalette.knobBottom],
+                    startPoint: .top, endPoint: .bottom
+                )
+            )
+            .overlay {
+                StretchPillSwitchView_KnobShape(progress: progress, metrics: m)
+                    .stroke(Color.black.opacity(0.06), lineWidth: 1)
+            }
+            .frame(width: m.trackWidth, height: m.trackHeight, alignment: .topLeading)
+            .shadow(color: Color.black.opacity(0.28),
+                    radius: 3, x: 0, y: 2)
+    }
+}
+
+// MARK: - Demo (self-driving)
+
+private struct StretchPillSwitchView_DemoSwitch: View {
+    var size: CGSize
+    private let period: Double = 3.0
+
+    var body: some View {
+        let m = StretchPillSwitchView_PillMetrics(canvas: size)
+        TimelineView(.animation) { timeline in
+            let p = pingPongProgress(at: timeline.date)
+            StretchPillSwitchView_PillBody(progress: p, metrics: m)
+        }
+    }
+
+    private func pingPongProgress(at date: Date) -> CGFloat {
+        let t = date.timeIntervalSinceReferenceDate
+        // 0->1->0 over `period` seconds, eased so the dwell at the ends reads.
+        let phase = (t.truncatingRemainder(dividingBy: period)) / period // 0..1
+        let tri = phase < 0.5 ? phase * 2.0 : (1.0 - phase) * 2.0          // 0..1..0
+        // ease for a spring-like settle feel
+        let eased = easeInOut(tri)
+        return CGFloat(eased)
+    }
+
+    private func easeInOut(_ x: Double) -> Double {
+        let c = max(0, min(1, x))
+        return c < 0.5 ? 2 * c * c : 1 - pow(-2 * c + 2, 2) / 2
+    }
+}
+
+// MARK: - Interactive (tap to toggle)
+
+private struct StretchPillSwitchView_InteractiveSwitch: View {
+    var size: CGSize
+    @State private var isOn: Bool = false
+    @State private var progress: CGFloat = 0
+
+    var body: some View {
+        let m = StretchPillSwitchView_PillMetrics(canvas: size)
+        StretchPillSwitchView_PillBody(progress: progress, metrics: m)
+            .contentShape(Capsule())
+            .onTapGesture { toggle() }
+            .sensoryFeedback(.impact(flexibility: .soft), trigger: isOn)
+    }
+
+    private func toggle() {
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.55)) {
+            isOn.toggle()
+            progress = isOn ? 1 : 0
         }
     }
 }

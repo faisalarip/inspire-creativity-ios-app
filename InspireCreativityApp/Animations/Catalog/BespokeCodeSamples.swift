@@ -44923,6 +44923,7141 @@ private struct GenieMagnifyDockView_InteractiveDock: View {
     }
 }
 """###,
+        "nav-inkbleed-segment": ###"""
+import SwiftUI
+
+/// Ink Bleed Segment — a segmented control where tapping a segment drops a spot
+/// of ink that organically bleeds outward to fill exactly that segment's bounds
+/// with a feathered, slightly jittering edge, while the previously-selected
+/// segment's ink simultaneously drains away.
+///
+/// Rendering is done with `Canvas` clipped per-segment. Fill progress is a *pure
+/// function of time* computed inside a `TimelineView(.animation)` render closure
+/// (Canvas does not interpolate `withAnimation`-driven state), so the bleed tweens
+/// smoothly in both the interactive and the self-driving demo modes.
+struct InkbleedSegmentView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            InkbleedSegmentView_InkbleedSegmentControl(demo: demo, size: geo.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Control
+
+private struct InkbleedSegmentView_InkbleedSegmentControl: View {
+    let demo: Bool
+    let size: CGSize
+
+    private let labels = ["Ink", "Bleed", "Flow"]
+
+    /// The currently committed selection.
+    @State private var selectedIndex: Int = 0
+    /// Fill values captured at the moment the last transition began.
+    @State private var fromFills: [Double] = [1, 0, 0]
+    /// When the current transition started (TimelineView clock).
+    @State private var transitionStart: Date = .distantPast
+    /// Origins (0...1 within each segment) of the ink drop per segment.
+    @State private var origins: [CGPoint]
+
+    /// Duration of one bleed transition.
+    private let transitionDuration: Double = 0.45
+    /// Demo dwell per segment.
+    private let demoDwell: Double = 1.0
+
+    init(demo: Bool, size: CGSize) {
+        self.demo = demo
+        self.size = size
+        _origins = State(initialValue: Array(repeating: CGPoint(x: 0.5, y: 0.5), count: 3))
+    }
+
+    var body: some View {
+        let metrics = InkbleedSegmentView_Metrics(size: size, count: labels.count)
+
+        TimelineView(.animation) { timeline in
+            let now = timeline.date
+            ZStack {
+                background(metrics: metrics)
+                inkCanvas(now: now, metrics: metrics)
+                labelsOverlay(now: now, metrics: metrics)
+            }
+            .frame(width: metrics.width, height: metrics.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(RoundedRectangle(cornerRadius: 24))
+    }
+
+    // MARK: Layers
+
+    private func background(metrics: InkbleedSegmentView_Metrics) -> some View {
+        let shape = RoundedRectangle(cornerRadius: metrics.cornerRadius, style: .continuous)
+        return shape
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.93, green: 0.91, blue: 0.86),
+                        Color(red: 0.88, green: 0.85, blue: 0.79)
+                    ],
+                    startPoint: .top, endPoint: .bottom
+                )
+            )
+            .overlay(
+                shape.stroke(Color(red: 0.74, green: 0.70, blue: 0.62), lineWidth: 1)
+            )
+            .frame(width: metrics.width, height: metrics.height)
+    }
+
+    private func inkCanvas(now: Date, metrics: InkbleedSegmentView_Metrics) -> some View {
+        let fills = currentFills(now: now)
+        let t = now.timeIntervalSinceReferenceDate
+        return Canvas { ctx, _ in
+            for i in 0..<labels.count {
+                let progress = fills[i]
+                guard progress > 0.001 else { continue }
+                let rect = metrics.segmentRect(i)
+                drawBlob(in: &ctx, rect: rect, progress: progress,
+                         origin: origin(i), time: t, seed: Double(i),
+                         cornerRadius: metrics.innerCornerRadius)
+            }
+        }
+        .frame(width: metrics.width, height: metrics.height)
+    }
+
+    private func labelsOverlay(now: Date, metrics: InkbleedSegmentView_Metrics) -> some View {
+        let fills = currentFills(now: now)
+        return ZStack {
+            ForEach(0..<labels.count, id: \.self) { i in
+                segmentLabel(index: i, fill: fills[i], metrics: metrics)
+            }
+        }
+        .frame(width: metrics.width, height: metrics.height)
+        .contentShape(Rectangle())
+        .gesture(tapGesture(metrics: metrics))
+    }
+
+    private func segmentLabel(index i: Int, fill: Double, metrics: InkbleedSegmentView_Metrics) -> some View {
+        let rect = metrics.segmentRect(i)
+        // Label flips from dark (on paper) to near-white (on ink) as the fill rises.
+        let inkAmount = min(1.0, fill * 1.15)
+        let textColor = Color(
+            red: 0.12 + 0.84 * inkAmount,
+            green: 0.13 + 0.83 * inkAmount,
+            blue: 0.16 + 0.80 * inkAmount
+        )
+        return Text(labels[i])
+            .font(.system(size: metrics.fontSize, weight: .semibold, design: .rounded))
+            .foregroundStyle(textColor)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .shadow(color: Color.black.opacity(0.18 * inkAmount), radius: 1, y: 0.5)
+            .frame(width: rect.width, height: rect.height)
+            .position(x: rect.midX, y: rect.midY)
+    }
+
+    // MARK: Ink drawing
+
+    private func drawBlob(in ctx: inout GraphicsContext,
+                          rect: CGRect,
+                          progress: Double,
+                          origin: CGPoint,
+                          time: Double,
+                          seed: Double,
+                          cornerRadius: CGFloat) {
+        var layer = ctx
+        // 1. Clip to this segment's rounded rect — ink can never spill into neighbours.
+        let segClip = Path(roundedRect: rect, cornerRadius: cornerRadius, style: .continuous)
+        layer.clip(to: segClip)
+
+        let center = CGPoint(
+            x: rect.minX + origin.x * rect.width,
+            y: rect.minY + origin.y * rect.height
+        )
+        // Reach the far diagonal so progress == 1 floods every corner.
+        let maxReach = hypot(rect.width, rect.height)
+        let baseRadius = CGFloat(progress) * maxReach * 1.04
+        guard baseRadius > 0.5 else { return }
+
+        // Build the wobbly front. `peak` is its maximum radial extent so the
+        // feather can be aimed exactly at the irregular rim.
+        let wobble = wobblyPath(center: center, radius: baseRadius,
+                                time: time, seed: seed)
+
+        // 2. Intersect the clip with the wobbly blob → containment AND an irregular,
+        //    organic boundary (a radial gradient alone is radially symmetric).
+        layer.clip(to: wobble.path)
+        // 3. Soften that irregular cut so it reads as wet ink, not a hard stamp.
+        //    (blur is added AFTER both clips, so it cannot bleed past the segment.)
+        layer.addFilter(.blur(radius: max(0.6, baseRadius * 0.045)))
+
+        let inkCore = Color(red: 0.07, green: 0.09, blue: 0.13)
+        let inkEdge = Color(red: 0.10, green: 0.13, blue: 0.20)
+
+        // 4. Feathered fill: dense core → translucent rim, with the rim landing at
+        //    the wobbly edge (endRadius == path peak), so the feather is the boundary.
+        let gradient = Gradient(stops: [
+            .init(color: inkCore, location: 0.0),
+            .init(color: inkCore, location: 0.66),
+            .init(color: inkEdge.opacity(0.9), location: 0.85),
+            .init(color: inkEdge.opacity(0.45), location: 0.95),
+            .init(color: inkEdge.opacity(0.0), location: 1.0)
+        ])
+        let shading = GraphicsContext.Shading.radialGradient(
+            gradient,
+            center: center,
+            startRadius: 0,
+            endRadius: max(wobble.peak, 1)
+        )
+        // Fill the whole segment rect; the wobbly clip shapes it, the gradient feathers it.
+        layer.fill(segClip, with: shading)
+
+        // A few soaking satellite droplets near the front for organic bleed.
+        drawSatellites(in: &layer, center: center, radius: baseRadius,
+                       time: time, seed: seed, color: inkEdge)
+    }
+
+    /// A closed, time-animated wobbly circle plus its maximum radial extent.
+    private func wobblyPath(center: CGPoint, radius: CGFloat,
+                            time: Double, seed: Double) -> (path: Path, peak: CGFloat) {
+        var path = Path()
+        let steps = 48
+        let amp = 0.08 + 0.025 * sin(time * 0.9 + seed)   // breathing edge amplitude
+        var peak: CGFloat = radius
+        for s in 0...steps {
+            let frac = Double(s) / Double(steps)
+            let angle = frac * 2 * Double.pi
+            // Layered sine lobes (time-based, never re-seeded randomness).
+            let w = 1.0
+                + amp * sin(angle * 3 + time * 1.6 + seed * 1.7)
+                + amp * 0.6 * sin(angle * 5 - time * 1.1 + seed)
+                + amp * 0.4 * sin(angle * 8 + time * 0.7)
+            let r = radius * CGFloat(max(0.2, w))
+            if r > peak { peak = r }
+            let p = CGPoint(
+                x: center.x + r * CGFloat(cos(angle)),
+                y: center.y + r * CGFloat(sin(angle))
+            )
+            if s == 0 { path.move(to: p) } else { path.addLine(to: p) }
+        }
+        path.closeSubpath()
+        return (path, peak)
+    }
+
+    private func drawSatellites(in ctx: inout GraphicsContext,
+                                center: CGPoint, radius: CGFloat,
+                                time: Double, seed: Double, color: Color) {
+        guard radius > 6 else { return }
+        let count = 5
+        for k in 0..<count {
+            let a = Double(k) / Double(count) * 2 * Double.pi + seed
+            let drift = 0.78 + 0.16 * sin(time * 1.3 + Double(k) * 2.1 + seed)
+            let dr = radius * CGFloat(drift)
+            let p = CGPoint(
+                x: center.x + dr * CGFloat(cos(a + time * 0.25)),
+                y: center.y + dr * CGFloat(sin(a + time * 0.25))
+            )
+            let dotR = radius * 0.06 * CGFloat(0.7 + 0.4 * sin(time * 2 + Double(k)))
+            let dot = Path(ellipseIn: CGRect(x: p.x - dotR, y: p.y - dotR,
+                                             width: dotR * 2, height: dotR * 2))
+            ctx.fill(dot, with: .color(color.opacity(0.35)))
+        }
+    }
+
+    // MARK: Fill computation (time-driven)
+
+    private func currentFills(now: Date) -> [Double] {
+        if demo { return demoFills(now: now) }
+        return interactiveFills(now: now)
+    }
+
+    private func interactiveFills(now: Date) -> [Double] {
+        let elapsed = now.timeIntervalSinceReferenceDate
+            - transitionStart.timeIntervalSinceReferenceDate
+        let raw = elapsed / transitionDuration
+        let t = min(1.0, max(0.0, raw))
+        let eased = easeOut(t)
+        var result = [Double](repeating: 0, count: labels.count)
+        for i in 0..<labels.count {
+            let target: Double = (i == selectedIndex) ? 1.0 : 0.0
+            let from = i < fromFills.count ? fromFills[i] : 0
+            result[i] = from + (target - from) * eased
+        }
+        return result
+    }
+
+    /// Self-driving fills, computed purely from the clock — no state mutation.
+    /// Each segment dwells `demoDwell`; the leading `transitionDuration` of every
+    /// dwell tweens the new segment up and the previous one down.
+    private func demoFills(now: Date) -> [Double] {
+        let period = demoDwell * Double(labels.count)
+        let phase = now.timeIntervalSinceReferenceDate
+            .truncatingRemainder(dividingBy: period)
+        let slot = Int(phase / demoDwell)                 // current segment index
+        let prev = (slot - 1 + labels.count) % labels.count
+        let localT = phase - Double(slot) * demoDwell     // time within this dwell
+        let eased = easeOut(min(1.0, localT / transitionDuration))
+        var result = [Double](repeating: 0, count: labels.count)
+        for i in 0..<labels.count {
+            if i == slot {
+                result[i] = eased
+            } else if i == prev {
+                result[i] = 1 - eased
+            } else {
+                result[i] = 0
+            }
+        }
+        return result
+    }
+
+    /// Demo ink origin varies per segment so the bleed never looks mechanical.
+    private func demoOrigin(_ i: Int) -> CGPoint {
+        let xs: [CGFloat] = [0.28, 0.5, 0.72]
+        return CGPoint(x: xs[i % xs.count], y: 0.5)
+    }
+
+    private func origin(_ i: Int) -> CGPoint {
+        demo ? demoOrigin(i) : origins[i]
+    }
+
+    private func easeOut(_ t: Double) -> Double {
+        1 - pow(1 - t, 3)
+    }
+
+    // MARK: Interaction
+
+    private func tapGesture(metrics: InkbleedSegmentView_Metrics) -> some Gesture {
+        SpatialTapGesture()
+            .onEnded { value in
+                guard !demo else { return }
+                let i = metrics.segmentIndex(forX: value.location.x)
+                commit(to: i, at: value.location, metrics: metrics)
+            }
+    }
+
+    private func commit(to index: Int, at location: CGPoint, metrics: InkbleedSegmentView_Metrics) {
+        guard index != selectedIndex else { return }
+        let now = Date()
+        // Snapshot the fills as they are right now so the new transition tweens
+        // smoothly from the live state (handles rapid re-taps mid-bleed).
+        fromFills = currentFills(now: now)
+        // Ink origin = local tap point inside the tapped segment (fallback center).
+        let rect = metrics.segmentRect(index)
+        let ox = rect.width > 0 ? (location.x - rect.minX) / rect.width : 0.5
+        let oy = rect.height > 0 ? (location.y - rect.minY) / rect.height : 0.5
+        origins[index] = CGPoint(
+            x: min(0.95, max(0.05, ox)),
+            y: min(0.9, max(0.1, oy))
+        )
+        selectedIndex = index
+        transitionStart = now
+    }
+}
+
+// MARK: - Layout metrics
+
+private struct InkbleedSegmentView_Metrics {
+    let width: CGFloat
+    let height: CGFloat
+    let count: Int
+    let inset: CGFloat
+    let cornerRadius: CGFloat
+
+    init(size: CGSize, count: Int) {
+        // Clamp to a control-shaped band so it reads well in both a 120pt tile
+        // and a large detail area.
+        let w = max(40, size.width)
+        let h = max(28, size.height)
+        let bandHeight = min(h, max(40, w * 0.32))
+        self.width = w
+        self.height = min(h, bandHeight)
+        self.count = max(1, count)
+        self.inset = max(3, self.height * 0.08)
+        self.cornerRadius = min(self.height / 2, 26)
+    }
+
+    var innerWidth: CGFloat { width - inset * 2 }
+    var innerHeight: CGFloat { height - inset * 2 }
+    var segmentWidth: CGFloat { innerWidth / CGFloat(count) }
+    var innerCornerRadius: CGFloat { max(0, cornerRadius - inset) }
+
+    var fontSize: CGFloat {
+        max(9, min(18, height * 0.34))
+    }
+
+    func segmentRect(_ i: Int) -> CGRect {
+        CGRect(
+            x: inset + segmentWidth * CGFloat(i),
+            y: inset,
+            width: segmentWidth,
+            height: innerHeight
+        )
+    }
+
+    func segmentIndex(forX x: CGFloat) -> Int {
+        let local = x - inset
+        let raw = Int(local / max(1, segmentWidth))
+        return min(count - 1, max(0, raw))
+    }
+}
+"""###,
+        "nav-magnetic-grab-drawer": ###"""
+import SwiftUI
+
+// MARK: - Magnetic Grab Drawer
+// A thin edge handle that leans toward your finger with a magnetic pull,
+// stretches a rubbery neck as you drag the drawer out, and recoils with a
+// velocity-aware spring on release.
+struct MagneticGrabDrawerView: View {
+    var demo: Bool = false
+
+    // Single source of truth shared by interactive + demo render paths.
+    // openProgress: 0 = drawer tucked at edge, 1 = fully pulled out.
+    // handleLeanY:  0 = handle resting at its rail center,
+    //              ±1 = handle leaned fully toward the touch (vertical offset).
+    @State private var openProgress: CGFloat = 0
+    @State private var handleLeanY: CGFloat = 0
+
+    // Haptic latch: flips when the magnetic attraction first "grabs".
+    @State private var snapLatch: Int = 0
+    @State private var isGrabbed: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            if demo {
+                demoBody(in: geo.size)
+            } else {
+                interactiveBody(in: geo.size)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.063, green: 0.078, blue: 0.094))
+        .sensoryFeedback(.impact(weight: .medium), trigger: snapLatch)
+    }
+
+    // MARK: Demo (self-driving synthetic finger)
+
+    private func demoBody(in size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let phase = MagneticGrabDrawerView_DemoFinger.sample(at: t)
+            MagneticGrabDrawerView_DrawerStage(
+                size: size,
+                openProgress: phase.open,
+                handleLeanY: phase.lean
+            )
+            .onChange(of: phase.grabbed) { _, grabbed in
+                if grabbed { snapLatch &+= 1 }
+            }
+        }
+    }
+
+    // MARK: Interactive
+
+    private func interactiveBody(in size: CGSize) -> some View {
+        MagneticGrabDrawerView_DrawerStage(
+            size: size,
+            openProgress: openProgress,
+            handleLeanY: handleLeanY
+        )
+        .contentShape(Rectangle())
+        .gesture(drawerDrag(in: size))
+    }
+
+    private func drawerDrag(in size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let metrics = MagneticGrabDrawerView_DrawerMetrics(size: size)
+                // Pull-out distance maps drag.x onto open progress.
+                let raw = value.translation.width / metrics.travel
+                openProgress = clamp(raw, 0, 1.08) // small overscroll headroom
+
+                // Handle leans toward the finger's vertical position.
+                let railCenterY = metrics.railCenterY
+                let dy = value.location.y - railCenterY
+                let lean = attractionCurve(dy / (metrics.height * 0.5))
+                handleLeanY = lean
+
+                // Magnetic "grab": fire haptic once when lean first exceeds threshold.
+                let grabbing = abs(lean) > 0.35 || openProgress > 0.06
+                if grabbing && !isGrabbed {
+                    isGrabbed = true
+                    snapLatch &+= 1
+                } else if !grabbing {
+                    isGrabbed = false
+                }
+            }
+            .onEnded { value in
+                let metrics = MagneticGrabDrawerView_DrawerMetrics(size: size)
+                // Velocity-aware: blend release point + predicted travel.
+                let predicted = value.predictedEndTranslation.width / metrics.travel
+                let projected = (openProgress + predicted) * 0.5
+                let shouldOpen = projected > 0.5
+                // Normalized initial velocity seed (kept reasonable, not exact physics).
+                let v = value.velocity.width / metrics.travel
+                let seedVelocity = clamp(v, -6, 6)
+
+                isGrabbed = false
+                withAnimation(.interpolatingSpring(
+                    mass: 0.9,
+                    stiffness: 140,
+                    damping: 13,
+                    initialVelocity: seedVelocity
+                )) {
+                    openProgress = shouldOpen ? 1 : 0
+                    handleLeanY = 0
+                }
+            }
+    }
+
+    private func attractionCurve(_ x: CGFloat) -> CGFloat {
+        // Eager near center, eases off near the rail ends so the handle
+        // lunges to meet the finger without overshooting the edge.
+        let c = clamp(x, -1, 1)
+        let eased = c * (1.6 - 0.6 * abs(c))
+        return clamp(eased, -1, 1)
+    }
+}
+
+// MARK: - Demo finger script
+
+private enum MagneticGrabDrawerView_DemoFinger {
+    struct Phase {
+        var open: CGFloat
+        var lean: CGFloat
+        var grabbed: Bool
+    }
+
+    // ~3.0s loop: approach (handle reaches) -> grab -> stretch out -> recoil.
+    static func sample(at time: TimeInterval) -> Phase {
+        let period: Double = 3.0
+        let u = (time.truncatingRemainder(dividingBy: period)) / period // 0..1
+
+        // Lean: finger sweeps in, handle lunges to meet it, then releases.
+        // Stays non-zero through the active window; rests near 0 otherwise.
+        let lean: CGFloat
+        if u < 0.18 {
+            // approach: lean ramps up toward finger
+            lean = ease(CGFloat(u / 0.18)) * 0.85
+        } else if u < 0.72 {
+            // held: gentle sinusoidal sway while drawer is out
+            let s = CGFloat((u - 0.18) / 0.54)
+            lean = 0.85 - 0.45 * (1 - cos(s * .pi * 2)) * 0.5
+        } else {
+            // recoil: lean settles back to neutral
+            let s = CGFloat((u - 0.72) / 0.28)
+            lean = (1 - ease(s)) * 0.4
+        }
+
+        // Open: closed -> stretch out -> hold -> spring recoil closed.
+        let open: CGFloat
+        if u < 0.18 {
+            open = ease(CGFloat(u / 0.18)) * 0.12 // handle nudges as it grabs
+        } else if u < 0.55 {
+            // stretch the drawer out
+            open = 0.12 + ease(CGFloat((u - 0.18) / 0.37)) * 0.88
+        } else if u < 0.72 {
+            open = 1.0 // hold open
+        } else {
+            // recoil with a little overshoot then settle closed
+            let s = CGFloat((u - 0.72) / 0.28)
+            let settle = 1 - ease(s)
+            let overshoot = sin(s * .pi * 3) * 0.06 * (1 - s)
+            open = max(0, settle - overshoot)
+        }
+
+        // Grab moment: just after approach completes.
+        let grabbed = u >= 0.16 && u < 0.20
+        return Phase(open: open, lean: clamp(lean, -1, 1), grabbed: grabbed)
+    }
+
+    static func ease(_ t: CGFloat) -> CGFloat {
+        let c = clamp(t, 0, 1)
+        return c * c * (3 - 2 * c)
+    }
+}
+
+// MARK: - Layout metrics
+
+private struct MagneticGrabDrawerView_DrawerMetrics {
+    let size: CGSize
+
+    init(size: CGSize) { self.size = size }
+
+    var width: CGFloat { size.width }
+    var height: CGFloat { size.height }
+
+    // Handle is a thin pill anchored to the left edge.
+    var handleWidth: CGFloat { max(8, min(width, height) * 0.07) }
+    var handleHeight: CGFloat { height * 0.34 }
+    var handleRestX: CGFloat { handleWidth * 0.5 + width * 0.02 }
+    var railCenterY: CGFloat { height * 0.5 }
+
+    // How far the drawer body travels from tucked to fully open.
+    var travel: CGFloat { width * 0.62 }
+
+    // Drawer body geometry.
+    var bodyWidth: CGFloat { max(28, width * 0.30) }
+    var bodyHeight: CGFloat { height * 0.74 }
+    // Tucked just off the left edge; pulled out by openProgress * travel.
+    var bodyTuckedX: CGFloat { -bodyWidth * 0.62 }
+
+    // Shared geometry resolvers so the stage AND the animatable neck compute
+    // the handle/body anchor points from identical formulas. This keeps the
+    // tether endpoints locked to the handle/body during the release spring.
+    func clampedOpen(_ open: CGFloat) -> CGFloat { min(max(open, 0), 1.08) }
+
+    func handleCenter(open: CGFloat, lean: CGFloat) -> CGPoint {
+        let co = clampedOpen(open)
+        let leanMax = height * 0.30
+        let x = handleRestX + co * (handleWidth * 0.6)
+        let y = railCenterY + lean * leanMax
+        return CGPoint(x: x, y: y)
+    }
+
+    func bodyCenter(open: CGFloat, lean: CGFloat) -> CGPoint {
+        let co = clampedOpen(open)
+        let x = bodyTuckedX + bodyWidth * 0.5 + co * travel
+        // Body lags slightly toward the handle's lean (tether drag).
+        let y = railCenterY + lean * (height * 0.10) * co
+        return CGPoint(x: x, y: y)
+    }
+}
+
+// MARK: - The composed stage (shared by demo + interactive)
+
+private struct MagneticGrabDrawerView_DrawerStage: View {
+    let size: CGSize
+    let openProgress: CGFloat
+    let handleLeanY: CGFloat
+
+    private var m: MagneticGrabDrawerView_DrawerMetrics { MagneticGrabDrawerView_DrawerMetrics(size: size) }
+
+    // Resolved geometry from the two driving values.
+    private var clampedOpen: CGFloat { m.clampedOpen(openProgress) }
+    private var handleCenter: CGPoint { m.handleCenter(open: openProgress, lean: handleLeanY) }
+    private var bodyCenter: CGPoint { m.bodyCenter(open: openProgress, lean: handleLeanY) }
+
+    var body: some View {
+        ZStack {
+            railGuide
+            neck
+            drawerBody
+            handle
+        }
+    }
+
+    // Faint rail showing the handle's vertical track.
+    private var railGuide: some View {
+        Capsule()
+            .fill(Color(red: 1, green: 1, blue: 1).opacity(0.05))
+            .frame(width: m.handleWidth * 0.5, height: m.height * 0.62)
+            .position(x: m.handleRestX, y: m.railCenterY)
+    }
+
+    // Rubbery tether connecting handle tip to the drawer body edge.
+    // MagneticGrabDrawerView_NeckShape owns its geometry (resolves endpoints from open/lean internally)
+    // so its endpoints animate on the same spring as the handle/body positions.
+    private var neck: some View {
+        MagneticGrabDrawerView_NeckShape(
+            size: size,
+            open: openProgress,
+            lean: handleLeanY,
+            thickness: m.handleWidth * 0.9
+        )
+        .fill(
+            LinearGradient(
+                colors: [
+                    Color(red: 0.36, green: 0.58, blue: 0.98),
+                    Color(red: 0.24, green: 0.40, blue: 0.86)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
+        .opacity(0.92)
+    }
+
+    private var drawerBody: some View {
+        RoundedRectangle(cornerRadius: min(m.bodyWidth, m.bodyHeight) * 0.18, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.20, green: 0.35, blue: 0.80),
+                        Color(red: 0.14, green: 0.24, blue: 0.62)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: min(m.bodyWidth, m.bodyHeight) * 0.18, style: .continuous)
+                    .strokeBorder(Color(red: 1, green: 1, blue: 1).opacity(0.14), lineWidth: 1)
+            )
+            .overlay(drawerContent)
+            .frame(width: m.bodyWidth, height: m.bodyHeight)
+            .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(0.35),
+                    radius: 10 * clampedOpen + 2, x: 6 * clampedOpen, y: 4)
+            .position(bodyCenter)
+    }
+
+    private var drawerContent: some View {
+        VStack(spacing: m.bodyHeight * 0.08) {
+            ForEach(0..<3, id: \.self) { _ in
+                Capsule()
+                    .fill(Color(red: 1, green: 1, blue: 1).opacity(0.22))
+                    .frame(height: max(3, m.bodyHeight * 0.05))
+            }
+        }
+        .padding(.horizontal, m.bodyWidth * 0.18)
+        .opacity(Double(min(1, clampedOpen * 1.6)))
+    }
+
+    private var handle: some View {
+        Capsule(style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.62, green: 0.78, blue: 1.0),
+                        Color(red: 0.40, green: 0.60, blue: 0.98)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(Color(red: 1, green: 1, blue: 1).opacity(0.30), lineWidth: 1)
+            )
+            .frame(width: m.handleWidth, height: m.handleHeight)
+            .shadow(color: Color(red: 0.2, green: 0.4, blue: 1).opacity(0.45),
+                    radius: 6, x: 0, y: 0)
+            .position(handleCenter)
+    }
+}
+
+// MARK: - Animatable rubber neck
+
+private struct MagneticGrabDrawerView_NeckShape: Shape {
+    var size: CGSize         // stage size, used to resolve endpoint geometry
+    var open: CGFloat        // openProgress  (animated on release)
+    var lean: CGFloat        // handleLeanY   (animated on release)
+    var thickness: CGFloat
+
+    // BOTH open + lean are animated on release so the spring returns the
+    // drawer AND handle endpoints together, in lockstep with the handle/body
+    // .position(...) — no detachment, no kink.
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(open, lean) }
+        set {
+            open = newValue.first
+            lean = newValue.second
+        }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let m = MagneticGrabDrawerView_DrawerMetrics(size: size)
+        // Resolve endpoints from the SAME formulas the stage uses, at the
+        // currently-interpolated open/lean — so the tether tracks the spring.
+        let handleTip = m.handleCenter(open: open, lean: lean)
+        let body = m.bodyCenter(open: open, lean: lean)
+        let bodyEdge = CGPoint(x: body.x - m.bodyWidth * 0.5, y: body.y)
+
+        let co = max(0, m.clampedOpen(open))
+        // A bowed band from handle tip to body edge. As it stretches, the waist
+        // pinches (rubbery tether) and the midline bows toward the handle lean.
+        let p0 = handleTip
+        let p1 = bodyEdge
+
+        // Endpoint half-thicknesses: full at the handle, slightly fuller at body.
+        let h0 = thickness * 0.5
+        let h1 = thickness * 0.62
+        // Waist thins as the neck stretches out.
+        let waist = thickness * 0.5 * (1 - min(0.6, co * 0.6))
+
+        // Control-point bow: sag toward the lean direction so it doesn't kink.
+        let dx = p1.x - p0.x
+        let dy = p1.y - p0.y
+        let midX = (p0.x + p1.x) * 0.5
+        let midYTop = (p0.y + p1.y) * 0.5 - waist
+        let midYBot = (p0.y + p1.y) * 0.5 + waist
+        let bow = lean * (abs(dx) * 0.10 + 6)
+
+        var path = Path()
+        // Top edge: handle-top -> waist-top -> body-top
+        path.move(to: CGPoint(x: p0.x, y: p0.y - h0))
+        path.addQuadCurve(
+            to: CGPoint(x: midX, y: midYTop + bow),
+            control: CGPoint(x: p0.x + dx * 0.30, y: p0.y - h0 + dy * 0.15)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: p1.x, y: p1.y - h1),
+            control: CGPoint(x: p0.x + dx * 0.70, y: p1.y - h1)
+        )
+        // Body cap (down its left edge)
+        path.addLine(to: CGPoint(x: p1.x, y: p1.y + h1))
+        // Bottom edge: body-bottom -> waist-bottom -> handle-bottom
+        path.addQuadCurve(
+            to: CGPoint(x: midX, y: midYBot + bow),
+            control: CGPoint(x: p0.x + dx * 0.70, y: p1.y + h1)
+        )
+        path.addQuadCurve(
+            to: CGPoint(x: p0.x, y: p0.y + h0),
+            control: CGPoint(x: p0.x + dx * 0.30, y: p0.y + h0 + dy * 0.15)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
+// MARK: - Utility
+
+private func clamp<T: Comparable>(_ v: T, _ lo: T, _ hi: T) -> T {
+    min(max(v, lo), hi)
+}
+"""###,
+        "nav-magnetic-snap-dock": ###"""
+import SwiftUI
+
+// MARK: - Magnetic Snap Dock
+// A reorderable dock: dragging an icon makes the others slide aside and the
+// dragged icon snaps into slots with a magnetic click + overshoot wobble, while
+// a soft attraction pulls it toward the nearest gap as you hover.
+//
+// Both the interactive path (LongPress -> Drag) and the self-driving demo feed
+// the SAME pure slot math (`slotCenterX` / `visualSlot`), so the demo is a
+// faithful replay of the real gesture — no second layout routine.
+
+struct MagneticSnapDockView: View {
+    var demo: Bool = false
+
+    // Stable item identities. Kept low (5) so the shuffle is legible at 120pt.
+    @State private var items: [MagneticSnapDockView_DockItem] = MagneticSnapDockView_DockItem.defaults
+
+    // Single source of truth for the INTERACTIVE path.
+    @State private var draggingIndex: Int? = nil      // logical index in `items`
+    @State private var targetSlot: Int = 0            // slot the gap is opening at
+    @State private var fingerX: CGFloat = 0           // live finger x in dock space
+    @State private var snapTick: Int = 0              // drives the release haptic
+
+    var body: some View {
+        GeometryReader { geo in
+            let metrics = MagneticSnapDockView_DockMetrics(size: geo.size, count: items.count)
+            ZStack {
+                background(metrics)
+                if demo {
+                    demoDock(metrics)
+                } else {
+                    interactiveDock(metrics)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Background
+
+    private func background(_ m: MagneticSnapDockView_DockMetrics) -> some View {
+        let r = m.dockHeight / 2
+        return RoundedRectangle(cornerRadius: r, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.13, green: 0.15, blue: 0.20),
+                        Color(red: 0.07, green: 0.08, blue: 0.11)
+                    ],
+                    startPoint: .top, endPoint: .bottom
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: r, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .frame(width: m.dockWidth, height: m.dockHeight)
+            .shadow(color: .black.opacity(0.45), radius: m.tile * 0.18, y: m.tile * 0.10)
+            .position(x: m.size.width / 2, y: m.midY)
+    }
+
+    // MARK: - Interactive dock (demo == false)
+
+    private func interactiveDock(_ m: MagneticSnapDockView_DockMetrics) -> some View {
+        ZStack {
+            ForEach(Array(items.enumerated()), id: \.element.id) { logicalIndex, item in
+                iconTile(item, m: m)
+                    .scaleEffect(draggingIndex == logicalIndex ? 1.22 : 1.0)
+                    .shadow(
+                        color: .black.opacity(draggingIndex == logicalIndex ? 0.5 : 0.0),
+                        radius: m.tile * 0.22, y: m.tile * 0.12
+                    )
+                    .position(position(forLogical: logicalIndex, m: m))
+                    .zIndex(draggingIndex == logicalIndex ? 10 : 0)
+                    .animation(shuffleAnimation, value: targetSlot)
+                    .animation(shuffleAnimation, value: draggingIndex)
+            }
+        }
+        .frame(width: m.size.width, height: m.size.height)
+        .contentShape(Rectangle())
+        .gesture(dragGesture(m))
+        .sensoryFeedback(.impact(weight: .medium), trigger: snapTick)
+        .sensoryFeedback(.selection, trigger: targetSlot)
+    }
+
+    private var shuffleAnimation: Animation {
+        .spring(response: 0.34, dampingFraction: 0.72)
+    }
+
+    // Position of a logical item. The dragged item floats toward the finger with
+    // a magnetic attraction to the nearest slot; everyone else sits at their
+    // visual slot (which has shifted to open the gap at `targetSlot`).
+    private func position(forLogical logicalIndex: Int, m: MagneticSnapDockView_DockMetrics) -> CGPoint {
+        if draggingIndex == logicalIndex {
+            return liftedPosition(m: m)
+        }
+        let slot = visualSlot(ofLogical: logicalIndex)
+        return CGPoint(x: m.slotCenterX(slot), y: m.midY)
+    }
+
+    // The lifted icon: blend the raw finger position with the nearest slot center
+    // so it "resists then clicks" toward the gap — the magnetic pull.
+    private func liftedPosition(m: MagneticSnapDockView_DockMetrics) -> CGPoint {
+        let nearest = m.slotCenterX(targetSlot)
+        let pull: CGFloat = 0.30                      // attraction strength
+        let x = fingerX * (1 - pull) + nearest * pull
+        let clamped = min(max(x, m.slotCenterX(0)), m.slotCenterX(m.count - 1))
+        return CGPoint(x: clamped, y: m.midY - m.tile * 0.16)   // lifted above rail
+    }
+
+    // MARK: Gesture — LongPress to lift, then Drag to move, snap on release.
+
+    private func dragGesture(_ m: MagneticSnapDockView_DockMetrics) -> some Gesture {
+        LongPressGesture(minimumDuration: 0.16)
+            .sequenced(before: DragGesture(minimumDistance: 0))
+            .onChanged { value in
+                switch value {
+                case .first:
+                    break
+                case .second(let pressed, let drag):
+                    guard pressed, let drag else { return }
+                    beginIfNeeded(at: drag.startLocation, m: m)
+                    update(to: drag.location, m: m)
+                }
+            }
+            .onEnded { _ in
+                endDrag()
+            }
+    }
+
+    private func beginIfNeeded(at start: CGPoint, m: MagneticSnapDockView_DockMetrics) {
+        guard draggingIndex == nil else { return }
+        let slot = m.slot(forX: start.x)
+        // Before any drag, logical order == slot order, so slot == logical item.
+        fingerX = start.x
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.7)) {
+            draggingIndex = slot
+            targetSlot = slot
+        }
+    }
+
+    private func update(to location: CGPoint, m: MagneticSnapDockView_DockMetrics) {
+        guard draggingIndex != nil else { return }
+        fingerX = location.x
+        let newTarget = m.slot(forX: location.x)
+        if newTarget != targetSlot {
+            withAnimation(shuffleAnimation) {
+                targetSlot = newTarget       // gap opens AHEAD of the drop
+            }
+        }
+    }
+
+    private func endDrag() {
+        guard let dragged = draggingIndex else { return }
+        reorder(fromSlot: dragged, toSlot: targetSlot)   // logical index == home slot
+        // Snap home with a bouncy overshoot wobble.
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.52)) {
+            draggingIndex = nil
+        }
+        snapTick &+= 1   // fire the impact haptic on real release only
+    }
+
+    // MARK: Reorder bookkeeping (logical index <-> visual slot)
+    //
+    // `items` is kept in logical order. Between drags, logical order == slot order,
+    // so a logical index IS its home slot. A drag always starts fresh
+    // (draggingIndex == nil) and commits fully before the next, preserving the
+    // invariant. During a drag we recompute the visual slot of each item.
+
+    // The visual slot a non-dragged logical item occupies, given the gap opening
+    // at `targetSlot`. Items between the dragged item's home slot and the target
+    // shift by one to make room.
+    private func visualSlot(ofLogical logicalIndex: Int) -> Int {
+        guard let dragged = draggingIndex, dragged != logicalIndex else {
+            return logicalIndex
+        }
+        return Self.shiftedSlot(index: logicalIndex, source: dragged, target: targetSlot)
+    }
+
+    // Pure shift rule shared by interactive + demo paths.
+    static func shiftedSlot(index i: Int, source: Int, target: Int) -> Int {
+        if source < target {
+            // gap moves right: items in (source, target] slide LEFT by one
+            if i > source && i <= target { return i - 1 }
+        } else if source > target {
+            // gap moves left: items in [target, source) slide RIGHT by one
+            if i >= target && i < source { return i + 1 }
+        }
+        return i
+    }
+
+    private func reorder(fromSlot: Int, toSlot: Int) {
+        guard fromSlot != toSlot,
+              items.indices.contains(fromSlot),
+              items.indices.contains(toSlot) else { return }
+        let moved = items.remove(at: fromSlot)
+        items.insert(moved, at: toSlot)
+    }
+
+    // MARK: - Demo dock (demo == true)
+    // Self-driving: a TimelineView scripts a synthetic drag of the middle icon
+    // back and forth between the two end slots, feeding the SAME slot math. The
+    // dragged item's home slot is CONSTANT (no commit ever happens), and the live
+    // target is derived from the floating icon's position — exactly like the real
+    // gesture — so the gap always sits under the icon with no overlap. The release
+    // overshoot wobble is baked into the travel easing so the snap reads as bouncy.
+
+    private func demoDock(_ m: MagneticSnapDockView_DockMetrics) -> some View {
+        TimelineView(.animation) { tl in
+            let t = tl.date.timeIntervalSinceReferenceDate
+            let state = MagneticSnapDockView_DemoState(time: t, metrics: m)
+            let liveTarget = m.slot(forX: state.draggedX)
+            ZStack {
+                ForEach(Array(items.enumerated()), id: \.element.id) { logicalIndex, item in
+                    demoTile(logicalIndex, item: item, state: state, target: liveTarget, m: m)
+                }
+            }
+            .frame(width: m.size.width, height: m.size.height)
+        }
+    }
+
+    @ViewBuilder
+    private func demoTile(_ logicalIndex: Int, item: MagneticSnapDockView_DockItem,
+                          state: MagneticSnapDockView_DemoState, target: Int, m: MagneticSnapDockView_DockMetrics) -> some View {
+        let isDragged = (logicalIndex == state.draggedLogical)
+        if isDragged {
+            iconTile(item, m: m)
+                .scaleEffect(1.0 + 0.22 * state.liftAmount)
+                .shadow(color: .black.opacity(0.5 * state.liftAmount),
+                        radius: m.tile * 0.22, y: m.tile * 0.12)
+                .position(x: state.draggedX, y: m.midY - m.tile * 0.16 * state.liftAmount)
+                .zIndex(10)
+        } else {
+            let slot = Self.shiftedSlot(index: logicalIndex,
+                                        source: state.draggedLogical, target: target)
+            iconTile(item, m: m)
+                .position(x: m.slotCenterX(slot), y: m.midY)
+                .zIndex(0)
+                .animation(shuffleAnimation, value: slot)   // slide aside, don't teleport
+        }
+    }
+
+    // MARK: - Shared icon tile
+
+    private func iconTile(_ item: MagneticSnapDockView_DockItem, m: MagneticSnapDockView_DockMetrics) -> some View {
+        let r = m.tile * 0.26
+        return RoundedRectangle(cornerRadius: r, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [item.top, item.bottom],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: r, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
+            )
+            .overlay(
+                Image(systemName: item.symbol)
+                    .font(.system(size: m.tile * 0.42, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .shadow(color: .black.opacity(0.25), radius: 1, y: 1)
+            )
+            .frame(width: m.tile, height: m.tile)
+    }
+}
+
+// MARK: - Demo state (derived, never written to @State during render)
+
+private struct MagneticSnapDockView_DemoState {
+    let draggedLogical: Int    // == home slot; CONSTANT because demo never commits
+    let draggedX: CGFloat      // live x of the floating icon
+    let liftAmount: CGFloat    // 0 = resting in slot, 1 = fully lifted
+
+    init(time: Double, metrics m: MagneticSnapDockView_DockMetrics) {
+        // The MIDDLE icon hops between the two end slots on a ~3.4s loop, so the
+        // home slot is honest and the shuffle is symmetric in both directions.
+        let dragged = m.count / 2          // 2 for a 5-item dock
+        let endLeft = 0
+        let endRight = m.count - 1
+        self.draggedLogical = dragged
+
+        let loop: Double = 3.4
+        let phase = (time.truncatingRemainder(dividingBy: loop)) / loop  // 0..1
+
+        let cHome = m.slotCenterX(dragged)
+        let cLeft = m.slotCenterX(endLeft)
+        let cRight = m.slotCenterX(endRight)
+
+        // Phase plan:
+        //   0.00–0.10  lift up in place
+        //   0.10–0.40  travel home -> right end (overshoot wobble)
+        //   0.40–0.50  hold lifted at right
+        //   0.50–0.80  travel right end -> left end (overshoot wobble)
+        //   0.80–0.90  hold lifted at left
+        //   0.90–1.00  travel left -> home & drop down
+        self.liftAmount = MagneticSnapDockView_DemoState.lift(phase)
+
+        if phase < 0.10 {
+            self.draggedX = cHome
+        } else if phase < 0.40 {
+            let local = (phase - 0.10) / 0.30
+            self.draggedX = MagneticSnapDockView_DemoState.overshootLerp(cHome, cRight, local)
+        } else if phase < 0.50 {
+            self.draggedX = cRight
+        } else if phase < 0.80 {
+            let local = (phase - 0.50) / 0.30
+            self.draggedX = MagneticSnapDockView_DemoState.overshootLerp(cRight, cLeft, local)
+        } else if phase < 0.90 {
+            self.draggedX = cLeft
+        } else {
+            let local = (phase - 0.90) / 0.10
+            self.draggedX = MagneticSnapDockView_DemoState.overshootLerp(cLeft, cHome, local)
+        }
+    }
+
+    // Lift envelope: rises fast, stays up through the travels, drops at the end.
+    static func lift(_ phase: Double) -> CGFloat {
+        let p: Double
+        if phase < 0.10 {
+            p = phase / 0.10
+        } else if phase < 0.90 {
+            p = 1.0
+        } else {
+            p = 1.0 - (phase - 0.90) / 0.10
+        }
+        let e = p * p * (3 - 2 * p)   // smoothstep
+        return CGFloat(min(max(e, 0), 1))
+    }
+
+    // Travel with a baked damped-overshoot so the synthetic snap visibly wobbles
+    // into the slot (replaces the event-driven spring of the interactive path).
+    static func overshootLerp(_ a: CGFloat, _ b: CGFloat, _ tRaw: Double) -> CGFloat {
+        let t = min(max(tRaw, 0), 1)
+        let zeta = 0.42
+        let omega = 9.0
+        let decay = exp(-zeta * omega * t)
+        let wd = omega * sqrt(max(0.0001, 1 - zeta * zeta))
+        let osc = decay * (cos(wd * t) + (zeta * omega / wd) * sin(wd * t))
+        let settle = 1.0 - osc           // 0 -> ~1 with overshoot past 1, then rings
+        return a + (b - a) * CGFloat(settle)
+    }
+}
+
+// MARK: - Metrics
+
+private struct MagneticSnapDockView_DockMetrics {
+    let size: CGSize
+    let count: Int
+    let tile: CGFloat
+    let gap: CGFloat
+    let slotWidth: CGFloat
+    let dockWidth: CGFloat
+    let dockHeight: CGFloat
+    let midY: CGFloat
+    let originX: CGFloat   // x of slot 0's center
+
+    init(size: CGSize, count: Int) {
+        self.size = size
+        self.count = count
+        let n = CGFloat(count)
+        let shortest = min(size.width, size.height)
+
+        // Slot geometry is derived FROM the final dock width so they can never
+        // disagree (no clamped/unclamped mismatch). Layout model:
+        //   gap = 0.34 * slotWidth, tile = 0.66 * slotWidth,
+        //   dockWidth = count*slotWidth + gap = slotWidth * (count + 0.34)
+        let gapFrac: CGFloat = 0.34
+        let padFactor = n + gapFrac
+
+        // Cap the dock by width AND by height (so tiles never get huge on wide tiles).
+        let maxByWidth = size.width * 0.94
+        let maxTileByHeight = shortest * 0.50
+        let maxByHeight = (maxTileByHeight / 0.66) * padFactor
+        let dw = max(40, min(maxByWidth, maxByHeight))
+        self.dockWidth = dw
+
+        let sw = dw / padFactor
+        self.slotWidth = sw
+        self.gap = sw * gapFrac
+        self.tile = sw * 0.66
+        self.dockHeight = self.tile + self.gap * 1.3
+        self.midY = size.height / 2
+
+        let dockLeft = (size.width - dw) / 2
+        self.originX = dockLeft + self.gap + self.tile / 2
+    }
+
+    func slotCenterX(_ slot: Int) -> CGFloat {
+        originX + slotWidth * CGFloat(slot)
+    }
+
+    func slot(forX x: CGFloat) -> Int {
+        let raw = (x - originX) / slotWidth
+        let rounded = Int(raw.rounded())
+        return min(max(rounded, 0), count - 1)
+    }
+}
+
+// MARK: - Model
+
+private struct MagneticSnapDockView_DockItem: Identifiable, Equatable {
+    let id: Int
+    let symbol: String
+    let top: Color
+    let bottom: Color
+
+    static let defaults: [MagneticSnapDockView_DockItem] = [
+        MagneticSnapDockView_DockItem(id: 0, symbol: "house.fill",
+                 top: Color(red: 0.36, green: 0.62, blue: 0.98),
+                 bottom: Color(red: 0.20, green: 0.40, blue: 0.86)),
+        MagneticSnapDockView_DockItem(id: 1, symbol: "magnifyingglass",
+                 top: Color(red: 0.98, green: 0.55, blue: 0.42),
+                 bottom: Color(red: 0.92, green: 0.34, blue: 0.36)),
+        MagneticSnapDockView_DockItem(id: 2, symbol: "heart.fill",
+                 top: Color(red: 0.96, green: 0.45, blue: 0.66),
+                 bottom: Color(red: 0.82, green: 0.26, blue: 0.55)),
+        MagneticSnapDockView_DockItem(id: 3, symbol: "bell.fill",
+                 top: Color(red: 0.55, green: 0.78, blue: 0.52),
+                 bottom: Color(red: 0.30, green: 0.62, blue: 0.42)),
+        MagneticSnapDockView_DockItem(id: 4, symbol: "gearshape.fill",
+                 top: Color(red: 0.74, green: 0.66, blue: 0.96),
+                 bottom: Color(red: 0.52, green: 0.42, blue: 0.88))
+    ]
+}
+"""###,
+        "nav-orbital-satellite-menu": ###"""
+import SwiftUI
+
+// MARK: - Orbital OrbitalSatelliteMenuView_Satellite Menu
+//
+// Action icons orbit a central hub. Drag the ring to rotate it; whichever
+// satellite reaches the top "focus" slot enlarges. A flick coasts with
+// momentum and snaps to the nearest detent.
+//
+//  • demo == true  -> closed-form auto-orbit (pure function of time, no
+//                     stored integrator state) that eases between detents
+//                     on a loop so the tile is always alive and legible.
+//  • demo == false -> real RotationGesture-style DragGesture wiring: atan2
+//                     deltas accumulate into an unwrapped ring angle, and
+//                     release projects a resting angle from the measured
+//                     angular velocity, snaps it to the nearest detent, and
+//                     settles with a plain spring (no terminal jitter).
+
+struct OrbitalSatelliteMenuView: View {
+    var demo: Bool = false
+
+    // The current ring rotation, kept UNWRAPPED (never folded into
+    // (-pi, pi]) so the spring can animate smoothly across the atan2 seam.
+    @State private var ringAngle: Double = 0
+
+    // Drag bookkeeping for measuring angular velocity at release.
+    @State private var lastTouchAngle: Double = 0
+    @State private var lastAngle: Double = 0          // ring angle snapshot
+    @State private var lastDate: Date = .distantPast
+    @State private var angularVelocity: Double = 0    // rad / s
+    @State private var isDragging: Bool = false
+
+    // The item currently sitting in the focus slot (drives haptic ticks).
+    @State private var focusedIndex: Int = 0
+
+    private let items: [OrbitalSatelliteMenuView_Satellite] = OrbitalSatelliteMenuView_Satellite.demoSet
+
+    var body: some View {
+        GeometryReader { proxy in
+            let side = min(proxy.size.width, proxy.size.height)
+            let center = CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
+            let metrics = OrbitalSatelliteMenuView_Metrics(side: side)
+
+            ZStack {
+                backdrop(side: side)
+                orbitRing(radius: metrics.orbitRadius, lineWidth: metrics.ringWidth)
+                focusHalo(center: center, metrics: metrics)
+
+                if demo {
+                    demoContent(center: center, metrics: metrics)
+                } else {
+                    interactiveContent(center: center, metrics: metrics)
+                }
+
+                hub(metrics: metrics)
+                    .position(center)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .contentShape(Rectangle())
+            .gesture(rotationDrag(center: center), including: demo ? .none : .all)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .sensoryFeedback(.selection, trigger: demo ? -1 : focusedIndex)
+    }
+
+    // MARK: Demo (self-driving, closed form)
+
+    @ViewBuilder
+    private func demoContent(center: CGPoint, metrics: OrbitalSatelliteMenuView_Metrics) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let angle = Self.demoAngle(at: t, step: step)
+            satelliteField(ringAngle: angle, center: center, metrics: metrics)
+                .onChange(of: nearestIndex(for: angle)) { _, newValue in
+                    focusedIndex = newValue
+                }
+        }
+    }
+
+    // MARK: Interactive
+
+    @ViewBuilder
+    private func interactiveContent(center: CGPoint, metrics: OrbitalSatelliteMenuView_Metrics) -> some View {
+        satelliteField(ringAngle: ringAngle, center: center, metrics: metrics)
+            .onChange(of: nearestIndex(for: ringAngle)) { _, newValue in
+                focusedIndex = newValue
+            }
+    }
+
+    // MARK: OrbitalSatelliteMenuView_Satellite layout
+
+    /// Lays out every satellite at its polar angle around the hub and
+    /// applies a smooth focus falloff so the item nearest the top slot grows.
+    @ViewBuilder
+    private func satelliteField(ringAngle: Double, center: CGPoint, metrics: OrbitalSatelliteMenuView_Metrics) -> some View {
+        ZStack {
+            ForEach(items.indices, id: \.self) { index in
+                let placement = placement(for: index, ringAngle: ringAngle, metrics: metrics)
+                satelliteView(items[index], emphasis: placement.emphasis, metrics: metrics)
+                    .position(x: center.x + placement.offset.width,
+                              y: center.y + placement.offset.height)
+                    .zIndex(placement.emphasis)
+            }
+        }
+    }
+
+    private func satelliteView(_ item: OrbitalSatelliteMenuView_Satellite, emphasis: Double, metrics: OrbitalSatelliteMenuView_Metrics) -> some View {
+        let scale = 0.82 + emphasis * 0.62
+        let dotSize = metrics.satelliteSize
+        return ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            item.tint.opacity(0.95),
+                            item.tint.opacity(0.45 + emphasis * 0.4)
+                        ],
+                        center: .topLeading,
+                        startRadius: 1,
+                        endRadius: dotSize
+                    )
+                )
+                .overlay(
+                    Circle().strokeBorder(Color(red: 1, green: 1, blue: 1).opacity(0.18 + emphasis * 0.3), lineWidth: 1)
+                )
+                .shadow(color: item.tint.opacity(0.5 * emphasis),
+                        radius: 8 * emphasis, x: 0, y: 0)
+            Image(systemName: item.symbol)
+                .font(.system(size: dotSize * 0.42, weight: .semibold))
+                .foregroundStyle(Color(red: 1, green: 1, blue: 1).opacity(0.6 + emphasis * 0.4))
+        }
+        .frame(width: dotSize, height: dotSize)
+        .scaleEffect(scale)
+        .opacity(0.55 + emphasis * 0.45)
+    }
+
+    // MARK: Hub & decoration
+
+    private func hub(metrics: OrbitalSatelliteMenuView_Metrics) -> some View {
+        ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.28, green: 0.32, blue: 0.42),
+                            Color(red: 0.10, green: 0.12, blue: 0.18)
+                        ],
+                        center: .topLeading,
+                        startRadius: 1,
+                        endRadius: metrics.hubSize
+                    )
+                )
+            Circle()
+                .strokeBorder(Color(red: 1, green: 1, blue: 1).opacity(0.22), lineWidth: 1)
+            Image(systemName: "circle.grid.cross.fill")
+                .font(.system(size: metrics.hubSize * 0.4, weight: .medium))
+                .foregroundStyle(Color(red: 0.62, green: 0.78, blue: 1.0))
+        }
+        .frame(width: metrics.hubSize, height: metrics.hubSize)
+        .shadow(color: Color(red: 0.0, green: 0.0, blue: 0.0).opacity(0.4), radius: 6, x: 0, y: 3)
+    }
+
+    private func orbitRing(radius: CGFloat, lineWidth: CGFloat) -> some View {
+        Circle()
+            .strokeBorder(
+                Color(red: 1, green: 1, blue: 1).opacity(0.10),
+                style: StrokeStyle(lineWidth: lineWidth, dash: [2, 6])
+            )
+            .frame(width: radius * 2, height: radius * 2)
+    }
+
+    /// A soft glow marking the top-of-ring focus slot.
+    private func focusHalo(center: CGPoint, metrics: OrbitalSatelliteMenuView_Metrics) -> some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.55, green: 0.74, blue: 1.0).opacity(0.35),
+                        Color(red: 0.55, green: 0.74, blue: 1.0).opacity(0.0)
+                    ],
+                    center: .center,
+                    startRadius: 1,
+                    endRadius: metrics.satelliteSize * 1.3
+                )
+            )
+            .frame(width: metrics.satelliteSize * 2.6, height: metrics.satelliteSize * 2.6)
+            .position(x: center.x, y: center.y - metrics.orbitRadius)
+    }
+
+    private func backdrop(side: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: side * 0.10, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.07, green: 0.08, blue: 0.12),
+                        Color(red: 0.04, green: 0.05, blue: 0.08)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+    }
+
+    // MARK: Gesture
+
+    private func rotationDrag(center: CGPoint) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let now = Date()
+                let touchAngle = atan2(Double(value.location.y - center.y),
+                                       Double(value.location.x - center.x))
+                if !isDragging {
+                    // First sample of this drag — seed, don't rotate.
+                    isDragging = true
+                    lastTouchAngle = touchAngle
+                    lastAngle = ringAngle
+                    lastDate = now
+                    angularVelocity = 0
+                    return
+                }
+
+                // Normalize the DELTA into (-pi, pi] (never wrap ringAngle).
+                var delta = touchAngle - lastTouchAngle
+                delta = Self.normalizeDelta(delta)
+                ringAngle += delta
+                lastTouchAngle = touchAngle
+
+                // Measure instantaneous angular velocity (rad/s).
+                let dt = now.timeIntervalSince(lastDate)
+                if dt > 0.0001 {
+                    let measured = (ringAngle - lastAngle) / dt
+                    // Light smoothing keeps the release reading stable.
+                    angularVelocity = angularVelocity * 0.4 + measured * 0.6
+                    lastAngle = ringAngle
+                    lastDate = now
+                }
+            }
+            .onEnded { _ in
+                isDragging = false
+                // Project a resting angle from momentum, then snap to the
+                // nearest detent and settle with a plain spring (no jitter).
+                let friction: Double = 3.2
+                let projected = ringAngle + angularVelocity / friction
+                let target = Self.snappedAngle(projected, step: step)
+                angularVelocity = 0
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.72)) {
+                    ringAngle = target
+                }
+            }
+    }
+
+    // MARK: Placement maths
+
+    private var step: Double { (2 * Double.pi) / Double(items.count) }
+
+    struct Placement {
+        var offset: CGSize
+        var emphasis: Double   // 0…1, 1 == perfectly in the focus slot
+    }
+
+    /// Item `i` is anchored at `-pi/2 + i*step` (top of ring = focus slot)
+    /// and then rotated by the live `ringAngle`.
+    private func placement(for index: Int, ringAngle: Double, metrics: OrbitalSatelliteMenuView_Metrics) -> Placement {
+        let base = -Double.pi / 2 + Double(index) * step
+        let angle = base + ringAngle
+        let x = cos(angle) * Double(metrics.orbitRadius)
+        let y = sin(angle) * Double(metrics.orbitRadius)
+
+        // Angular distance from the focus slot (top, -pi/2).
+        let toFocus = Self.normalizeDelta(angle - (-Double.pi / 2))
+        let dist = abs(toFocus)
+        // Smooth falloff: 1 at the slot, easing to 0 within ~one step.
+        let span = step
+        let raw = max(0, 1 - dist / span)
+        let emphasis = raw * raw * (3 - 2 * raw) // smoothstep
+
+        return Placement(offset: CGSize(width: x, height: y), emphasis: emphasis)
+    }
+
+    private func nearestIndex(for ringAngle: Double) -> Int {
+        // Which item is closest to the focus slot for the given rotation.
+        var best = 0
+        var bestDist = Double.greatestFiniteMagnitude
+        for index in items.indices {
+            let base = -Double.pi / 2 + Double(index) * step
+            let angle = base + ringAngle
+            let d = abs(Self.normalizeDelta(angle - (-Double.pi / 2)))
+            if d < bestDist {
+                bestDist = d
+                best = index
+            }
+        }
+        return best
+    }
+
+    // MARK: Static helpers (pure, no state — safe to call from anywhere)
+
+    /// Closed-form demo angle: eases between detents with a decelerating
+    /// curve on a loop, mimicking flick-coast-snap with no integrator state.
+    static func demoAngle(at time: TimeInterval, step: Double) -> Double {
+        let period: Double = 3.4
+        let phase = time.truncatingRemainder(dividingBy: period) / period // 0…1
+        // Cycle index advances each period so the ring keeps progressing.
+        let cycle = floor(time / period)
+        // Move 2 detents per period for a lively spin.
+        let perCycle = step * 2
+        let startAngle = -cycle * perCycle
+        // easeOut: fast start, decelerating into the detent (coast feel).
+        let eased = 1 - pow(1 - phase, 3)
+        return startAngle - eased * perCycle
+    }
+
+    /// Normalize an angle delta into (-pi, pi].
+    static func normalizeDelta(_ value: Double) -> Double {
+        var d = value.truncatingRemainder(dividingBy: 2 * Double.pi)
+        if d > Double.pi { d -= 2 * Double.pi }
+        if d <= -Double.pi { d += 2 * Double.pi }
+        return d
+    }
+
+    /// Snap an (unwrapped) ring angle to the nearest detent, preserving the
+    /// unwrapped magnitude so the spring animates over the shortest path.
+    static func snappedAngle(_ angle: Double, step: Double) -> Double {
+        (angle / step).rounded() * step
+    }
+}
+
+// MARK: - Model
+
+private struct OrbitalSatelliteMenuView_Satellite: Identifiable {
+    let id = UUID()
+    let symbol: String
+    let tint: Color
+
+    static let demoSet: [OrbitalSatelliteMenuView_Satellite] = [
+        OrbitalSatelliteMenuView_Satellite(symbol: "house.fill",        tint: Color(red: 0.36, green: 0.70, blue: 1.00)),
+        OrbitalSatelliteMenuView_Satellite(symbol: "magnifyingglass",   tint: Color(red: 0.55, green: 0.84, blue: 0.62)),
+        OrbitalSatelliteMenuView_Satellite(symbol: "heart.fill",        tint: Color(red: 1.00, green: 0.46, blue: 0.55)),
+        OrbitalSatelliteMenuView_Satellite(symbol: "bell.fill",         tint: Color(red: 1.00, green: 0.78, blue: 0.38)),
+        OrbitalSatelliteMenuView_Satellite(symbol: "bookmark.fill",     tint: Color(red: 0.74, green: 0.58, blue: 1.00)),
+        OrbitalSatelliteMenuView_Satellite(symbol: "gearshape.fill",    tint: Color(red: 0.55, green: 0.82, blue: 0.95))
+    ]
+}
+
+// MARK: - OrbitalSatelliteMenuView_Metrics
+
+private struct OrbitalSatelliteMenuView_Metrics {
+    let side: CGFloat
+    var orbitRadius: CGFloat { side * 0.34 }
+    var satelliteSize: CGFloat { side * 0.18 }
+    var hubSize: CGFloat { side * 0.22 }
+    var ringWidth: CGFloat { max(1, side * 0.006) }
+}
+"""###,
+        "nav-origami-fold-tabs": ###"""
+import SwiftUI
+
+/// Origami Fold Tabs — a tab bar built from paper panels.
+///
+/// Tapping a tab folds the strip inward along two crease lines, the chosen
+/// icon pops forward off the page with a soft shadow, then the strip unfolds
+/// flat again. The fold is a transient *pulse* (0 → peak → 0) on every switch,
+/// not an end-state — at rest the bar lies flat with a persistent selection
+/// indicator under the active tab.
+///
+/// - `demo == true`  : a self-driving loop auto-advances through the tabs,
+///                     replaying the full crease-in → icon-pop → unfold cycle.
+/// - `demo == false` : tap a tab; a KeyframeAnimator pulses the fold and
+///                     commits the new selection at the peak of the crease.
+struct OrigamiFoldTabsView: View {
+    var demo: Bool = false
+
+    // Persistent selection (the tab that stays highlighted at rest).
+    @State private var selectedTab: Int = 0
+    // The index whose fold pulse is currently playing (the icon that pops).
+    @State private var activeTab: Int = 0
+
+    private let tabCount: Int = 4
+
+    var body: some View {
+        GeometryReader { geo in
+            if demo {
+                demoStrip(geo: geo)
+            } else {
+                interactiveStrip(geo: geo)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Demo (self-driving)
+
+    @ViewBuilder
+    private func demoStrip(geo: GeometryProxy) -> some View {
+        // Period per tab; one full crease pulse plays inside each period.
+        let period: Double = 1.3
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let phase = t / period
+            let index = Int(floor(phase)) % tabCount
+            let local = phase - floor(phase)            // 0..<1 within this tab
+            let fold = pulse(local)                     // 0 → 1 → 0 envelope
+
+            strip(geo: geo, selected: index, popped: index, foldProgress: fold)
+        }
+    }
+
+    // MARK: - Interactive (tap-driven)
+
+    @ViewBuilder
+    private func interactiveStrip(geo: GeometryProxy) -> some View {
+        // KeyframeAnimator re-keys on `activeTab`; the fold track pulses
+        // 0 → peak → 0 each time a tab is tapped.
+        KeyframeAnimator(initialValue: CGFloat(0.0), trigger: activeTab) { fold in
+            strip(geo: geo,
+                  selected: selectedTab,
+                  popped: activeTab,
+                  foldProgress: fold)
+        } keyframes: { _ in
+            KeyframeTrack(\CGFloat.self) {
+                SpringKeyframe(1.0, duration: 0.26, spring: .init(duration: 0.26, bounce: 0.30))
+                SpringKeyframe(0.0, duration: 0.30, spring: .init(duration: 0.30, bounce: 0.22))
+            }
+        }
+    }
+
+    // MARK: - Shared strip (identical render for demo + interactive)
+
+    /// The whole control. `selected` drives the persistent highlight,
+    /// `popped` is the icon that lifts forward, `foldProgress` is the 0→1→0 pulse.
+    @ViewBuilder
+    private func strip(geo: GeometryProxy,
+                       selected: Int,
+                       popped: Int,
+                       foldProgress: CGFloat) -> some View {
+        let size = geo.size
+        let slotW: CGFloat = size.width / CGFloat(tabCount)
+        // Strip is centred vertically and sized to leave breathing room in a tile.
+        let stripH: CGFloat = min(size.height * 0.62, slotW * 1.15)
+        let stripW: CGFloat = size.width
+        let stripY: CGFloat = size.height / 2
+
+        ZStack {
+            paperBackdrop(width: stripW, height: stripH)
+                .position(x: size.width / 2, y: stripY)
+
+            // The creasing two-panel base layer.
+            foldingPanels(slotW: slotW,
+                          stripH: stripH,
+                          stripW: stripW,
+                          selected: selected,
+                          foldProgress: foldProgress)
+                .position(x: size.width / 2, y: stripY)
+
+            // The chosen icon, lifted forward on its own layer.
+            poppingIcon(slotW: slotW,
+                        stripH: stripH,
+                        popped: popped,
+                        foldProgress: foldProgress)
+                .position(x: slotCenterX(index: popped, slotW: slotW),
+                          y: stripY)
+        }
+        .compositingGroup()
+        .contentShape(Rectangle())
+        .modifier(OrigamiFoldTabsView_TapTabs(enabled: !demo, tabCount: tabCount, slotW: slotW) { idx in
+            selectTab(idx)
+        })
+    }
+
+    // MARK: - Layers
+
+    private func paperBackdrop(width: CGFloat, height: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: height * 0.22, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [paperLight, paperDark],
+                    startPoint: .top, endPoint: .bottom
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: height * 0.22, style: .continuous)
+                    .stroke(creaseLine.opacity(0.30), lineWidth: 1)
+            )
+            .frame(width: width, height: height)
+            .shadow(color: .black.opacity(0.18), radius: 6, x: 0, y: 4)
+    }
+
+    /// Two HStacks creased toward the centre line via mirrored rotation3DEffect.
+    @ViewBuilder
+    private func foldingPanels(slotW: CGFloat,
+                               stripH: CGFloat,
+                               stripW: CGFloat,
+                               selected: Int,
+                               foldProgress: CGFloat) -> some View {
+        // Modest angle so the demo never collapses to a line. Spec: cap perspective.
+        let creaseAngle: Double = 34.0 * Double(foldProgress)
+        let halfCount: Int = tabCount / 2
+        let perspective: CGFloat = 0.6
+
+        HStack(spacing: 0) {
+            // Left half — hinges on its LEADING edge, folds back to the right.
+            panelRow(range: 0..<halfCount,
+                     slotW: slotW, stripH: stripH,
+                     selected: selected, foldProgress: foldProgress)
+                .rotation3DEffect(.degrees(creaseAngle),
+                                  axis: (x: 0, y: 1, z: 0),
+                                  anchor: .leading,
+                                  perspective: perspective)
+                .brightness(-0.10 * Double(foldProgress))
+
+            // Right half — hinges on its TRAILING edge, folds back to the left.
+            panelRow(range: halfCount..<tabCount,
+                     slotW: slotW, stripH: stripH,
+                     selected: selected, foldProgress: foldProgress)
+                .rotation3DEffect(.degrees(-creaseAngle),
+                                  axis: (x: 0, y: 1, z: 0),
+                                  anchor: .trailing,
+                                  perspective: perspective)
+                .brightness(-0.10 * Double(foldProgress))
+        }
+        .frame(width: stripW, height: stripH)
+        // Centre crease shading: darkens as the bar folds in.
+        .overlay(centerCrease(height: stripH, foldProgress: foldProgress))
+    }
+
+    /// A contiguous row of base tab slots (icons sit flat here; the popped one
+    /// is hidden because its forward-lifted copy renders in the overlay).
+    @ViewBuilder
+    private func panelRow(range: Range<Int>,
+                          slotW: CGFloat,
+                          stripH: CGFloat,
+                          selected: Int,
+                          foldProgress: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            ForEach(range, id: \.self) { idx in
+                tabSlot(index: idx,
+                        slotW: slotW,
+                        stripH: stripH,
+                        selected: selected,
+                        foldProgress: foldProgress)
+            }
+        }
+    }
+
+    private func tabSlot(index: Int,
+                         slotW: CGFloat,
+                         stripH: CGFloat,
+                         selected: Int,
+                         foldProgress: CGFloat) -> some View {
+        let isSelected = index == selected
+        // The base copy of the popping icon fades out as it lifts forward.
+        let baseIconOpacity: Double = isSelected ? (1.0 - 0.85 * Double(foldProgress)) : 0.55
+        let iconSize: CGFloat = stripH * 0.34
+
+        return VStack(spacing: stripH * 0.10) {
+            Image(systemName: symbolName(index))
+                .font(.system(size: iconSize, weight: .semibold))
+                .foregroundStyle(isSelected ? accent : ink.opacity(0.65))
+                .opacity(baseIconOpacity)
+
+            // Persistent selection dot — independent of the fold pulse.
+            Capsule()
+                .fill(accent)
+                .frame(width: isSelected ? slotW * 0.30 : 0,
+                       height: stripH * 0.055)
+                .opacity(isSelected ? 1 : 0)
+        }
+        .frame(width: slotW, height: stripH)
+        .contentShape(Rectangle())
+    }
+
+    /// The selected icon lifted toward the viewer with a soft tracking shadow.
+    @ViewBuilder
+    private func poppingIcon(slotW: CGFloat,
+                             stripH: CGFloat,
+                             popped: Int,
+                             foldProgress: CGFloat) -> some View {
+        let iconSize: CGFloat = stripH * 0.34
+        let lift: CGFloat = foldProgress              // 0..1
+        let scale: CGFloat = 1.0 + 0.42 * lift
+        let forwardAngle: Double = -26.0 * Double(lift)   // tilt toward viewer
+        let shadowRadius: CGFloat = 2 + 12 * lift
+        let shadowY: CGFloat = 2 + 9 * lift
+
+        Image(systemName: symbolName(popped))
+            .font(.system(size: iconSize, weight: .semibold))
+            .foregroundStyle(accent)
+            .scaleEffect(scale)
+            .rotation3DEffect(.degrees(forwardAngle),
+                              axis: (x: 1, y: 0, z: 0),
+                              anchor: .bottom,
+                              perspective: 0.5)
+            .shadow(color: .black.opacity(0.35 * Double(lift)),
+                    radius: shadowRadius, x: 0, y: shadowY)
+            // Never fully invisible — at rest it sits flush on the base icon.
+            .opacity(0.15 + 0.85 * Double(lift) + 0.001)
+    }
+
+    private func centerCrease(height: CGFloat, foldProgress: CGFloat) -> some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        creaseLine.opacity(0.0),
+                        creaseLine.opacity(0.45 * Double(foldProgress)),
+                        creaseLine.opacity(0.0)
+                    ],
+                    startPoint: .leading, endPoint: .trailing
+                )
+            )
+            .frame(width: height * 0.10, height: height)
+            .blur(radius: 1)
+            .allowsHitTesting(false)
+    }
+
+    // MARK: - Logic
+
+    private func selectTab(_ idx: Int) {
+        guard idx != selectedTab || idx != activeTab else { return }
+        // Commit the persistent selection up front so the dot is correct, then
+        // re-key the fold pulse via `activeTab` to play the crease flourish.
+        selectedTab = idx
+        activeTab = idx
+    }
+
+    /// 0 → 1 → 0 envelope across a normalised local time `u` in [0, 1).
+    private func pulse(_ u: Double) -> CGFloat {
+        // sin gives a smooth bloom that returns to flat and holds near 0 at the
+        // tail so the bar reads clearly flat before the next tab fires.
+        let eased = sin(min(max(u, 0), 1) * .pi)
+        return CGFloat(eased * eased)   // sharpen the peak slightly
+    }
+
+    private func slotCenterX(index: Int, slotW: CGFloat) -> CGFloat {
+        slotW * (CGFloat(index) + 0.5)
+    }
+
+    private func symbolName(_ index: Int) -> String {
+        let names = ["house.fill", "magnifyingglass", "heart.fill", "person.fill"]
+        return names[index % names.count]
+    }
+
+    // MARK: - Palette (literal colors — no app dependencies)
+
+    private var paperLight: Color { Color(red: 0.97, green: 0.96, blue: 0.93) }
+    private var paperDark: Color  { Color(red: 0.90, green: 0.88, blue: 0.83) }
+    private var ink: Color        { Color(red: 0.18, green: 0.20, blue: 0.24) }
+    private var accent: Color     { Color(red: 0.91, green: 0.36, blue: 0.27) }
+    private var creaseLine: Color { Color(red: 0.45, green: 0.42, blue: 0.38) }
+}
+
+// MARK: - Tap routing
+
+/// Maps a tap's x position to a tab index. Kept as a modifier so the shared
+/// `strip` renders identically in demo (disabled) and interactive (enabled).
+private struct OrigamiFoldTabsView_TapTabs: ViewModifier {
+    let enabled: Bool
+    let tabCount: Int
+    let slotW: CGFloat
+    let onSelect: (Int) -> Void
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.gesture(
+                SpatialTapGesture()
+                    .onEnded { value in
+                        let raw = Int(value.location.x / max(slotW, 1))
+                        let idx = min(max(raw, 0), tabCount - 1)
+                        onSelect(idx)
+                    }
+            )
+        } else {
+            content
+        }
+    }
+}
+"""###,
+        "nav-pagecurl-drawer": ###"""
+import SwiftUI
+
+// MARK: - Page Curl Drawer
+// Dragging from the screen edge peels the top surface back like a turning page,
+// revealing a navigation panel underneath. A lit, curved highlight rides the
+// lifting edge with a shadow cast onto the panel; rubber-band resistance on
+// drag and a velocity-aware spring snap to open/closed on release.
+
+struct PagecurlDrawerView: View {
+    var demo: Bool = false
+
+    // Interactive state (demo == false)
+    @State private var progress: CGFloat = 0      // 0 = closed (flat page), 1 = open (curled away)
+    @State private var isOpen: Bool = false
+
+    // Geometry constants
+    private let maxAngle: Double = 82             // cap below 90 to avoid backface / z-fight
+    private let loopDuration: Double = 3.0
+
+    var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Root content
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        if demo {
+            TimelineView(.animation) { timeline in
+                let p = autoProgress(timeline.date)
+                stack(size: size, progress: p)
+            }
+        } else {
+            stack(size: size, progress: progress)
+                .contentShape(Rectangle())
+                .gesture(dragGesture(width: size.width))
+        }
+    }
+
+    // MARK: Composition
+
+    private func stack(size: CGSize, progress p: CGFloat) -> some View {
+        let clamped = max(0, min(1, p))
+        return ZStack {
+            // Panel sits BEHIND, full size, always legible.
+            PagecurlDrawerView_NavPanel(reveal: clamped)
+
+            // The curling top page, hinged on the trailing (right) edge.
+            PagecurlDrawerView_CurlingPage(progress: clamped, maxAngle: maxAngle, size: size)
+        }
+    }
+
+    // MARK: Auto-drive loop (demo)
+
+    private func autoProgress(_ date: Date) -> CGFloat {
+        let t = date.timeIntervalSinceReferenceDate
+        let phase = (t.truncatingRemainder(dividingBy: loopDuration)) / loopDuration // 0..1
+        // Smooth triangle: rise then fall, eased, with a hold near open.
+        let tri: Double
+        if phase < 0.45 {
+            tri = ease(phase / 0.45)
+        } else if phase < 0.60 {
+            tri = 1.0                                  // brief hold open
+        } else {
+            tri = ease(1.0 - (phase - 0.60) / 0.40)
+        }
+        return CGFloat(tri)
+    }
+
+    private func ease(_ x: Double) -> Double {
+        let c = min(1, max(0, x))
+        return c * c * (3 - 2 * c)                     // smoothstep
+    }
+
+    // MARK: Drag wiring (interactive)
+
+    private func dragGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let raw = value.translation.width / max(width, 1)
+                let base: CGFloat = isOpen ? 1 : 0
+                let target = base + raw
+                progress = rubberBand(target)
+            }
+            .onEnded { value in
+                let predicted = (isOpen ? 1 : 0) + value.predictedEndTranslation.width / max(width, 1)
+                let shouldOpen = predicted > 0.5
+                isOpen = shouldOpen
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.72)) {
+                    progress = shouldOpen ? 1 : 0
+                }
+            }
+    }
+
+    // Dampened overshoot beyond [0,1].
+    private func rubberBand(_ x: CGFloat) -> CGFloat {
+        if x < 0 { return x * 0.3 }
+        if x > 1 { return 1 + (x - 1) * 0.3 }
+        return x
+    }
+}
+
+// MARK: - Navigation Panel (revealed underneath)
+
+private struct PagecurlDrawerView_NavPanel: View {
+    var reveal: CGFloat
+
+    private let items: [(String, Color)] = [
+        ("square.grid.2x2.fill", Color(red: 0.45, green: 0.78, blue: 0.95)),
+        ("sparkles",             Color(red: 0.95, green: 0.78, blue: 0.42)),
+        ("heart.fill",           Color(red: 0.96, green: 0.50, blue: 0.55)),
+        ("bell.fill",            Color(red: 0.62, green: 0.86, blue: 0.62)),
+        ("gearshape.fill",       Color(red: 0.74, green: 0.70, blue: 0.95))
+    ]
+
+    var body: some View {
+        GeometryReader { geo in
+            let s = geo.size
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.10, green: 0.13, blue: 0.20),
+                        Color(red: 0.06, green: 0.08, blue: 0.13)
+                    ],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+                rows(in: s)
+            }
+            .frame(width: s.width, height: s.height)
+        }
+    }
+
+    private func rows(in s: CGSize) -> some View {
+        let count = items.count
+        let pad = s.height * 0.10
+        let usable = s.height - pad * 2
+        let spacing = usable / CGFloat(count)
+        let dot = min(spacing * 0.52, s.width * 0.30)
+        return ZStack(alignment: .topLeading) {
+            ForEach(0..<count, id: \.self) { i in
+                row(index: i, dot: dot, s: s)
+                    .offset(
+                        x: s.width * 0.12,
+                        y: pad + spacing * CGFloat(i) + (spacing - dot) / 2
+                    )
+            }
+        }
+    }
+
+    private func row(index i: Int, dot: CGFloat, s: CGSize) -> some View {
+        let (symbol, tint) = items[i]
+        // Stagger the entrance with reveal progress.
+        let appear = max(0, min(1, (reveal - CGFloat(i) * 0.06) / 0.6))
+        return HStack(spacing: dot * 0.5) {
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.20))
+                Image(systemName: symbol)
+                    .font(.system(size: dot * 0.5, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+            .frame(width: dot, height: dot)
+
+            Capsule()
+                .fill(Color.white.opacity(0.12))
+                .frame(width: s.width * 0.38 * appear, height: dot * 0.34)
+        }
+        .opacity(Double(appear))
+        .offset(x: (1 - appear) * -s.width * 0.08)
+    }
+}
+
+// MARK: - Curling Page (the peeling top surface)
+
+private struct PagecurlDrawerView_CurlingPage: View {
+    var progress: CGFloat            // 0..1 (rubber-banded values handled by caller clamp)
+    var maxAngle: Double
+    var size: CGSize
+
+    var body: some View {
+        let angle = Double(max(0, min(1, progress))) * maxAngle
+        ZStack {
+            pageFace
+            // Lit fold highlight riding the lifting (leading / left) edge.
+            PagecurlDrawerView_FoldLight(progress: progress)
+            // Soft contact shadow near the hinge as the page lifts.
+            hingeShade
+        }
+        // Cast a moving drop shadow onto the panel to sell the lift.
+        .shadow(
+            color: Color.black.opacity(0.35 * Double(min(1, progress))),
+            radius: 14 * min(1, progress),
+            x: -10 * min(1, progress),
+            y: 4
+        )
+        // Hinge on the trailing (right) edge: the LEFT edge lifts toward viewer.
+        .rotation3DEffect(
+            .degrees(angle),
+            axis: (x: 0, y: 1, z: 0),
+            anchor: .trailing,
+            anchorZ: 0,
+            perspective: 0.55
+        )
+    }
+
+    private var pageFace: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.97, green: 0.96, blue: 0.93),
+                    Color(red: 0.90, green: 0.89, blue: 0.85)
+                ],
+                startPoint: .leading, endPoint: .trailing
+            )
+            pageContent
+        }
+    }
+
+    // Faux page content so the lifting face stays legible (never blank).
+    private var pageContent: some View {
+        VStack(alignment: .leading, spacing: size.height * 0.045) {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(red: 0.20, green: 0.24, blue: 0.32))
+                .frame(width: size.width * 0.42, height: size.height * 0.07)
+            ForEach(0..<5, id: \.self) { i in
+                Capsule()
+                    .fill(Color(red: 0.55, green: 0.57, blue: 0.62).opacity(0.55))
+                    .frame(width: size.width * (0.66 - CGFloat(i) * 0.07),
+                           height: size.height * 0.035)
+            }
+        }
+        .padding(.horizontal, size.width * 0.10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.top, size.height * 0.12)
+    }
+
+    private var hingeShade: some View {
+        LinearGradient(
+            colors: [
+                Color.black.opacity(0.0),
+                Color.black.opacity(0.22 * Double(min(1, progress)))
+            ],
+            startPoint: .leading, endPoint: .trailing
+        )
+        .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Fold Light (lit cylindrical highlight on the lifting edge)
+
+private struct PagecurlDrawerView_FoldLight: View {
+    var progress: CGFloat
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let p = Double(max(0, min(1, progress)))
+            // Highlight band rides from the leading (left) edge inward as it lifts.
+            let bandW = w * 0.30
+            ZStack(alignment: .leading) {
+                // Bright specular streak on the curling edge.
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.0),
+                        Color.white.opacity(0.55 * p),
+                        Color.white.opacity(0.85 * p),
+                        Color.white.opacity(0.0)
+                    ],
+                    startPoint: .leading, endPoint: .trailing
+                )
+                .frame(width: bandW)
+                .blur(radius: 2)
+
+                // A thin crisp lit line at the very fold edge.
+                Rectangle()
+                    .fill(Color.white.opacity(0.7 * p))
+                    .frame(width: 1.5)
+                    .blur(radius: 0.5)
+            }
+            .frame(width: w, alignment: .leading)
+            .blendMode(.screen)
+            .allowsHitTesting(false)
+        }
+    }
+}
+"""###,
+        "nav-parallax-deck-tabs": ###"""
+import SwiftUI
+
+/// Parallax Deck Tabs
+///
+/// Tabs live on three stacked depth planes. The selected tab rises toward the
+/// viewer while neighbors recede and blur, with a light rotation3DEffect tilt
+/// that gives the deck a parallax feel as selection moves. Selection becomes a
+/// Z-axis move, not an X-axis slide — the active tab physically lifts out of a
+/// deck of cards.
+///
+/// - demo == true : a PhaseAnimator auto-cycles which card is frontmost so the
+///   deck keeps lifting one card forward and pushing the rest back, alive with
+///   no touch.
+/// - demo == false: tap a card to select it; a single spring drives the
+///   Z-rise, neighbor recede, blur and tilt.
+struct ParallaxDeckTabsView: View {
+    var demo: Bool = false
+
+    private let tabs: [ParallaxDeckTabsView_DeckTab] = ParallaxDeckTabsView_DeckTab.sample
+    @State private var selected: Int = 1
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+
+            ZStack {
+                background
+
+                if demo {
+                    autoDriving(in: size)
+                } else {
+                    interactive(in: size)
+                }
+            }
+            .frame(width: size.width, height: size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Backdrop
+
+    private var background: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.05, green: 0.06, blue: 0.10),
+                Color(red: 0.10, green: 0.11, blue: 0.16)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    // MARK: - Auto-driving (demo)
+
+    private func autoDriving(in size: CGSize) -> some View {
+        PhaseAnimator(Array(0..<tabs.count)) { phase in
+            deck(selectedIndex: phase, in: size)
+        } animation: { _ in
+            .spring(duration: 0.45, bounce: 0.3)
+        }
+    }
+
+    // MARK: - Interactive
+
+    private func interactive(in size: CGSize) -> some View {
+        deck(selectedIndex: selected, in: size)
+            .animation(.spring(response: 0.5, dampingFraction: 0.68), value: selected)
+    }
+
+    // MARK: - Deck
+
+    @ViewBuilder
+    private func deck(selectedIndex: Int, in size: CGSize) -> some View {
+        let metrics = ParallaxDeckTabsView_DeckMetrics(size: size)
+
+        ZStack {
+            ForEach(Array(tabs.enumerated()), id: \.element.id) { index, tab in
+                cardView(tab: tab, index: index, selectedIndex: selectedIndex, metrics: metrics)
+            }
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    @ViewBuilder
+    private func cardView(tab: ParallaxDeckTabsView_DeckTab, index: Int, selectedIndex: Int, metrics: ParallaxDeckTabsView_DeckMetrics) -> some View {
+        let distance: Double = Double(index - selectedIndex)
+        let clamped: Double = max(-2.0, min(2.0, distance))
+        let absClamped: Double = abs(clamped)
+
+        ParallaxDeckTabsView_DeckCard(tab: tab, isFront: index == selectedIndex, metrics: metrics)
+            .frame(width: metrics.cardWidth, height: metrics.cardHeight)
+            .scaleEffect(scale(absClamped))
+            .blur(radius: blurRadius(absClamped))
+            .rotation3DEffect(
+                .degrees(tilt(clamped)),
+                axis: (x: 0, y: 1, z: 0),
+                anchor: .center,
+                perspective: 0.55
+            )
+            .offset(x: xOffset(clamped, metrics: metrics), y: yOffset(absClamped, metrics: metrics))
+            .opacity(opacity(absClamped))
+            .shadow(
+                color: Color.black.opacity(shadowOpacity(absClamped)),
+                radius: shadowRadius(absClamped),
+                x: 0,
+                y: shadowYOffset(absClamped)
+            )
+            .zIndex(zValue(absClamped))
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard !demo else { return }
+                selected = index
+            }
+    }
+
+    // MARK: - Transform helpers (pure functions of clamped distance)
+
+    private func scale(_ absD: Double) -> CGFloat {
+        // Front card largest; recede ~14% per plane, floored so far cards stay legible.
+        let s: Double = 1.0 - absD * 0.14
+        return CGFloat(max(0.7, s))
+    }
+
+    private func blurRadius(_ absD: Double) -> CGFloat {
+        // Front card sharp; neighbors soften, capped so they never dissolve.
+        CGFloat(min(7.0, absD * 3.6))
+    }
+
+    private func tilt(_ d: Double) -> Double {
+        // Signed tilt away from center sells the parallax depth, kept small.
+        max(-11.0, min(11.0, d * 7.0))
+    }
+
+    private func xOffset(_ d: Double, metrics: ParallaxDeckTabsView_DeckMetrics) -> CGFloat {
+        // Fan the deck sideways so back cards peek out behind the front one.
+        CGFloat(d) * metrics.xSpread
+    }
+
+    private func yOffset(_ absD: Double, metrics: ParallaxDeckTabsView_DeckMetrics) -> CGFloat {
+        // Front card lifts up; receding cards sink down into the stack.
+        CGFloat(absD) * metrics.ySink
+    }
+
+    private func opacity(_ absD: Double) -> Double {
+        // Never fully transparent — floored so every plane stays readable.
+        max(0.45, 1.0 - absD * 0.26)
+    }
+
+    private func zValue(_ absD: Double) -> Double {
+        // Closer to selected => higher in the stack.
+        2.0 - absD
+    }
+
+    private func shadowOpacity(_ absD: Double) -> Double {
+        absD < 0.5 ? 0.42 : 0.18
+    }
+
+    private func shadowRadius(_ absD: Double) -> CGFloat {
+        absD < 0.5 ? 18.0 : 8.0
+    }
+
+    private func shadowYOffset(_ absD: Double) -> CGFloat {
+        absD < 0.5 ? 14.0 : 6.0
+    }
+}
+
+// MARK: - Layout metrics
+
+private struct ParallaxDeckTabsView_DeckMetrics {
+    let cardWidth: CGFloat
+    let cardHeight: CGFloat
+    let xSpread: CGFloat
+    let ySink: CGFloat
+    let corner: CGFloat
+    let compact: Bool
+
+    init(size: CGSize) {
+        let minSide: CGFloat = min(size.width, size.height)
+        compact = minSide < 220
+        cardWidth = max(40, min(size.width * 0.62, 320))
+        cardHeight = max(54, min(size.height * 0.72, 360))
+        xSpread = cardWidth * 0.20
+        ySink = cardHeight * 0.055
+        corner = compact ? 14 : 24
+    }
+}
+
+// MARK: - Card model
+
+private struct ParallaxDeckTabsView_DeckTab: Identifiable {
+    let id: Int
+    let title: String
+    let systemImage: String
+    let top: Color
+    let bottom: Color
+
+    static let sample: [ParallaxDeckTabsView_DeckTab] = [
+        ParallaxDeckTabsView_DeckTab(id: 0, title: "Discover", systemImage: "sparkles",
+                top: Color(red: 0.36, green: 0.32, blue: 0.86),
+                bottom: Color(red: 0.20, green: 0.18, blue: 0.55)),
+        ParallaxDeckTabsView_DeckTab(id: 1, title: "Create", systemImage: "wand.and.stars",
+                top: Color(red: 0.95, green: 0.42, blue: 0.55),
+                bottom: Color(red: 0.62, green: 0.21, blue: 0.42)),
+        ParallaxDeckTabsView_DeckTab(id: 2, title: "Library", systemImage: "books.vertical.fill",
+                top: Color(red: 0.30, green: 0.74, blue: 0.78),
+                bottom: Color(red: 0.13, green: 0.44, blue: 0.52)),
+        ParallaxDeckTabsView_DeckTab(id: 3, title: "Profile", systemImage: "person.crop.circle.fill",
+                top: Color(red: 0.98, green: 0.74, blue: 0.36),
+                bottom: Color(red: 0.70, green: 0.45, blue: 0.16))
+    ]
+}
+
+// MARK: - Card view
+
+private struct ParallaxDeckTabsView_DeckCard: View {
+    let tab: ParallaxDeckTabsView_DeckTab
+    let isFront: Bool
+    let metrics: ParallaxDeckTabsView_DeckMetrics
+
+    var body: some View {
+        ZStack {
+            base
+            sheen
+            content
+        }
+        .overlay(border)
+        .clipShape(RoundedRectangle(cornerRadius: metrics.corner, style: .continuous))
+    }
+
+    private var base: some View {
+        RoundedRectangle(cornerRadius: metrics.corner, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [tab.top, tab.bottom],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+    }
+
+    private var sheen: some View {
+        RoundedRectangle(cornerRadius: metrics.corner, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(isFront ? 0.28 : 0.14),
+                        Color.white.opacity(0.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .center
+                )
+            )
+    }
+
+    private var border: some View {
+        RoundedRectangle(cornerRadius: metrics.corner, style: .continuous)
+            .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if metrics.compact {
+            compactContent
+        } else {
+            fullContent
+        }
+    }
+
+    private var compactContent: some View {
+        Image(systemName: tab.systemImage)
+            .font(.system(size: 26, weight: .semibold))
+            .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
+    }
+
+    private var fullContent: some View {
+        VStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.18))
+                    .frame(width: 64, height: 64)
+                Image(systemName: tab.systemImage)
+                    .font(.system(size: 30, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            Text(tab.title)
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+        }
+        .padding(.horizontal, 12)
+    }
+}
+"""###,
+        "nav-rolling-bead-tabs": ###"""
+import SwiftUI
+
+// MARK: - Rolling Bead Tabs
+//
+// The active-tab indicator is a solid marble that physically rolls along the
+// tab bar to the selected tab. Its rolling spin is coupled to the SAME animated
+// position value as its horizontal offset, so the spring's overshoot lives in
+// one place and the spin overshoots in lockstep with the x-bounce (rolling
+// without slipping: angle = distance / radius). A KeyframeAnimator layers a
+// brake-phase squash (x-stretch during travel, then a damped settle wobble) on
+// top, as an independent transform.
+//
+// demo == true  -> a PhaseAnimator auto-rolls the bead across the tabs forever.
+// demo == false -> tap a tab to roll the bead there (the faithful tap-driven
+//                  interaction from the spec).
+
+struct RollingBeadTabsView: View {
+    var demo: Bool = false
+
+    @State private var selectedIndex: Int = 0
+
+    private let tabCount = 4
+    private let symbols = ["house.fill", "magnifyingglass", "bell.fill", "person.fill"]
+
+    var body: some View {
+        GeometryReader { proxy in
+            let metrics = RollingBeadTabsView_Metrics(size: proxy.size, tabCount: tabCount)
+            content(metrics: metrics)
+                .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(backgroundFill)
+    }
+
+    // MARK: Mode switch
+
+    @ViewBuilder
+    private func content(metrics: RollingBeadTabsView_Metrics) -> some View {
+        if demo {
+            demoContent(metrics: metrics)
+        } else {
+            interactiveContent(metrics: metrics)
+        }
+    }
+
+    // demo: a trigger-less PhaseAnimator continuously cycles the tab indices,
+    // .spring(bounce:0.4) rolls the bead between them forever.
+    @ViewBuilder
+    private func demoContent(metrics: RollingBeadTabsView_Metrics) -> some View {
+        PhaseAnimator(phaseSequence) { index in
+            barBody(metrics: metrics, activeIndex: index)
+        } animation: { _ in
+            .spring(duration: 0.85, bounce: 0.4)
+        }
+    }
+
+    // real: tap a tab -> selectedIndex; the same spring rolls the bead.
+    @ViewBuilder
+    private func interactiveContent(metrics: RollingBeadTabsView_Metrics) -> some View {
+        barBody(metrics: metrics, activeIndex: selectedIndex)
+            .animation(.spring(duration: 0.85, bounce: 0.4), value: selectedIndex)
+            .overlay(tapTargets(metrics: metrics))
+    }
+
+    // A long, looping walk across the tabs so we exercise both short hops and
+    // long jumps (where the overshoot is most visible).
+    private var phaseSequence: [Int] {
+        [0, 1, 2, 3, 2, 0, 3, 1]
+    }
+
+    // MARK: Shared bar
+
+    @ViewBuilder
+    private func barBody(metrics: RollingBeadTabsView_Metrics, activeIndex: Int) -> some View {
+        ZStack {
+            trackView(metrics: metrics)
+            RollingBeadTabsView_BeadView(metrics: metrics, activeIndex: activeIndex)
+            iconRow(metrics: metrics, activeIndex: activeIndex)
+        }
+    }
+
+    // MARK: Track
+
+    @ViewBuilder
+    private func trackView(metrics: RollingBeadTabsView_Metrics) -> some View {
+        let h = metrics.trackHeight
+        Capsule()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.10, green: 0.12, blue: 0.16),
+                        Color(red: 0.06, green: 0.07, blue: 0.10)
+                    ],
+                    startPoint: .top, endPoint: .bottom
+                )
+            )
+            .overlay(
+                Capsule().strokeBorder(
+                    Color(red: 1, green: 1, blue: 1).opacity(0.06),
+                    lineWidth: 1
+                )
+            )
+            .frame(width: metrics.trackWidth, height: h)
+            .position(x: metrics.size.width / 2, y: metrics.midY)
+            .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(0.35),
+                    radius: h * 0.18, y: h * 0.10)
+    }
+
+    // MARK: Icons
+
+    @ViewBuilder
+    private func iconRow(metrics: RollingBeadTabsView_Metrics, activeIndex: Int) -> some View {
+        ForEach(0..<tabCount, id: \.self) { i in
+            let active = (i == activeIndex)
+            Image(systemName: symbols[i])
+                .font(.system(size: metrics.iconSize, weight: .semibold))
+                .foregroundStyle(
+                    active
+                    ? Color(red: 0.07, green: 0.08, blue: 0.11)
+                    : Color(red: 0.62, green: 0.66, blue: 0.74)
+                )
+                .scaleEffect(active ? 1.04 : 1.0)
+                .position(x: metrics.centerX(for: i), y: metrics.midY)
+                .animation(.easeOut(duration: 0.3), value: activeIndex)
+        }
+    }
+
+    // MARK: Tap layer (interactive only)
+
+    @ViewBuilder
+    private func tapTargets(metrics: RollingBeadTabsView_Metrics) -> some View {
+        HStack(spacing: 0) {
+            ForEach(0..<tabCount, id: \.self) { i in
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .onTapGesture { selectedIndex = i }
+            }
+        }
+        .frame(width: metrics.trackWidth, height: metrics.trackHeight * 1.6)
+        .position(x: metrics.size.width / 2, y: metrics.midY)
+    }
+
+    private var backgroundFill: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.04, green: 0.05, blue: 0.07),
+                Color(red: 0.02, green: 0.03, blue: 0.04)
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+    }
+}
+
+// MARK: - Bead
+
+private struct RollingBeadTabsView_BeadView: View {
+    let metrics: RollingBeadTabsView_Metrics
+    let activeIndex: Int
+
+    var body: some View {
+        let targetX = metrics.centerX(for: activeIndex)
+        beadSurface
+            .frame(width: metrics.beadSize, height: metrics.beadSize)
+            // Single carrier: offset + spin both interpolate from `centerX`,
+            // so the spring overshoot is shared between travel and spin.
+            .modifier(RollingBeadTabsView_RollingModifier(centerX: targetX,
+                                      restingX: metrics.size.width / 2,
+                                      radius: metrics.beadSize / 2))
+            // Brake-phase squash, re-keyed by the index change.
+            .modifier(RollingBeadTabsView_SquashModifier(trigger: activeIndex))
+            .position(x: metrics.size.width / 2, y: metrics.midY)
+            .shadow(color: Color(red: 0.30, green: 0.55, blue: 1.0).opacity(0.45),
+                    radius: metrics.beadSize * 0.22, y: metrics.beadSize * 0.10)
+    }
+
+    // The bead carries off-center surface detail so its rotation is visible —
+    // a uniform disc spinning looks identical to one at rest.
+    private var beadSurface: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.55, green: 0.78, blue: 1.0),
+                            Color(red: 0.22, green: 0.46, blue: 0.95),
+                            Color(red: 0.12, green: 0.28, blue: 0.72)
+                        ],
+                        center: UnitPoint(x: 0.34, y: 0.30),
+                        startRadius: 0,
+                        endRadius: metrics.beadSize * 0.72
+                    )
+                )
+
+            // Rotating surface marks (these reveal the spin).
+            ForEach(0..<3, id: \.self) { k in
+                Circle()
+                    .fill(Color(red: 0.85, green: 0.93, blue: 1.0).opacity(0.55))
+                    .frame(width: metrics.beadSize * 0.12,
+                           height: metrics.beadSize * 0.12)
+                    .offset(y: -metrics.beadSize * 0.27)
+                    .rotationEffect(.degrees(Double(k) * 120))
+            }
+
+            // A meridian band so a full revolution is unmistakable.
+            Capsule()
+                .fill(Color(red: 0.10, green: 0.20, blue: 0.50).opacity(0.45))
+                .frame(width: metrics.beadSize * 0.10,
+                       height: metrics.beadSize * 0.86)
+
+            Circle()
+                .strokeBorder(Color(red: 1, green: 1, blue: 1).opacity(0.18),
+                              lineWidth: max(1, metrics.beadSize * 0.03))
+        }
+        .overlay(
+            // Fixed specular highlight (does NOT rotate — sells a glossy marble).
+            Circle()
+                .fill(Color(red: 1, green: 1, blue: 1).opacity(0.55))
+                .frame(width: metrics.beadSize * 0.18,
+                       height: metrics.beadSize * 0.18)
+                .blur(radius: metrics.beadSize * 0.04)
+                .offset(x: -metrics.beadSize * 0.18,
+                        y: -metrics.beadSize * 0.20)
+        )
+        .clipShape(Circle())
+    }
+}
+
+// MARK: - Rolling modifier (offset + spin from one Animatable value)
+
+private struct RollingBeadTabsView_RollingModifier: ViewModifier, Animatable {
+    var centerX: CGFloat
+    let restingX: CGFloat
+    let radius: CGFloat
+
+    // Animating this drives the spring; offset & rotation read the same value,
+    // so overshoot is shared and the marble rolls without slipping.
+    var animatableData: CGFloat {
+        get { centerX }
+        set { centerX = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        let travel = centerX - restingX
+        let angle = radius > 0 ? Double(travel / radius) : 0
+        content
+            .rotationEffect(.radians(angle))
+            .offset(x: travel)
+    }
+}
+
+// MARK: - Squash modifier (brake-phase, KeyframeAnimator)
+
+private struct RollingBeadTabsView_SquashModifier: ViewModifier {
+    let trigger: Int
+
+    func body(content: Content) -> some View {
+        KeyframeAnimator(initialValue: Squash(),
+                         trigger: trigger) { s in
+            content.scaleEffect(x: s.scaleX, y: s.scaleY, anchor: .center)
+        } keyframes: { _ in
+            // x-stretch as it launches & rolls, then a damped wobble settle.
+            KeyframeTrack(\.scaleX) {
+                SpringKeyframe(1.22, duration: 0.30, spring: .snappy)
+                SpringKeyframe(0.92, duration: 0.28, spring: .bouncy)
+                SpringKeyframe(1.05, duration: 0.18, spring: .bouncy)
+                SpringKeyframe(1.0, duration: 0.20, spring: .smooth)
+            }
+            KeyframeTrack(\.scaleY) {
+                SpringKeyframe(0.84, duration: 0.30, spring: .snappy)
+                SpringKeyframe(1.08, duration: 0.28, spring: .bouncy)
+                SpringKeyframe(0.96, duration: 0.18, spring: .bouncy)
+                SpringKeyframe(1.0, duration: 0.20, spring: .smooth)
+            }
+        }
+    }
+
+    struct Squash {
+        var scaleX: CGFloat = 1.0
+        var scaleY: CGFloat = 1.0
+    }
+}
+
+// MARK: - Layout metrics
+
+private struct RollingBeadTabsView_Metrics {
+    let size: CGSize
+    let tabCount: Int
+
+    var midY: CGFloat { size.height / 2 }
+
+    // The track spans most of the width with side insets.
+    var sideInset: CGFloat { max(10, size.width * 0.08) }
+    var trackWidth: CGFloat { max(1, size.width - sideInset * 2) }
+
+    var trackHeight: CGFloat {
+        min(size.height * 0.46, size.width * 0.16).clampedLow(12)
+    }
+
+    var beadSize: CGFloat {
+        (trackHeight * 0.82).clampedLow(10)
+    }
+
+    var iconSize: CGFloat {
+        (trackHeight * 0.40).clampedLow(8)
+    }
+
+    var slotWidth: CGFloat {
+        tabCount > 0 ? trackWidth / CGFloat(tabCount) : trackWidth
+    }
+
+    func centerX(for index: Int) -> CGFloat {
+        let start = size.width / 2 - trackWidth / 2
+        return start + slotWidth * (CGFloat(index) + 0.5)
+    }
+}
+
+private extension CGFloat {
+    func clampedLow(_ low: CGFloat) -> CGFloat { Swift.max(self, low) }
+}
+"""###,
+        "ob-color-bleed": ###"""
+import SwiftUI
+
+// MARK: - Ink Bleed Wipe
+// Advancing a page releases a blot of ink that organically blooms and bleeds
+// outward in irregular wobbling lobes to flood the screen with the next page's
+// color, carrying the new content in behind the wavefront. The idle demo blooms
+// a fresh ink wipe from a corner on a loop.
+//
+// Mechanism: an animatable closed `ColorBleedView_BlobShape` whose vertex radius is
+// baseRadius(progress) + sine lobe wobble. It is used as a `.mask` on the
+// incoming page layer so the wavefront reveals the next color + glyph.
+// Pure Shape (no Metal, no Canvas-for-the-grow). iOS 17.
+
+struct ColorBleedView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            if demo {
+                ColorBleedView_DemoBleed(size: size)
+            } else {
+                ColorBleedView_InteractiveBleed(size: size)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+}
+
+// MARK: - Palette of "pages"
+
+private struct ColorBleedView_InkPage {
+    let top: Color
+    let bottom: Color
+    let symbol: String
+    let accent: Color
+}
+
+private let inkPages: [ColorBleedView_InkPage] = [
+    ColorBleedView_InkPage(top: Color(red: 0.36, green: 0.20, blue: 0.62),
+            bottom: Color(red: 0.18, green: 0.09, blue: 0.34),
+            symbol: "sparkles", accent: Color(red: 0.92, green: 0.86, blue: 1.00)),
+    ColorBleedView_InkPage(top: Color(red: 0.05, green: 0.50, blue: 0.60),
+            bottom: Color(red: 0.02, green: 0.24, blue: 0.34),
+            symbol: "paintbrush.pointed.fill", accent: Color(red: 0.82, green: 0.98, blue: 0.98)),
+    ColorBleedView_InkPage(top: Color(red: 0.86, green: 0.34, blue: 0.36),
+            bottom: Color(red: 0.50, green: 0.12, blue: 0.24),
+            symbol: "flame.fill", accent: Color(red: 1.00, green: 0.92, blue: 0.84)),
+    ColorBleedView_InkPage(top: Color(red: 0.18, green: 0.55, blue: 0.34),
+            bottom: Color(red: 0.07, green: 0.28, blue: 0.20),
+            symbol: "leaf.fill", accent: Color(red: 0.90, green: 1.00, blue: 0.90))
+]
+
+// MARK: - The animatable ink blob
+
+/// A closed organic blob. Its radius at angle a is:
+///   r(a) = baseRadius * progress  +  lobeAmplitude * sin(a * lobeCount + phase)
+/// Both `progress` (bloom) and `phase` (lobe wobble) are animatable so the rim
+/// keeps breathing smoothly while the blob grows. We never re-seed noise per
+/// frame — the wobble is a deterministic function of the animated `phase`.
+private struct ColorBleedView_BlobShape: Shape {
+    var progress: CGFloat
+    var phase: CGFloat
+    let origin: CGPoint
+    let maxRadius: CGFloat
+    let lobeCount: Int
+    let lobeAmplitude: CGFloat
+
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(progress, phase) }
+        set {
+            progress = newValue.first
+            phase = newValue.second
+        }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let clamped = max(0, min(1, progress))
+        // Eased base radius so the bloom decelerates as it floods.
+        let base = maxRadius * easeOut(clamped)
+        if base <= 0.0001 {
+            return path
+        }
+        // Wobble amplitude grows in then relaxes near full coverage so the edge
+        // settles flat once the screen is flooded.
+        let wobbleEnv = sin(clamped * .pi)               // 0 -> 1 -> 0
+        let amp = lobeAmplitude * (0.35 + 0.65 * wobbleEnv) * min(1, base / 40)
+
+        let steps = 64
+        for i in 0...steps {
+            let t = CGFloat(i) / CGFloat(steps)
+            let angle = t * 2 * .pi
+            // Two superimposed lobe sets for a less regular, more organic rim.
+            let w1 = sin(angle * CGFloat(lobeCount) + phase)
+            let w2 = sin(angle * CGFloat(lobeCount + 3) - phase * 0.7)
+            let r = base + amp * (0.7 * w1 + 0.3 * w2)
+            let x = origin.x + cos(angle) * r
+            let y = origin.y + sin(angle) * r
+            let point = CGPoint(x: x, y: y)
+            if i == 0 {
+                path.move(to: point)
+            } else {
+                path.addLine(to: point)
+            }
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    private func easeOut(_ x: CGFloat) -> CGFloat {
+        1 - pow(1 - x, 2.4)
+    }
+}
+
+// MARK: - Shared "page" content
+
+private struct ColorBleedView_PageContent: View {
+    let page: ColorBleedView_InkPage
+    let size: CGSize
+
+    var body: some View {
+        let dim = min(size.width, size.height)
+        ZStack {
+            LinearGradient(colors: [page.top, page.bottom],
+                           startPoint: .topLeading,
+                           endPoint: .bottomTrailing)
+            // Carried content behind the wavefront.
+            VStack(spacing: dim * 0.06) {
+                Image(systemName: page.symbol)
+                    .font(.system(size: dim * 0.28, weight: .semibold))
+                    .foregroundStyle(page.accent)
+                    .shadow(color: .black.opacity(0.25), radius: dim * 0.02, y: dim * 0.01)
+                Capsule()
+                    .fill(page.accent.opacity(0.85))
+                    .frame(width: dim * 0.34, height: max(3, dim * 0.022))
+            }
+        }
+    }
+}
+
+// MARK: - Interactive (demo == false)
+
+private struct ColorBleedView_InteractiveBleed: View {
+    let size: CGSize
+
+    @State private var baseIndex: Int = 0
+    @State private var progress: CGFloat = 0
+    @State private var phase: CGFloat = 0
+    @State private var origin: CGPoint = .zero
+
+    private var incomingIndex: Int { (baseIndex + 1) % inkPages.count }
+
+    var body: some View {
+        let maxR = floodRadius(from: origin, in: size)
+        ZStack {
+            // Base layer: the currently-settled page, always full-screen.
+            ColorBleedView_PageContent(page: inkPages[baseIndex], size: size)
+
+            // Incoming layer revealed by the growing ink blob.
+            ColorBleedView_PageContent(page: inkPages[incomingIndex], size: size)
+                .mask {
+                    ColorBleedView_BlobShape(progress: progress,
+                              phase: phase,
+                              origin: origin,
+                              maxRadius: maxR,
+                              lobeCount: 5,
+                              lobeAmplitude: min(size.width, size.height) * 0.085)
+                }
+
+            hint
+        }
+        .contentShape(Rectangle())
+        .gesture(
+            SpatialTapGesture(coordinateSpace: .local)
+                .onEnded { value in
+                    advance(from: value.location)
+                }
+        )
+    }
+
+    private var hint: some View {
+        VStack {
+            Spacer()
+            Text("tap to bleed")
+                .font(.system(size: max(9, min(size.width, size.height) * 0.07),
+                              weight: .semibold, design: .rounded))
+                .foregroundStyle(.white.opacity(progress > 0.05 ? 0 : 0.55))
+                .padding(.bottom, min(size.width, size.height) * 0.06)
+                .animation(.easeInOut(duration: 0.25), value: progress)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func advance(from point: CGPoint) {
+        guard progress < 0.001 else { return }
+        origin = point
+        // Drive bloom AND wobble phase inside the same withAnimation block so the
+        // rim keeps breathing as it grows (no TimelineView here — that would make
+        // the shape re-read the jumped model value and snap instead of grow).
+        withAnimation(.easeOut(duration: 0.55)) {
+            progress = 1
+            phase += .pi * 1.6
+        }
+        // After the flood fully covers, promote the incoming page to the base and
+        // reset progress to 0 with no visible change (full incoming == new base).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.58) {
+            baseIndex = incomingIndex
+            progress = 0
+        }
+    }
+}
+
+// MARK: - Demo (demo == true)
+
+private struct ColorBleedView_DemoBleed: View {
+    let size: CGSize
+
+    // ~3.2s per bleed cycle.
+    private let period: Double = 3.2
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            content(time: t)
+        }
+    }
+
+    @ViewBuilder
+    private func content(time: Double) -> some View {
+        // Compute all animation state up front so the ViewBuilder body holds only
+        // view content (avoids any "() cannot conform to View" pitfalls).
+        let cycle = (time / period).truncatingRemainder(dividingBy: 1)   // 0..<1
+        // Which page is settled vs. blooming in. Each completed cycle advances one.
+        let step = Int(time / period)
+        let baseIndex = ((step % inkPages.count) + inkPages.count) % inkPages.count
+        let incomingIndex = (baseIndex + 1) % inkPages.count
+
+        // Bloom progress: grow over the first ~75% of the cycle, then hold full so
+        // the wrap (full incoming -> new base) has no blank/flash frame.
+        let raw = min(1, CGFloat(cycle) / 0.75)
+        let progress = easeInOut(raw)
+
+        // Origin rotates among the four corners each cycle so it blooms from a
+        // fresh corner on the loop.
+        let origin = corner(for: step, in: size)
+        let maxR = floodRadius(from: origin, in: size)
+        // Phase advances continuously with real time so the rim wobbles smoothly.
+        let phase = CGFloat(time) * 1.4
+
+        ZStack {
+            ColorBleedView_PageContent(page: inkPages[baseIndex], size: size)
+
+            ColorBleedView_PageContent(page: inkPages[incomingIndex], size: size)
+                .mask {
+                    ColorBleedView_BlobShape(progress: progress,
+                              phase: phase,
+                              origin: origin,
+                              maxRadius: maxR,
+                              lobeCount: 5,
+                              lobeAmplitude: min(size.width, size.height) * 0.085)
+                }
+        }
+    }
+
+    private func corner(for step: Int, in size: CGSize) -> CGPoint {
+        switch ((step % 4) + 4) % 4 {
+        case 0: return CGPoint(x: size.width * 0.16, y: size.height * 0.82)
+        case 1: return CGPoint(x: size.width * 0.84, y: size.height * 0.82)
+        case 2: return CGPoint(x: size.width * 0.84, y: size.height * 0.18)
+        default: return CGPoint(x: size.width * 0.16, y: size.height * 0.18)
+        }
+    }
+
+    private func easeInOut(_ x: CGFloat) -> CGFloat {
+        let c = max(0, min(1, x))
+        return c * c * (3 - 2 * c)
+    }
+}
+
+// MARK: - Shared geometry
+
+/// Distance from the bloom origin to the farthest corner, plus a margin for the
+/// lobe wobble amplitude so the blob fully floods with no surviving corner sliver.
+private func floodRadius(from origin: CGPoint, in size: CGSize) -> CGFloat {
+    let corners = [
+        CGPoint(x: 0, y: 0),
+        CGPoint(x: size.width, y: 0),
+        CGPoint(x: 0, y: size.height),
+        CGPoint(x: size.width, y: size.height)
+    ]
+    var maxDist: CGFloat = 0
+    for c in corners {
+        let dx = c.x - origin.x
+        let dy = c.y - origin.y
+        let d = sqrt(dx * dx + dy * dy)
+        if d > maxDist { maxDist = d }
+    }
+    let wobbleMargin = min(size.width, size.height) * 0.10
+    return maxDist + wobbleMargin
+}
+"""###,
+        "ob-constellation-hero": ###"""
+import SwiftUI
+
+/// Constellation Hero — drifting star points that wire themselves into themed
+/// constellations (heart, bell, key) by drawing connecting lines with an
+/// animatable trim, then twinkle. Swiping re-routes the lines to the next
+/// figure; the demo loop self-wires on a timer.
+struct ConstellationHeroView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            ZStack {
+                ConstellationHeroView_CHBackdrop()
+                Group {
+                    if demo {
+                        ConstellationHeroView_CHDemoStage(side: side)
+                    } else {
+                        ConstellationHeroView_CHInteractiveStage(side: side)
+                    }
+                }
+                .frame(width: side, height: side)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
+}
+
+// MARK: - Figures
+
+private struct ConstellationHeroView_CHFigure {
+    let nodes: [CGPoint]   // normalized 0...1, ordered for the connecting polyline
+    let closed: Bool
+}
+
+private enum ConstellationHeroView_CHCatalog {
+    /// Heart traced clockwise from the bottom tip.
+    static let heart = ConstellationHeroView_CHFigure(
+        nodes: [
+            CGPoint(x: 0.50, y: 0.86),
+            CGPoint(x: 0.20, y: 0.55),
+            CGPoint(x: 0.18, y: 0.34),
+            CGPoint(x: 0.31, y: 0.22),
+            CGPoint(x: 0.44, y: 0.30),
+            CGPoint(x: 0.50, y: 0.40),
+            CGPoint(x: 0.56, y: 0.30),
+            CGPoint(x: 0.69, y: 0.22),
+            CGPoint(x: 0.82, y: 0.34),
+            CGPoint(x: 0.80, y: 0.55)
+        ],
+        closed: true
+    )
+
+    /// Bell: domed body, splayed base, hanging clapper.
+    static let bell = ConstellationHeroView_CHFigure(
+        nodes: [
+            CGPoint(x: 0.50, y: 0.16),
+            CGPoint(x: 0.36, y: 0.24),
+            CGPoint(x: 0.30, y: 0.46),
+            CGPoint(x: 0.24, y: 0.66),
+            CGPoint(x: 0.18, y: 0.74),
+            CGPoint(x: 0.82, y: 0.74),
+            CGPoint(x: 0.76, y: 0.66),
+            CGPoint(x: 0.70, y: 0.46),
+            CGPoint(x: 0.64, y: 0.24),
+            CGPoint(x: 0.50, y: 0.16)
+        ],
+        closed: false
+    )
+
+    /// Key: round bow, shaft, two teeth.
+    static let key = ConstellationHeroView_CHFigure(
+        nodes: [
+            CGPoint(x: 0.30, y: 0.24),
+            CGPoint(x: 0.22, y: 0.34),
+            CGPoint(x: 0.30, y: 0.44),
+            CGPoint(x: 0.40, y: 0.40),
+            CGPoint(x: 0.52, y: 0.46),
+            CGPoint(x: 0.64, y: 0.52),
+            CGPoint(x: 0.64, y: 0.66),
+            CGPoint(x: 0.72, y: 0.60),
+            CGPoint(x: 0.80, y: 0.68),
+            CGPoint(x: 0.86, y: 0.60)
+        ],
+        closed: false
+    )
+
+    /// Empty figure — no lines, used as the "before" state so the opening draw
+    /// routes cleanly from nothing into the heart.
+    static let blank = ConstellationHeroView_CHFigure(nodes: [], closed: false)
+
+    static let all: [ConstellationHeroView_CHFigure] = [heart, bell, key]
+
+    static func figure(_ index: Int) -> ConstellationHeroView_CHFigure {
+        all[((index % all.count) + all.count) % all.count]
+    }
+}
+
+// MARK: - Constellation polyline shape (uses SwiftUI's built-in .trim)
+
+private struct ConstellationHeroView_CHConstellationPath: Shape {
+    let figure: ConstellationHeroView_CHFigure
+    let inset: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let area = rect.insetBy(dx: inset, dy: inset)
+        guard let first = figure.nodes.first else { return path }
+        func mapped(_ p: CGPoint) -> CGPoint {
+            CGPoint(x: area.minX + p.x * area.width,
+                    y: area.minY + p.y * area.height)
+        }
+        path.move(to: mapped(first))
+        for node in figure.nodes.dropFirst() {
+            path.addLine(to: mapped(node))
+        }
+        if figure.closed {
+            path.addLine(to: mapped(first))
+        }
+        return path
+    }
+}
+
+// MARK: - Star drift math (deterministic, time-based)
+
+private enum ConstellationHeroView_CHStars {
+    /// Stable per-index phase so drift never strobes between frames.
+    static func phase(_ index: Int) -> Double {
+        let s = sin(Double(index) * 12.9898) * 43758.5453
+        return (s - floor(s)) * 2.0 * .pi
+    }
+
+    /// Small wandering offset for a star, pure function of time.
+    static func drift(index: Int, time: Double, amplitude: CGFloat) -> CGSize {
+        let ph = phase(index)
+        // Pin trig to CGFloat before mixing with the CGFloat amplitude so the
+        // numeric type is unambiguous across toolchains.
+        let dx = CGFloat(sin(time * 0.6 + ph)) * amplitude
+        let dy = CGFloat(cos(time * 0.45 + ph * 1.3)) * amplitude
+        return CGSize(width: dx, height: dy)
+    }
+
+    /// Per-star twinkle opacity, floored so the sky is never blank.
+    static func twinkle(index: Int, time: Double) -> Double {
+        let ph = phase(index)
+        let raw = sin(time * 1.7 + ph) * 0.5 + 0.5  // 0...1
+        return 0.55 + raw * 0.45                     // 0.55...1.0
+    }
+}
+
+// MARK: - Shared constellation canvas
+
+/// Renders an outgoing figure (un-drawing) cross-faded with an incoming figure
+/// (drawing) plus the drifting / twinkling star layer. `progress` 0→1 means a
+/// full hand-off from `figure` to `nextFigure`.
+private struct ConstellationHeroView_CHConstellationCanvas: View {
+    let side: CGFloat
+    let figure: ConstellationHeroView_CHFigure
+    let nextFigure: ConstellationHeroView_CHFigure
+    let progress: CGFloat   // 0...1 cross-trim
+    let time: Double
+    let twinkleBoost: Double // 0...1 extra glow when a figure is fully wired
+
+    private var inset: CGFloat { side * 0.14 }
+    private var lineWidth: CGFloat { max(1.2, side * 0.012) }
+    private var starRadius: CGFloat { max(1.6, side * 0.016) }
+
+    var body: some View {
+        ZStack {
+            outgoingLines
+            incomingLines
+            starLayer
+        }
+        .frame(width: side, height: side)
+    }
+
+    // Outgoing figure recedes: full when progress==0, gone when progress==1.
+    private var outgoingLines: some View {
+        let p = 1.0 - progress
+        return ConstellationHeroView_CHConstellationPath(figure: figure, inset: inset)
+            .trim(from: 0, to: p)
+            .stroke(lineGradient(opacity: lineOpacity(p)),
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+            .shadow(color: glowColor.opacity(0.55 * lineOpacity(p)),
+                    radius: lineWidth * 1.6)
+    }
+
+    // Incoming figure draws in as progress climbs.
+    private var incomingLines: some View {
+        let p = progress
+        return ConstellationHeroView_CHConstellationPath(figure: nextFigure, inset: inset)
+            .trim(from: 0, to: p)
+            .stroke(lineGradient(opacity: lineOpacity(p)),
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round))
+            .shadow(color: glowColor.opacity(0.55 * lineOpacity(p)),
+                    radius: lineWidth * 1.6)
+    }
+
+    // Both figures' stars are rendered and crossfaded by progress, so dots never
+    // teleport at the midpoint. A blank side stays hidden and forces its partner
+    // to full opacity, so the opening draw / blank hand-off is never empty.
+    private func starOpacity(outgoing: Bool) -> Double {
+        if figure.nodes.isEmpty { return outgoing ? 0 : 1 }
+        if nextFigure.nodes.isEmpty { return outgoing ? 1 : 0 }
+        return outgoing ? Double(1 - progress) : Double(progress)
+    }
+
+    private var starLayer: some View {
+        let area = CGRect(x: 0, y: 0, width: side, height: side).insetBy(dx: inset, dy: inset)
+        return ZStack {
+            starField(figure.nodes, area: area)
+                .opacity(starOpacity(outgoing: true))
+            starField(nextFigure.nodes, area: area)
+                .opacity(starOpacity(outgoing: false))
+        }
+    }
+
+    private func starField(_ nodes: [CGPoint], area: CGRect) -> some View {
+        ZStack {
+            ForEach(nodes.indices, id: \.self) { i in
+                star(at: nodes[i], index: i, area: area)
+            }
+        }
+    }
+
+    private func star(at norm: CGPoint, index: Int, area: CGRect) -> some View {
+        let base = CGPoint(x: area.minX + norm.x * area.width,
+                           y: area.minY + norm.y * area.height)
+        let drift = ConstellationHeroView_CHStars.drift(index: index, time: time, amplitude: side * 0.012)
+        let tw = min(1.0, ConstellationHeroView_CHStars.twinkle(index: index, time: time) + twinkleBoost * 0.25)
+        return ZStack {
+            Circle()
+                .fill(glowColor)
+                .frame(width: starRadius * 3.0, height: starRadius * 3.0)
+                .blur(radius: starRadius * 1.1)
+                .opacity(0.35 * tw)
+            Circle()
+                .fill(Color(red: 0.98, green: 0.96, blue: 1.0))
+                .frame(width: starRadius * 2.0, height: starRadius * 2.0)
+                .opacity(tw)
+        }
+        .position(x: base.x + drift.width, y: base.y + drift.height)
+    }
+
+    // MARK: derived style
+
+    private func lineOpacity(_ p: CGFloat) -> Double {
+        // Floor so a half-drawn line is always legible; brighten when complete.
+        let base = 0.55 + Double(p) * 0.45
+        return min(1.0, base + twinkleBoost * 0.2)
+    }
+
+    private var glowColor: Color {
+        Color(red: 0.62, green: 0.74, blue: 1.0)
+    }
+
+    private func lineGradient(opacity: Double) -> LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.75, green: 0.85, blue: 1.0).opacity(opacity),
+                Color(red: 0.58, green: 0.66, blue: 1.0).opacity(opacity)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+// MARK: - Backdrop
+
+private struct ConstellationHeroView_CHBackdrop: View {
+    var body: some View {
+        RadialGradient(
+            colors: [
+                Color(red: 0.10, green: 0.09, blue: 0.18),
+                Color(red: 0.05, green: 0.04, blue: 0.10)
+            ],
+            center: .center,
+            startRadius: 0,
+            endRadius: 400
+        )
+    }
+}
+
+// MARK: - Demo stage (self-driving)
+
+private struct ConstellationHeroView_CHDemoStage: View {
+    let side: CGFloat
+
+    // Per beat the constellation hands off from one figure to the next:
+    // hold (twinkle the current figure) → re-route (undraw current / draw next).
+    private let beat: Double = 3.4
+    @State private var start = Date()
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            // Relative clock so beat 0 (the opening draw-in) actually plays and
+            // the drift/twinkle phase still uses absolute time for variety.
+            let t = context.date.timeIntervalSince(start)
+            let phase = computePhase(max(0, t))
+            ConstellationHeroView_CHConstellationCanvas(
+                side: side,
+                figure: phase.from,
+                nextFigure: phase.to,
+                progress: phase.progress,
+                time: t,
+                twinkleBoost: phase.twinkleBoost
+            )
+        }
+    }
+
+    struct CHPhase {
+        let from: ConstellationHeroView_CHFigure
+        let to: ConstellationHeroView_CHFigure
+        let progress: CGFloat
+        let twinkleBoost: Double
+    }
+
+    /// Beat 0 routes from a blank figure into the heart (opening draw), so the
+    /// first frame already shows the heart's stars — never blank. Every later
+    /// beat holds the current figure (twinkling) then re-routes into the next.
+    private func computePhase(_ t: Double) -> CHPhase {
+        let beatIndex = Int(floor(t / beat))
+        let local = t - Double(beatIndex) * beat
+
+        let holdDur = 1.6
+        let routeDur = beat - holdDur
+
+        // `current` is the figure shown this beat (held, then un-drawn); `next`
+        // is the one it re-routes into. The very first hold doubles as the
+        // draw-in from blank so the opening frame is never empty.
+        let current = ConstellationHeroView_CHCatalog.figure(beatIndex)
+        let next = ConstellationHeroView_CHCatalog.figure(beatIndex + 1)
+
+        if local < holdDur {
+            if beatIndex == 0 {
+                // Opening: draw the first figure in from blank during the hold.
+                let p = easeOutCubic(local / holdDur)
+                return CHPhase(from: ConstellationHeroView_CHCatalog.blank, to: current,
+                               progress: CGFloat(p), twinkleBoost: p)
+            }
+            // Hold + twinkle the fully wired current figure.
+            return CHPhase(from: current, to: next, progress: 0, twinkleBoost: 1)
+        }
+
+        // Re-route: undraw current, draw next.
+        let route = easeInOutCubic((local - holdDur) / routeDur)
+        return CHPhase(from: current,
+                       to: next,
+                       progress: CGFloat(route),
+                       twinkleBoost: 1 - route)
+    }
+
+    private func easeOutCubic(_ x: Double) -> Double {
+        let c = 1 - x
+        return 1 - c * c * c
+    }
+
+    private func easeInOutCubic(_ x: Double) -> Double {
+        x < 0.5 ? 4 * x * x * x : 1 - pow(-2 * x + 2, 3) / 2
+    }
+}
+
+// MARK: - Interactive stage (real swipe)
+
+private struct ConstellationHeroView_CHInteractiveStage: View {
+    let side: CGFloat
+
+    @State private var figureIndex: Int = 0
+    // Live re-route progress 0...1: 0 = current figure wired, 1 = handed off to
+    // the next figure. Updated directly in onChanged so onEnded can spring it.
+    @State private var progress: CGFloat = 0
+    @State private var dragStart: CGFloat = 0
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            // Glow swells when a figure is fully wired (p near 0 or 1) and dims
+            // mid-scrub, so a settled constellation reads as "locked in".
+            let boost = 1.0 - Double(min(progress, 1 - progress)) * 2.0
+            ConstellationHeroView_CHConstellationCanvas(
+                side: side,
+                figure: ConstellationHeroView_CHCatalog.figure(figureIndex),
+                nextFigure: ConstellationHeroView_CHCatalog.figure(figureIndex + 1),
+                progress: progress,
+                time: t,
+                twinkleBoost: boost
+            )
+            .contentShape(Rectangle())
+            .gesture(dragGesture)
+        }
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                // Swipe left advances (draws the next figure); width / side.
+                let delta = -value.translation.width / max(side, 1)
+                progress = clamp(dragStart + delta)
+            }
+            .onEnded { value in
+                let predicted = -value.predictedEndTranslation.width / max(side, 1)
+                let committed = clamp(dragStart + predicted)
+                if committed > 0.5 {
+                    // Finish the re-route, then re-base onto the new figure (tied
+                    // to the spring, so a fast re-grab can't be clobbered) — the
+                    // new figure at progress 0 renders identically to progress 1.
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.8),
+                                  completionCriteria: .logicallyComplete) {
+                        progress = 1
+                    } completion: {
+                        figureIndex += 1
+                        progress = 0
+                        dragStart = 0
+                    }
+                } else {
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+                        progress = 0
+                    }
+                    dragStart = 0
+                }
+            }
+    }
+
+    private func clamp(_ v: CGFloat) -> CGFloat {
+        min(1, max(0, v))
+    }
+}
+"""###,
+        "ob-depth-diorama": ###"""
+import SwiftUI
+
+// Depth Diorama Swipe
+// A 4-layer, code-drawn parallax scene (sky, hills, midground, foreground).
+// Dragging scrubs a paged "camera"; layers offset by their depth factor so the
+// world has real depth. Released, it springs to the nearest page with each layer
+// overshooting at its own parallaxed rate. In demo mode a TimelineView pans the
+// camera gently side to side on a loop so the tile stays alive with no touch.
+
+struct DepthDioramaView: View {
+    var demo: Bool = false
+
+    // Page state (interactive mode). Progress is measured in *page units*:
+    // 0 = first page, 1 = second page, 2 = third page.
+    @State private var page: Int = 1
+    @State private var liveProgress: CGFloat = 1   // animatable camera position in page units
+    @State private var dragFraction: CGFloat = 0   // live drag contribution, page units
+
+    private let pageCount: Int = 3
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            content(size: size)
+                .frame(width: size.width, height: size.height)
+                .clipped()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            // Seed interactive camera at the middle page.
+            liveProgress = CGFloat(startPage)
+            page = startPage
+        }
+    }
+
+    private var startPage: Int { pageCount / 2 }
+
+    // MARK: - Content router
+
+    @ViewBuilder
+    private func content(size: CGSize) -> some View {
+        if demo {
+            demoScene(size: size)
+        } else {
+            interactiveScene(size: size)
+        }
+    }
+
+    // MARK: - Demo (self-driving)
+
+    private func demoScene(size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            // ~3.4s loop. Pan the camera around the middle page by ±0.62 of a page
+            // so we reveal neighbouring scene content without ever sweeping past
+            // the covered strip width.
+            let phase = t.truncatingRemainder(dividingBy: 3.4) / 3.4
+            let swing = sin(phase * 2 * .pi)
+            let progress = CGFloat(startPage) + CGFloat(swing) * 0.62
+            diorama(progress: progress, size: size)
+        }
+    }
+
+    // MARK: - Interactive (real component)
+
+    private func interactiveScene(size: CGSize) -> some View {
+        let progress = liveProgress + dragFraction
+        let pageWidth = max(size.width, 1)
+
+        return diorama(progress: progress, size: size)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        // translation.width / pageWidth -> page progress.
+                        // Drag left (negative) advances forward (+progress).
+                        var frac = -value.translation.width / pageWidth
+                        let raw = CGFloat(page) + frac
+                        // Rubber-band beyond the first/last page so over-drag
+                        // resists instead of running off the scene.
+                        if raw < 0 {
+                            frac -= raw * 0.55
+                        } else if raw > CGFloat(pageCount - 1) {
+                            frac -= (raw - CGFloat(pageCount - 1)) * 0.55
+                        }
+                        dragFraction = frac
+                    }
+                    .onEnded { value in
+                        let predicted = -value.predictedEndTranslation.width / pageWidth
+                        let projected = CGFloat(page) + predicted
+                        let target = clampPage(Int(projected.rounded()))
+
+                        // Fold the live drag into liveProgress, then spring to the
+                        // target page so layers overshoot at their own rates.
+                        liveProgress += dragFraction
+                        dragFraction = 0
+                        page = target
+
+                        let velocity = -value.velocity.width / pageWidth
+                        withAnimation(
+                            .interpolatingSpring(mass: 1.0, stiffness: 130, damping: 16, initialVelocity: Double(velocity))
+                        ) {
+                            liveProgress = CGFloat(target)
+                        }
+                    }
+            )
+    }
+
+    private func clampPage(_ p: Int) -> Int {
+        min(max(p, 0), pageCount - 1)
+    }
+
+    // MARK: - Shared offset math
+
+    /// The single source of truth for both modes.
+    /// offset = progress (in page units) * depth * pageWidth, negated so that
+    /// increasing progress moves the world left (camera moves right).
+    private func layerOffset(depth: CGFloat, progress: CGFloat, pageWidth: CGFloat) -> CGFloat {
+        -progress * depth * pageWidth
+    }
+
+    /// Width each layer must be drawn at so no edge ever reveals blank, including
+    /// the foreground (depth ~1.0) translating a full pageWidth per page across
+    /// all pages, plus headroom for the spring overshoot.
+    private func stripWidth(pageWidth: CGFloat) -> CGFloat {
+        let pages = CGFloat(pageCount)
+        let overshootMargin = pageWidth * 0.9
+        return pageWidth * pages + overshootMargin
+    }
+
+    // MARK: - The diorama (4 layers)
+
+    private func diorama(progress: CGFloat, size: CGSize) -> some View {
+        let w = size.width
+        let h = size.height
+        let strip = stripWidth(pageWidth: w)
+
+        // Depth factors: slow sky -> fast foreground.
+        let skyDepth: CGFloat = 0.10
+        let hillDepth: CGFloat = 0.32
+        let midDepth: CGFloat = 0.62
+        let fgDepth: CGFloat = 1.00
+
+        return ZStack {
+            skyLayer(strip: strip, height: h, progress: progress, pageWidth: w)
+                .offset(x: layerOffset(depth: skyDepth, progress: progress, pageWidth: w))
+
+            hillsLayer(strip: strip, height: h)
+                .offset(x: layerOffset(depth: hillDepth, progress: progress, pageWidth: w))
+
+            midgroundLayer(strip: strip, height: h, pageWidth: w)
+                .offset(x: layerOffset(depth: midDepth, progress: progress, pageWidth: w))
+
+            foregroundLayer(strip: strip, height: h)
+                .offset(x: layerOffset(depth: fgDepth, progress: progress, pageWidth: w))
+        }
+        .frame(width: w, height: h)
+    }
+
+    // MARK: Layer 1 — Sky (with travelling sun/moon detents)
+
+    private func skyLayer(strip: CGFloat, height: CGFloat, progress: CGFloat, pageWidth: CGFloat) -> some View {
+        // Blend the sky gradient across pages: dawn -> day -> dusk.
+        let frac = progress / CGFloat(max(pageCount - 1, 1))
+        let topColor = blendColor(
+            RGB(0.16, 0.21, 0.42),   // dawn indigo
+            RGB(0.36, 0.62, 0.92),   // day blue
+            RGB(0.45, 0.24, 0.40),   // dusk plum
+            t: frac
+        )
+        let bottomColor = blendColor(
+            RGB(0.55, 0.45, 0.58),
+            RGB(0.78, 0.88, 0.96),
+            RGB(0.95, 0.62, 0.46),
+            t: frac
+        )
+
+        return ZStack {
+            LinearGradient(
+                colors: [topColor, bottomColor],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            celestialBody(strip: strip, height: height, frac: frac)
+        }
+        .frame(width: strip, height: height)
+    }
+
+    private func celestialBody(strip: CGFloat, height: CGFloat, frac: CGFloat) -> some View {
+        // Sun arcs up and across the sky as we move through pages.
+        let cx = strip * (0.22 + 0.56 * frac)
+        let arc = CGFloat(sin(Double(frac) * .pi))   // 0 -> 1 -> 0
+        let cy = height * (0.42 - 0.20 * arc)
+        let r = max(height * 0.13, 14)
+        let warm = blendColor(
+            RGB(1.0, 0.93, 0.78),
+            RGB(1.0, 0.97, 0.86),
+            RGB(1.0, 0.78, 0.55),
+            t: frac
+        )
+        return Circle()
+            .fill(
+                RadialGradient(
+                    colors: [warm, warm.opacity(0.0)],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: r * 1.6
+                )
+            )
+            .frame(width: r * 2.2, height: r * 2.2)
+            .position(x: cx, y: cy)
+    }
+
+    // MARK: Layer 2 — Far hills
+
+    private func hillsLayer(strip: CGFloat, height: CGFloat) -> some View {
+        DepthDioramaView_HillsShape(baseline: 0.46, amplitude: 0.12, waves: 4.5, phase: 0.0)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.34, green: 0.45, blue: 0.55),
+                        Color(red: 0.22, green: 0.32, blue: 0.42)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: strip, height: height)
+    }
+
+    // MARK: Layer 3 — Midground hills with trees (props)
+
+    private func midgroundLayer(strip: CGFloat, height: CGFloat, pageWidth: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            DepthDioramaView_HillsShape(baseline: 0.62, amplitude: 0.16, waves: 3.0, phase: 1.3)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.20, green: 0.40, blue: 0.34),
+                            Color(red: 0.12, green: 0.28, blue: 0.24)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: strip, height: height)
+
+            // A few trees spaced along the strip — distinct props per "page".
+            ForEach(0..<7, id: \.self) { i in
+                let x = strip * (0.10 + 0.12 * CGFloat(i))
+                let baseY = height * (0.60 + 0.015 * CGFloat(i % 3))
+                tree(height: height * (0.16 + 0.03 * CGFloat(i % 2)))
+                    .position(x: x, y: baseY)
+            }
+        }
+        .frame(width: strip, height: height)
+    }
+
+    private func tree(height treeH: CGFloat) -> some View {
+        VStack(spacing: -treeH * 0.28) {
+            DepthDioramaView_Triangle()
+                .fill(Color(red: 0.10, green: 0.30, blue: 0.22))
+                .frame(width: treeH * 0.7, height: treeH * 0.7)
+            DepthDioramaView_Triangle()
+                .fill(Color(red: 0.13, green: 0.34, blue: 0.25))
+                .frame(width: treeH * 0.9, height: treeH * 0.8)
+        }
+    }
+
+    // MARK: Layer 4 — Foreground ground + grass tufts
+
+    private func foregroundLayer(strip: CGFloat, height: CGFloat) -> some View {
+        ZStack(alignment: .topLeading) {
+            DepthDioramaView_HillsShape(baseline: 0.86, amplitude: 0.06, waves: 5.0, phase: 0.4)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.16, green: 0.24, blue: 0.16),
+                            Color(red: 0.06, green: 0.12, blue: 0.08)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: strip, height: height)
+
+            ForEach(0..<14, id: \.self) { i in
+                let x = strip * (0.04 + 0.066 * CGFloat(i))
+                grassTuft(height: height * (0.10 + 0.04 * CGFloat(i % 3)))
+                    .position(x: x, y: height * (0.86 + 0.01 * CGFloat(i % 2)))
+            }
+        }
+        .frame(width: strip, height: height)
+    }
+
+    private func grassTuft(height tuftH: CGFloat) -> some View {
+        Capsule()
+            .fill(Color(red: 0.10, green: 0.20, blue: 0.12))
+            .frame(width: max(tuftH * 0.18, 2), height: tuftH)
+    }
+
+    // MARK: - Color blending helper (dawn -> day -> dusk)
+
+    /// A plain RGB triple so blending stays pure-Swift (no UIKit round-trip).
+    struct RGB {
+        var r: CGFloat
+        var g: CGFloat
+        var b: CGFloat
+        init(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) {
+            self.r = r
+            self.g = g
+            self.b = b
+        }
+        var color: Color {
+            Color(red: Double(r), green: Double(g), blue: Double(b))
+        }
+    }
+
+    private func blendColor(_ a: RGB, _ b: RGB, _ c: RGB, t: CGFloat) -> Color {
+        let tt = min(max(t, 0), 1)
+        if tt < 0.5 {
+            return mix(a, b, ratio: tt / 0.5).color
+        } else {
+            return mix(b, c, ratio: (tt - 0.5) / 0.5).color
+        }
+    }
+
+    private func mix(_ a: RGB, _ b: RGB, ratio: CGFloat) -> RGB {
+        let r = min(max(ratio, 0), 1)
+        return RGB(
+            a.r + (b.r - a.r) * r,
+            a.g + (b.g - a.g) * r,
+            a.b + (b.b - a.b) * r
+        )
+    }
+}
+
+// MARK: - Shapes
+
+/// A rolling hills silhouette filling from a baseline to the bottom of the rect.
+private struct DepthDioramaView_HillsShape: Shape {
+    var baseline: CGFloat   // 0..1 fraction of height where the ridge sits
+    var amplitude: CGFloat  // 0..1 fraction of height of the wave swing
+    var waves: CGFloat      // number of wave humps across the width
+    var phase: CGFloat      // phase offset in radians
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width
+        let h = rect.height
+        let baseY = h * baseline
+        let amp = h * amplitude
+        let step: CGFloat = max(w / 80, 2)
+
+        path.move(to: CGPoint(x: 0, y: h))
+        var x: CGFloat = 0
+        while x <= w {
+            let theta = (x / w) * waves * 2 * .pi + phase
+            let y = baseY - CGFloat(sin(Double(theta))) * amp
+            path.addLine(to: CGPoint(x: x, y: y))
+            x += step
+        }
+        path.addLine(to: CGPoint(x: w, y: h))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// An upward-pointing triangle (tree canopy tier).
+private struct DepthDioramaView_Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+"""###,
+        "ob-ferrofluid-dots": ###"""
+import SwiftUI
+
+// MARK: - Ferrofluid Dots
+//
+// Page dots behave like magnetized ferrofluid: as a magnet (your finger, or
+// an auto-swept virtual one) passes between them, the nearest dots stretch
+// toward it and fuse into a gooey metaball bridge, then release and snap back
+// round.
+//
+// The gooey fusion is pure SwiftUI Canvas. GraphicsContext applies stacked
+// filters in REVERSE of the order they are added: the last-added filter hits
+// the content first. So adding `.alphaThreshold` first and `.blur` second
+// means the circles are blurred first, then alpha-thresholded — overlapping
+// blurred circles raise the local alpha above the threshold and weld into a
+// single crisp-edged blob. Classic metaball compositing, no Metal shader.
+// Canvas filters ship since iOS 15, so iOS 17 needs no availability guard.
+
+struct FerrofluidDotsView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            FerrofluidDotsView_FerrofluidStage(demo: demo, size: proxy.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Stage
+
+private struct FerrofluidDotsView_FerrofluidStage: View {
+    let demo: Bool
+    let size: CGSize
+
+    // Far-off-rail rest position so every dot relaxes fully round when the
+    // magnet is released (a finite on-rail value would leave the nearest dot
+    // permanently swollen). Distance is huge → Gaussian influence ~0.
+    private static let restX: CGFloat = -100_000
+
+    // Interactive magnet position. `nil` == magnet released → relax to rest.
+    @State private var dragMagnetX: CGFloat? = nil
+    // Eased magnet used while interactive so release springs smoothly.
+    @State private var relaxedMagnetX: CGFloat = FerrofluidDotsView_FerrofluidStage.restX
+
+    private var dotCount: Int { 5 }
+
+    var body: some View {
+        ZStack {
+            background
+            content
+        }
+        .contentShape(Rectangle())
+    }
+
+    @ViewBuilder
+    private var background: some View {
+        // Tint #120e18 — the tile backdrop the liquid sits on.
+        let bg = Color(red: 0.071, green: 0.055, blue: 0.094)
+        RadialGradient(
+            colors: [
+                Color(red: 0.12, green: 0.10, blue: 0.17),
+                bg
+            ],
+            center: .center,
+            startRadius: 0,
+            endRadius: max(size.width, size.height) * 0.75
+        )
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if demo {
+            demoCanvas
+        } else {
+            interactiveCanvas
+        }
+    }
+
+    // MARK: Demo — self-driving sine sweep of a virtual magnet
+
+    private var demoCanvas: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let magnetX = sweptMagnetX(time: t)
+            let pulse = demoPulse(time: t)
+            metaballCanvas(magnetX: magnetX, pull: pulse)
+        }
+        // Demo tile must not eat ScrollView pans — it never needs touches.
+        .allowsHitTesting(false)
+    }
+
+    /// Magnet x oscillating across the full dot rail on a ~2.4s loop.
+    private func sweptMagnetX(time: Double) -> CGFloat {
+        let inset = railInset(for: size)
+        let lo = inset
+        let hi = size.width - inset
+        let period: Double = 2.4
+        let phase = (time.truncatingRemainder(dividingBy: period)) / period
+        // Smooth ease-in-out triangle so it dwells at the ends.
+        let angle = phase * 2 * Double.pi - Double.pi / 2
+        let s = (sin(angle) + 1) / 2
+        return lo + (hi - lo) * CGFloat(s)
+    }
+
+    /// Breathe the pull strength a touch so merges feel alive, never frozen.
+    private func demoPulse(time: Double) -> CGFloat {
+        let v = (sin(time * 2.7) + 1) / 2
+        return 0.82 + 0.18 * CGFloat(v)
+    }
+
+    // MARK: Interactive — drag a real magnet, release springs home
+
+    private var interactiveCanvas: some View {
+        metaballCanvas(magnetX: activeMagnetX, pull: 1.0)
+            // Make the whole tile hittable so the drag wins inside a ScrollView.
+            .contentShape(Rectangle())
+            .gesture(dragGesture)
+    }
+
+    private var activeMagnetX: CGFloat {
+        dragMagnetX ?? relaxedMagnetX
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let clamped = clampToRail(value.location.x)
+                dragMagnetX = clamped
+                relaxedMagnetX = clamped
+            }
+            .onEnded { _ in
+                // Release: spring the magnet back to rest (off-rail), letting
+                // the bridged dots un-fuse and snap round.
+                dragMagnetX = nil
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.55)) {
+                    relaxedMagnetX = restMagnetX
+                }
+            }
+    }
+
+    private func clampToRail(_ x: CGFloat) -> CGFloat {
+        let inset = railInset(for: size)
+        return min(max(x, inset), size.width - inset)
+    }
+
+    /// Rest position parks the magnet far off-rail so every dot sits round.
+    private var restMagnetX: CGFloat { FerrofluidDotsView_FerrofluidStage.restX }
+
+    // MARK: Canvas
+
+    private func metaballCanvas(magnetX: CGFloat, pull: CGFloat) -> some View {
+        let metrics = FerrofluidDotsView_FerroMetrics(size: size, dotCount: dotCount)
+        let pts = centers(magnetX: magnetX, metrics: metrics, pull: pull)
+        let rs = radii(magnetX: magnetX, metrics: metrics, pull: pull)
+        return Canvas { context, _ in
+            drawMetaball(in: context, centers: pts, radii: rs, metrics: metrics)
+        }
+    }
+
+    private func drawMetaball(
+        in context: GraphicsContext,
+        centers: [CGPoint],
+        radii: [CGFloat],
+        metrics: FerrofluidDotsView_FerroMetrics
+    ) {
+        var ctx = context
+        let liquid = Color(red: 0.45, green: 0.62, blue: 1.0)
+
+        // Filter ADD order is reverse of APPLY order. Adding alphaThreshold
+        // first and blur second means circles get blurred FIRST, then hard-cut
+        // by the threshold — so overlapping soft edges weld into one crisp
+        // blob. drawLayer is mandatory — the per-circle alphas must composite
+        // inside an isolated layer to fuse.
+        ctx.addFilter(.alphaThreshold(min: 0.5, color: liquid))
+        ctx.addFilter(.blur(radius: metrics.blurRadius))
+
+        ctx.drawLayer { layer in
+            for (i, center) in centers.enumerated() where i < radii.count {
+                let r = radii[i]
+                let rect = CGRect(
+                    x: center.x - r,
+                    y: center.y - r,
+                    width: r * 2,
+                    height: r * 2
+                )
+                layer.fill(Path(ellipseIn: rect), with: .color(.white))
+            }
+        }
+
+        drawSpecular(in: context, centers: centers, radii: radii)
+    }
+
+    /// A tiny bright highlight on each dot for the wet, mercury sheen. Drawn
+    /// outside the threshold layer so it always reads, never disappears.
+    private func drawSpecular(
+        in context: GraphicsContext,
+        centers: [CGPoint],
+        radii: [CGFloat]
+    ) {
+        let sheen = Color(red: 0.85, green: 0.92, blue: 1.0)
+        for (i, center) in centers.enumerated() where i < radii.count {
+            let r = radii[i]
+            let hr = r * 0.34
+            let hx = center.x - r * 0.28
+            let hy = center.y - r * 0.30
+            let rect = CGRect(x: hx - hr, y: hy - hr, width: hr * 2, height: hr * 2)
+            context.fill(
+                Path(ellipseIn: rect),
+                with: .color(sheen.opacity(0.5))
+            )
+        }
+    }
+
+    // MARK: Physics (pure)
+
+    /// Dot centers eased toward the magnet by a distance falloff so the two
+    /// nearest dots lunge together and bridge.
+    private func centers(
+        magnetX: CGFloat,
+        metrics: FerrofluidDotsView_FerroMetrics,
+        pull: CGFloat
+    ) -> [CGPoint] {
+        let cy = size.height / 2
+        return (0..<metrics.dotCount).map { i in
+            let restX = metrics.slotX(i)
+            let dx = magnetX - restX
+            // Gaussian-ish falloff: dots near the magnet pull hard, far ones
+            // barely move.
+            let influence = gaussian(distance: dx, sigma: metrics.sigma)
+            let maxReach = metrics.spacing * 0.62
+            let shift = clampSign(dx) * min(abs(dx), maxReach) * influence * pull
+            return CGPoint(x: restX + shift, y: cy)
+        }
+    }
+
+    /// A dot swells slightly as it nears the magnet (gathered liquid).
+    private func radii(
+        magnetX: CGFloat,
+        metrics: FerrofluidDotsView_FerroMetrics,
+        pull: CGFloat
+    ) -> [CGFloat] {
+        return (0..<metrics.dotCount).map { i in
+            let restX = metrics.slotX(i)
+            let dx = magnetX - restX
+            let influence = gaussian(distance: dx, sigma: metrics.sigma)
+            let swell = metrics.dotRadius * 0.32 * influence * pull
+            return metrics.dotRadius + swell
+        }
+    }
+
+    private func gaussian(distance: CGFloat, sigma: CGFloat) -> CGFloat {
+        let denom = 2 * sigma * sigma
+        guard denom > 0 else { return 0 }
+        let exponent = -(distance * distance) / denom
+        return CGFloat(exp(Double(exponent)))
+    }
+
+    private func clampSign(_ v: CGFloat) -> CGFloat {
+        v == 0 ? 0 : (v > 0 ? 1 : -1)
+    }
+
+    private func railInset(for size: CGSize) -> CGFloat {
+        FerrofluidDotsView_FerroMetrics(size: size, dotCount: dotCount).railInset
+    }
+}
+
+// MARK: - Metrics
+
+/// All size-relative geometry in one place so the dots, blur and rail scale
+/// identically at a 120pt tile and a large detail area. Crucially the blur
+/// radius is tied to dot radius so an *isolated* (un-merged) dot's peak alpha
+/// stays above the threshold and never silently vanishes.
+private struct FerrofluidDotsView_FerroMetrics {
+    let size: CGSize
+    let dotCount: Int
+
+    /// Base dot radius, clamped so very small tiles stay legible.
+    var dotRadius: CGFloat {
+        let r = size.width * 0.045
+        return min(max(r, 4.0), 22.0)
+    }
+
+    /// Blur kept modest relative to the dot so a lone dot still composites
+    /// solidly past the 0.5 threshold. ~0.7× dotRadius is the sweet spot.
+    var blurRadius: CGFloat {
+        dotRadius * 0.7
+    }
+
+    /// Horizontal spacing between rail slots.
+    var spacing: CGFloat {
+        let usable = size.width - railInset * 2
+        return dotCount > 1 ? usable / CGFloat(dotCount - 1) : 0
+    }
+
+    /// Falloff width of the magnet's influence.
+    var sigma: CGFloat {
+        max(spacing * 0.62, 1)
+    }
+
+    var railInset: CGFloat {
+        max(size.width * 0.14, dotRadius * 1.6)
+    }
+
+    func slotX(_ i: Int) -> CGFloat {
+        railInset + spacing * CGFloat(i)
+    }
+}
+"""###,
+        "ob-odometer-dots": ###"""
+import SwiftUI
+
+// MARK: - Odometer Steps
+// A horizontal step counter whose current step is a mechanical split-flap tile
+// that flips "01" -> "02" digit-by-digit, while surrounding dots slide along a
+// rail and recolor. demo == true self-flips through the sequence on a loop;
+// demo == false is driven by a horizontal swipe.
+struct OdometerDotsView: View {
+    var demo: Bool = false
+
+    // Step model: indices 0...(stepCount-1). `position` is continuous so a value
+    // like 1.7 means "70% through the flip from step 1 -> step 2". This single
+    // source of truth feeds both the demo loop and the interactive drag.
+    private let stepCount: Int = 5
+
+    // Interactive state (only used when demo == false).
+    @State private var committed: Double = 0          // last settled integer step
+    @State private var dragPosition: Double = 0        // live position during/after drag
+
+    var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        if demo {
+            TimelineView(.animation) { timeline in
+                let pos = demoPosition(at: timeline.date)
+                board(position: pos, size: size)
+            }
+        } else {
+            board(position: dragPosition, size: size)
+                .contentShape(Rectangle())
+                .gesture(stepDrag(size: size))
+        }
+    }
+
+    // MARK: - Demo loop driver
+
+    // Advances one step per segment, always flipping FORWARD, and wraps the
+    // last -> first as a forward flip ("05" -> "01"). `position` stays in
+    // [0, stepCount); the displayed digit is modular so the wrap reads cleanly.
+    private func demoPosition(at date: Date) -> Double {
+        let flipDuration: Double = 0.62
+        let holdDuration: Double = 0.55
+        let segment = flipDuration + holdDuration
+        let cycle = segment * Double(stepCount)            // full pass then wrap
+        let t = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: cycle)
+        let index = Int(t / segment)                       // step we are leaving
+        let local = t - Double(index) * segment
+        let base = Double(index)
+        if local <= flipDuration {
+            let raw = local / flipDuration                 // 0...1 across the flip
+            return base + easeInOut(raw)                   // forward into base+1
+        }
+        // Hold: if we just flipped off the last step, snap to 0; else hold base+1.
+        return (index == stepCount - 1) ? 0 : base + 1
+    }
+
+    private func easeInOut(_ x: Double) -> Double {
+        x < 0.5 ? 2 * x * x : 1 - pow(-2 * x + 2, 2) / 2
+    }
+
+    // MARK: - Interactive drag
+
+    private func stepDrag(size: CGSize) -> some Gesture {
+        let tileW = tileWidth(for: size)
+        return DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                // Drag left = advance; map translation to fractional steps.
+                let delta = Double(-value.translation.width / max(tileW, 1))
+                let proposed = committed + delta
+                dragPosition = clampPosition(proposed)
+            }
+            .onEnded { value in
+                let delta = Double(-value.translation.width / max(tileW, 1))
+                let predicted = Double(-value.predictedEndTranslation.width / max(tileW, 1))
+                let proposed = committed + delta
+                let withFlick = committed + predicted
+                // Commit to the next/prev step if past the half-tile threshold or flicked.
+                var target = (proposed).rounded()
+                if abs(withFlick - committed) > 0.45 {
+                    target = (committed + (withFlick > committed ? 1 : -1)).rounded()
+                }
+                target = clampPosition(target).rounded()
+                committed = target
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.7)) {
+                    dragPosition = target
+                }
+            }
+    }
+
+    private func clampPosition(_ p: Double) -> Double {
+        min(max(p, 0), Double(stepCount - 1))
+    }
+
+    // MARK: - Board layout
+
+    @ViewBuilder
+    private func board(position: Double, size: CGSize) -> some View {
+        let tileH = tileHeight(for: size)
+        VStack(spacing: tileH * 0.22) {
+            splitFlapTile(position: position, size: size)
+            dotsRail(position: position, size: size)
+            label(position: position, size: size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(tileH * 0.18)
+    }
+
+    private func tileHeight(for size: CGSize) -> CGFloat {
+        let byHeight = size.height * 0.46
+        let byWidth = size.width * 0.40
+        return max(28, min(byHeight, byWidth))
+    }
+
+    private func tileWidth(for size: CGSize) -> CGFloat {
+        tileHeight(for: size) * 0.74
+    }
+
+    // MARK: - Split-flap tile
+
+    @ViewBuilder
+    private func splitFlapTile(position: Double, size: CGSize) -> some View {
+        let tileH = tileHeight(for: size)
+        let tileW = tileWidth(for: size)
+        let fromIndex = Int(floor(position))
+        let p = position - floor(position)            // 0...1 fractional flip
+        // `to` is the digit appearing. When p == 0 there is no flip in progress.
+        let toIndex = min(fromIndex + 1, stepCount)
+        let fromDigit = stepLabel(for: fromIndex)
+        let toDigit = stepLabel(for: toIndex)
+
+        ZStack {
+            // Back layers: always show a settled, legible half so the tile is
+            // never blank on any frame. The top back layer shows the NEW digit
+            // (revealed only after the front top flap falls away in the 1st
+            // half); the bottom back layer shows the OLD digit until the landing
+            // flap covers it in the 2nd half.
+            VStack(spacing: 0) {
+                staticHalf(digit: toDigit, edge: .top,
+                           tileW: tileW, tileH: tileH)
+                staticHalf(digit: fromDigit, edge: .bottom,
+                           tileW: tileW, tileH: tileH)
+            }
+            // Falling front flaps that animate the mechanical flip.
+            frontFlaps(p: p, fromDigit: fromDigit, toDigit: toDigit,
+                       tileW: tileW, tileH: tileH)
+            // Center seam line.
+            Rectangle()
+                .fill(Color(red: 0.05, green: 0.05, blue: 0.07))
+                .frame(width: tileW, height: max(1, tileH * 0.012))
+        }
+        .frame(width: tileW, height: tileH)
+        .shadow(color: Color.black.opacity(0.35), radius: tileH * 0.06, y: tileH * 0.04)
+    }
+
+    @ViewBuilder
+    private func frontFlaps(p: CGFloat, fromDigit: String, toDigit: String,
+                            tileW: CGFloat, tileH: CGFloat) -> some View {
+        // Top flap: the old digit's TOP half rotates down and away (0 -> -90).
+        let topAngle: Double = p < 0.5 ? Double(-90 * (p / 0.5)) : -90
+        // Bottom flap: the new digit's BOTTOM half rises into place (90 -> 0)
+        // with a slight overshoot into the seam for that mechanical snap.
+        let bottomRaw: CGFloat = p < 0.5 ? 1 : (1 - (p - 0.5) / 0.5)   // 1 -> 0 in 2nd half
+        let bottomAngle: Double = Double(90 * bottomRaw) + overshoot(p)
+
+        // A VStack (not ZStack) so each flap occupies its true half: the top
+        // flap sits in [0, tileH/2] and `anchor: .bottom` pivots exactly on the
+        // seam; the bottom flap sits in [tileH/2, tileH] and `anchor: .top`
+        // pivots on the seam — matching the back layers' VStack exactly.
+        VStack(spacing: 0) {
+            // Old top half falling away.
+            halfFace(digit: fromDigit, edge: .top, tileW: tileW, tileH: tileH,
+                     shade: 0.10 + 0.30 * min(1, CGFloat(-topAngle) / 90))
+                .rotation3DEffect(.degrees(topAngle),
+                                  axis: (x: 1, y: 0, z: 0),
+                                  anchor: .bottom, perspective: 0.45)
+                .opacity(p < 0.5 ? 1 : 0)
+
+            // New bottom half snapping up.
+            halfFace(digit: toDigit, edge: .bottom, tileW: tileW, tileH: tileH,
+                     shade: 0.10 + 0.30 * min(1, bottomRaw))
+                .rotation3DEffect(.degrees(bottomAngle),
+                                  axis: (x: 1, y: 0, z: 0),
+                                  anchor: .top, perspective: 0.45)
+                .opacity(p < 0.5 ? 0 : 1)
+        }
+        .frame(width: tileW, height: tileH)
+    }
+
+    // A small spring-like overshoot as the bottom flap lands (only near p ~ 1).
+    // `phase` is pinned to Double so the exp()/sin() calls below are unambiguous.
+    private func overshoot(_ p: CGFloat) -> Double {
+        guard p > 0.82 else { return 0 }
+        let phase: Double = Double((p - 0.82) / 0.18)       // 0...1 over the landing
+        let decay: Double = exp(-3.4 * phase)
+        return -7 * decay * sin(phase * Double.pi * 2.2)    // tiny wobble past 0
+    }
+
+    // MARK: - Tile halves
+
+    enum HalfEdge { case top, bottom }
+
+    // A static (non-rotating) half used in the back layers.
+    @ViewBuilder
+    private func staticHalf(digit: String, edge: HalfEdge,
+                            tileW: CGFloat, tileH: CGFloat) -> some View {
+        halfFace(digit: digit, edge: edge, tileW: tileW, tileH: tileH,
+                 shade: edge == .top ? 0.0 : 0.06)
+    }
+
+    // Renders one half of a tile: the full glyph is laid out at full tile height,
+    // then clipped to the top or bottom half so the seam aligns perfectly.
+    @ViewBuilder
+    private func halfFace(digit: String, edge: HalfEdge,
+                          tileW: CGFloat, tileH: CGFloat, shade: CGFloat) -> some View {
+        let alignment: Alignment = edge == .top ? .top : .bottom
+        let corners = roundedHalf(edge: edge, radius: tileH * 0.14)
+        ZStack {
+            corners
+                .fill(tileGradient(shade: shade))
+            digitText(digit, tileH: tileH)
+                .frame(width: tileW, height: tileH)
+                .frame(width: tileW, height: tileH / 2, alignment: alignment)
+                .clipped()
+        }
+        .frame(width: tileW, height: tileH / 2)
+        .clipShape(corners)
+        .overlay(
+            corners.stroke(Color(red: 0.0, green: 0.0, blue: 0.0).opacity(0.25),
+                           lineWidth: 0.5)
+        )
+    }
+
+    private func tileGradient(shade: CGFloat) -> LinearGradient {
+        let base = 0.16
+        return LinearGradient(
+            colors: [
+                Color(red: base + 0.05, green: base + 0.06, blue: base + 0.09),
+                Color(red: max(0, base - Double(shade)),
+                      green: max(0, base + 0.01 - Double(shade)),
+                      blue: max(0, base + 0.04 - Double(shade)))
+            ],
+            startPoint: .top, endPoint: .bottom)
+    }
+
+    private func roundedHalf(edge: HalfEdge, radius: CGFloat) -> UnevenRoundedRectangle {
+        switch edge {
+        case .top:
+            return UnevenRoundedRectangle(topLeadingRadius: radius,
+                                          bottomLeadingRadius: 0,
+                                          bottomTrailingRadius: 0,
+                                          topTrailingRadius: radius)
+        case .bottom:
+            return UnevenRoundedRectangle(topLeadingRadius: 0,
+                                          bottomLeadingRadius: radius,
+                                          bottomTrailingRadius: radius,
+                                          topTrailingRadius: 0)
+        }
+    }
+
+    @ViewBuilder
+    private func digitText(_ value: String, tileH: CGFloat) -> some View {
+        Text(value)
+            .font(.system(size: tileH * 0.62, weight: .bold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(
+                LinearGradient(colors: [
+                    Color(red: 0.98, green: 0.97, blue: 0.94),
+                    Color(red: 0.82, green: 0.83, blue: 0.88)
+                ], startPoint: .top, endPoint: .bottom)
+            )
+            .minimumScaleFactor(0.4)
+            .lineLimit(1)
+    }
+
+    // MARK: - Dots rail
+
+    @ViewBuilder
+    private func dotsRail(position: Double, size: CGSize) -> some View {
+        let tileH = tileHeight(for: size)
+        let dot = max(6, tileH * 0.16)
+        let spacing = dot * 1.6
+        let active = position
+        ZStack {
+            Capsule()
+                .fill(Color(red: 0.16, green: 0.15, blue: 0.20))
+                .frame(height: max(3, dot * 0.42))
+            HStack(spacing: spacing) {
+                ForEach(0..<stepCount, id: \.self) { i in
+                    dotView(index: i, active: active, dot: dot)
+                }
+            }
+        }
+        .frame(height: dot * 1.6)
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func dotView(index i: Int, active: Double, dot: CGFloat) -> some View {
+        let distance = abs(Double(i) - active)
+        let nearness = max(0, 1 - distance)                // 1 at the active step
+        let scale = 1.0 + 0.65 * nearness
+        let on = Color(red: 0.55, green: 0.42, blue: 0.95)
+        let fill = blendActive(t: CGFloat(nearness))
+        Circle()
+            .fill(fill)
+            .frame(width: dot, height: dot)
+            .scaleEffect(scale)
+            .overlay(
+                Circle()
+                    .stroke(on.opacity(nearness), lineWidth: dot * 0.12)
+                    .scaleEffect(scale + CGFloat(nearness) * 0.5)
+                    .opacity(nearness * 0.6)
+            )
+            .shadow(color: on.opacity(nearness * 0.7),
+                    radius: dot * 0.5 * CGFloat(nearness))
+    }
+
+    // Interpolates the dot fill between the inactive grey and the active violet
+    // using known literal components (no UIColor round-trip, fully SwiftUI).
+    private func blendActive(t: CGFloat) -> Color {
+        let off: (Double, Double, Double) = (0.34, 0.33, 0.42)
+        let on: (Double, Double, Double) = (0.55, 0.42, 0.95)
+        let k = Double(min(max(t, 0), 1))
+        return Color(red: off.0 + (on.0 - off.0) * k,
+                     green: off.1 + (on.1 - off.1) * k,
+                     blue: off.2 + (on.2 - off.2) * k)
+    }
+
+    // MARK: - Caption label
+
+    @ViewBuilder
+    private func label(position: Double, size: CGSize) -> some View {
+        let tileH = tileHeight(for: size)
+        // Modular so the wrap segment (position ~ stepCount) reads "1" not "6".
+        let current = (Int(position.rounded()) % stepCount) + 1
+        HStack(spacing: 4) {
+            Text("STEP")
+                .font(.system(size: tileH * 0.16, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color(red: 0.62, green: 0.60, blue: 0.70))
+            Text("\(current)")
+                .font(.system(size: tileH * 0.18, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(red: 0.86, green: 0.84, blue: 0.94))
+                .contentTransition(.numericText())
+                .animation(.easeInOut(duration: 0.3), value: current)
+            Text("OF \(stepCount)")
+                .font(.system(size: tileH * 0.16, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color(red: 0.62, green: 0.60, blue: 0.70))
+        }
+        .tracking(1.2)
+        .minimumScaleFactor(0.5)
+        .lineLimit(1)
+    }
+
+    // MARK: - Helpers
+
+    // Two-digit zero-padded label for a step index (0 -> "01").
+    private func stepLabel(for index: Int) -> String {
+        let n = (index % stepCount) + 1
+        return String(format: "%02d", n)
+    }
+}
+"""###,
+        "ob-origami-hero": ###"""
+import SwiftUI
+
+/// Origami Hero Unfold
+///
+/// A folded paper hero that unfolds crease-by-crease. A ring of triangular
+/// petals all hinge around one shared center point (so creases never separate),
+/// rotating from a collapsed, viewer-facing folded triangle (`fold == 1`) into a
+/// fully spread, flat figure (`fold == 0`). Each petal carries a LinearGradient
+/// fold-shadow whose opacity tracks its crease angle.
+///
+/// - `demo == true`  : self-driving breathing loop that gently folds / unfolds
+///                     with a per-petal stagger so creases open in sequence.
+/// - `demo == false` : a horizontal drag scrubs the master fold parameter; on
+///                     release it snaps folded / unfolded and, when unfolded,
+///                     swaps in the next figure (different petal count + palette).
+struct OrigamiHeroView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let side: CGFloat = min(geo.size.width, geo.size.height)
+            ZStack {
+                paperBackground
+                if demo {
+                    demoContent(side: side)
+                } else {
+                    OrigamiHeroView_InteractiveOrigami(side: side)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Background
+
+    private var paperBackground: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.07, green: 0.055, blue: 0.10),
+                Color(red: 0.12, green: 0.10, blue: 0.16)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+
+    // MARK: Demo (self-driving)
+
+    private func demoContent(side: CGFloat) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            // ~3.4s breathing loop, eased so the holds at each extreme feel paper-like.
+            let phase = (sin(t * (2.0 * .pi / 3.4)) + 1.0) / 2.0
+            let eased = OrigamiHeroView_OrigamiMath.easeInOut(phase)
+            // Demo also drifts the figure slowly so the hero looks varied over time.
+            let figure = Int((t / 6.8).truncatingRemainder(dividingBy: 3.0))
+            OrigamiHeroView_OrigamiFigure(fold: eased, figureIndex: figure, side: side, staggered: true)
+        }
+    }
+}
+
+// MARK: - Interactive wrapper
+
+private struct OrigamiHeroView_InteractiveOrigami: View {
+    let side: CGFloat
+
+    @State private var fold: Double = 1.0          // start folded (triangle)
+    @State private var dragStart: Double? = nil
+    @State private var figureIndex: Int = 0
+
+    var body: some View {
+        OrigamiHeroView_OrigamiFigure(fold: fold, figureIndex: figureIndex, side: side, staggered: false)
+            .contentShape(Rectangle())
+            .gesture(dragGesture)
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if dragStart == nil { dragStart = fold }
+                let base = dragStart ?? fold
+                // Drag right → unfold (toward 0); drag left → fold (toward 1).
+                let delta = -value.translation.width / max(side, 1.0)
+                fold = OrigamiHeroView_OrigamiMath.clamp(base + delta, 0.0, 1.0)
+            }
+            .onEnded { value in
+                let predicted = -value.predictedEndTranslation.width / max(side, 1.0)
+                let base = dragStart ?? fold
+                let projected = OrigamiHeroView_OrigamiMath.clamp(base + predicted, 0.0, 1.0)
+                dragStart = nil
+                let target: Double = projected < 0.5 ? 0.0 : 1.0
+                // Key the swap on the fold value where this gesture *began*, so a
+                // slow, deliberate unfold still advances to the next figure.
+                let wasFolded = base > 0.5
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.74)) {
+                    fold = target
+                    // Committing to fully unfolded reveals the next figure.
+                    if target == 0.0 && wasFolded {
+                        figureIndex = (figureIndex + 1) % 3
+                    }
+                }
+            }
+    }
+}
+
+// MARK: - The figure (a ring of hinged petals + center medallion)
+
+private struct OrigamiHeroView_OrigamiFigure: View {
+    let fold: Double            // 1 = folded triangle, 0 = flat spread
+    let figureIndex: Int
+    let side: CGFloat
+    let staggered: Bool
+
+    private var config: OrigamiHeroView_FigureConfig { OrigamiHeroView_FigureConfig.all[figureIndex % OrigamiHeroView_FigureConfig.all.count] }
+
+    var body: some View {
+        let petalCount = config.petalCount
+        ZStack {
+            // Soft contact shadow on the "paper" beneath the spread figure.
+            groundShadow
+
+            ForEach(0..<petalCount, id: \.self) { index in
+                petal(index: index, count: petalCount)
+            }
+
+            centerMedallion
+        }
+        .frame(width: side, height: side)
+        // Slight overall lift toward the viewer when folded, like paper held up.
+        .scaleEffect(1.0 - 0.06 * fold)
+    }
+
+    // MARK: Ground shadow
+
+    private var groundShadow: some View {
+        // Fades in as the figure spreads flat onto the page.
+        Ellipse()
+            .fill(Color.black.opacity(0.28 * (1.0 - fold)))
+            .frame(width: side * 0.78, height: side * 0.30)
+            .blur(radius: 18)
+            .offset(y: side * 0.30)
+    }
+
+    // MARK: A single hinged petal
+
+    @ViewBuilder
+    private func petal(index: Int, count: Int) -> some View {
+        let localFold = staggeredFold(index: index, count: count)
+        // When spread, each petal points outward at its own angle (the flat figure).
+        let spreadAngle: Double = (Double(index) / Double(count)) * 360.0 + config.spreadRotation
+        // When folded, all petals collapse onto a single direction → triangle stack.
+        let foldedAngle: Double = config.foldedRotation
+        let planarAngle: Double = OrigamiHeroView_OrigamiMath.lerp(spreadAngle, foldedAngle, localFold)
+
+        // The crease lift: petals tip up out of the page toward the viewer as they fold.
+        let creaseAngle: Double = localFold * 74.0
+
+        OrigamiHeroView_PetalShape()
+            .fill(petalGradient(index: index, count: count))
+            .overlay(foldShadowOverlay(localFold: localFold))
+            .overlay(creaseHighlight(localFold: localFold))
+            .frame(width: side * 0.5, height: side * 0.5)
+            // Anchor the petal base at the shared center of the frame.
+            .offset(x: 0, y: -side * 0.25)
+            // Hinge the crease lift around the petal base (its bottom edge = center).
+            .rotation3DEffect(
+                .degrees(creaseAngle),
+                axis: (x: 1.0, y: 0.0, z: 0.0),
+                anchor: .bottom,
+                perspective: 0.6
+            )
+            // Rotate the whole petal around the shared center so creases stay joined.
+            .rotationEffect(.degrees(planarAngle), anchor: .center)
+            .zIndex(localFold)   // folded petals sit forward
+    }
+
+    // Per-petal staggered unfolding for the demo's sequential crease feel.
+    private func staggeredFold(index: Int, count: Int) -> Double {
+        guard staggered else { return fold }
+        let spread = 0.22
+        let center = Double(index) / Double(max(count - 1, 1))
+        // Shift each petal's effective fold slightly so creases open in order.
+        let shifted = fold + (center - 0.5) * spread
+        return OrigamiHeroView_OrigamiMath.clamp(shifted, 0.0, 1.0)
+    }
+
+    // MARK: Petal fills & shading
+
+    private func petalGradient(index: Int, count: Int) -> LinearGradient {
+        let pair = config.palette[index % config.palette.count]
+        return LinearGradient(
+            colors: [pair.0, pair.1],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    // Darkening fold-shadow that deepens as the crease lifts (tracks localFold).
+    private func foldShadowOverlay(localFold: Double) -> some View {
+        OrigamiHeroView_PetalShape()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(0.0),
+                        Color.black.opacity(0.45)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .opacity(localFold)
+    }
+
+    // A thin lit edge along the crease to sell the paper fold.
+    private func creaseHighlight(localFold: Double) -> some View {
+        OrigamiHeroView_PetalShape()
+            .stroke(
+                Color(red: 1.0, green: 0.97, blue: 0.90).opacity(0.35 * localFold),
+                lineWidth: 1.0
+            )
+    }
+
+    // MARK: Center medallion
+
+    private var centerMedallion: some View {
+        let size = side * 0.16
+        return Circle()
+            .fill(
+                RadialGradient(
+                    colors: [config.coreInner, config.coreOuter],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: size
+                )
+            )
+            .frame(width: size, height: size)
+            .overlay(
+                Circle().stroke(Color.white.opacity(0.18), lineWidth: 1.0)
+            )
+            // Shrinks a touch when folded so the triangle silhouette reads cleanly.
+            .scaleEffect(0.7 + 0.3 * (1.0 - fold))
+            .shadow(color: .black.opacity(0.35 * (1.0 - fold)), radius: 6, y: 3)
+    }
+}
+
+// MARK: - Petal shape (an isosceles triangle hinging on its base)
+
+private struct OrigamiHeroView_PetalShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let tip = CGPoint(x: rect.midX, y: rect.minY)
+        let baseLeft = CGPoint(x: rect.midX - rect.width * 0.32, y: rect.maxY)
+        let baseRight = CGPoint(x: rect.midX + rect.width * 0.32, y: rect.maxY)
+        p.move(to: tip)
+        p.addLine(to: baseRight)
+        p.addLine(to: baseLeft)
+        p.closeSubpath()
+        return p
+    }
+}
+
+// MARK: - Figure configuration (cheap variants for "next shape")
+
+private struct OrigamiHeroView_FigureConfig {
+    let petalCount: Int
+    let palette: [(Color, Color)]
+    let coreInner: Color
+    let coreOuter: Color
+    let spreadRotation: Double
+    let foldedRotation: Double
+
+    static let all: [OrigamiHeroView_FigureConfig] = [
+        // Figure 0 — warm lotus
+        OrigamiHeroView_FigureConfig(
+            petalCount: 6,
+            palette: [
+                (Color(red: 0.98, green: 0.55, blue: 0.42), Color(red: 0.85, green: 0.30, blue: 0.42)),
+                (Color(red: 0.99, green: 0.72, blue: 0.46), Color(red: 0.90, green: 0.42, blue: 0.40))
+            ],
+            coreInner: Color(red: 1.0, green: 0.90, blue: 0.66),
+            coreOuter: Color(red: 0.92, green: 0.50, blue: 0.36),
+            spreadRotation: 0.0,
+            foldedRotation: 18.0
+        ),
+        // Figure 1 — cool star
+        OrigamiHeroView_FigureConfig(
+            petalCount: 5,
+            palette: [
+                (Color(red: 0.52, green: 0.78, blue: 0.98), Color(red: 0.32, green: 0.46, blue: 0.86)),
+                (Color(red: 0.66, green: 0.86, blue: 0.99), Color(red: 0.40, green: 0.58, blue: 0.92))
+            ],
+            coreInner: Color(red: 0.86, green: 0.95, blue: 1.0),
+            coreOuter: Color(red: 0.40, green: 0.56, blue: 0.92),
+            spreadRotation: -90.0,
+            foldedRotation: -30.0
+        ),
+        // Figure 2 — verdant bloom
+        OrigamiHeroView_FigureConfig(
+            petalCount: 8,
+            palette: [
+                (Color(red: 0.62, green: 0.90, blue: 0.62), Color(red: 0.26, green: 0.66, blue: 0.50)),
+                (Color(red: 0.78, green: 0.94, blue: 0.58), Color(red: 0.40, green: 0.74, blue: 0.46))
+            ],
+            coreInner: Color(red: 0.96, green: 1.0, blue: 0.82),
+            coreOuter: Color(red: 0.34, green: 0.68, blue: 0.46),
+            spreadRotation: 22.5,
+            foldedRotation: 12.0
+        )
+    ]
+}
+
+// MARK: - Math helpers
+
+private enum OrigamiHeroView_OrigamiMath {
+    static func clamp(_ v: Double, _ lo: Double, _ hi: Double) -> Double {
+        min(max(v, lo), hi)
+    }
+
+    static func lerp(_ a: Double, _ b: Double, _ t: Double) -> Double {
+        a + (b - a) * t
+    }
+
+    static func easeInOut(_ t: Double) -> Double {
+        // smootherstep, gives gentle holds at the extremes
+        let x = clamp(t, 0.0, 1.0)
+        return x * x * x * (x * (x * 6.0 - 15.0) + 10.0)
+    }
+}
+"""###,
+        "ob-paper-popup": ###"""
+import SwiftUI
+
+/// Pop-Up Book — flat shape-drawn scenery hinges upward off the center spine using
+/// 3D rotation so the illustration physically pops up from the fold, while the
+/// previous page folds back down.
+///
+/// - `demo == true`  → a self-driving TimelineView loop that turns pages on a timer.
+/// - `demo == false` → an interactive horizontal drag that scrubs the page turn and
+///   commits / springs back on release.
+struct PaperPopupView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            ZStack {
+                PaperPopupView_BookBackground()
+                if demo {
+                    PaperPopupView_DemoStage(size: size)
+                } else {
+                    PaperPopupView_InteractiveStage(size: size)
+                }
+            }
+            .frame(width: size.width, height: size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Page model
+
+/// A small palette describing one pop-up spread. Three distinct scenes so the
+/// page-turn visibly swaps content.
+private struct PaperPopupView_PopupScene {
+    let sky: (Color, Color)
+    let ground: Color
+    let accent: Color
+    let kind: PaperPopupView_SceneKind
+}
+
+private enum PaperPopupView_SceneKind {
+    case meadow      // house + trees + sun
+    case mountains   // peaks + moon
+    case city        // skyline + stars
+}
+
+private enum PaperPopupView_PopupScenes {
+    static let all: [PaperPopupView_PopupScene] = [
+        PaperPopupView_PopupScene(
+            sky: (Color(red: 0.42, green: 0.66, blue: 0.92),
+                  Color(red: 0.83, green: 0.90, blue: 0.98)),
+            ground: Color(red: 0.46, green: 0.72, blue: 0.42),
+            accent: Color(red: 0.98, green: 0.82, blue: 0.32),
+            kind: .meadow
+        ),
+        PaperPopupView_PopupScene(
+            sky: (Color(red: 0.18, green: 0.22, blue: 0.40),
+                  Color(red: 0.45, green: 0.40, blue: 0.62)),
+            ground: Color(red: 0.34, green: 0.40, blue: 0.55),
+            accent: Color(red: 0.95, green: 0.94, blue: 0.86),
+            kind: .mountains
+        ),
+        PaperPopupView_PopupScene(
+            sky: (Color(red: 0.10, green: 0.13, blue: 0.27),
+                  Color(red: 0.30, green: 0.20, blue: 0.42)),
+            ground: Color(red: 0.16, green: 0.18, blue: 0.30),
+            accent: Color(red: 0.99, green: 0.74, blue: 0.42),
+            kind: .city
+        )
+    ]
+
+    static func scene(_ index: Int) -> PaperPopupView_PopupScene {
+        all[((index % all.count) + all.count) % all.count]
+    }
+}
+
+// MARK: - Persistent backdrop (never hinges, always legible)
+
+private struct PaperPopupView_BookBackground: View {
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            ZStack {
+                LinearGradient(
+                    colors: [Color(red: 0.20, green: 0.16, blue: 0.24),
+                             Color(red: 0.09, green: 0.07, blue: 0.12)],
+                    startPoint: .top, endPoint: .bottom
+                )
+                openBook(width: w, height: h)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    /// The open book base spread: two warm paper pages meeting at a shadowed spine.
+    private func openBook(width w: CGFloat, height h: CGFloat) -> some View {
+        let pageTop = h * 0.18
+        let pageH = h * 0.66
+        let pageW = w * 0.88
+        let x = (w - pageW) / 2
+        return ZStack {
+            RoundedRectangle(cornerRadius: h * 0.04, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [Color(red: 0.98, green: 0.96, blue: 0.90),
+                                 Color(red: 0.92, green: 0.88, blue: 0.79)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+                .frame(width: pageW, height: pageH)
+                .position(x: w / 2, y: pageTop + pageH / 2)
+                .shadow(color: .black.opacity(0.35), radius: h * 0.03, y: h * 0.012)
+
+            // Spine shadow down the center fold.
+            LinearGradient(
+                colors: [Color.black.opacity(0.0),
+                         Color.black.opacity(0.22),
+                         Color.black.opacity(0.0)],
+                startPoint: .leading, endPoint: .trailing
+            )
+            .frame(width: w * 0.10, height: pageH)
+            .position(x: w / 2, y: pageTop + pageH / 2)
+            .blur(radius: w * 0.012)
+
+            // Page lines suggesting paper.
+            ForEach(0..<2, id: \.self) { side in
+                ruleLines(width: pageW / 2 - x * 0.4)
+                    .frame(width: pageW / 2 - x * 0.4, height: pageH * 0.5)
+                    .position(
+                        x: side == 0 ? w * 0.30 : w * 0.70,
+                        y: pageTop + pageH * 0.72
+                    )
+            }
+        }
+    }
+
+    private func ruleLines(width: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            ForEach(0..<4, id: \.self) { _ in
+                Capsule()
+                    .fill(Color(red: 0.62, green: 0.55, blue: 0.45).opacity(0.30))
+                    .frame(height: 2)
+            }
+        }
+    }
+}
+
+// MARK: - Angle mapping shared by both drivers
+
+/// Maps a continuous turn progress `p` (0 = page settled flat & standing,
+/// 1 = fully turned to the next page) to hinge angles for the incoming and
+/// outgoing pop-up layers.
+///
+/// At rest the *current* scene stands up at 0° (facing the viewer). As the page
+/// turns the current scene lays back toward -90° while the next scene rises from
+/// 90° to 0°.
+private func hingeAngles(for p: Double) -> (incoming: Double, outgoing: Double) {
+    let clamped = min(max(p, 0), 1)
+    let eased = smoothstep(clamped)
+    let outgoing: Double = -90.0 * eased        // 0 → -90 (lays flat away)
+    let incoming: Double = 90.0 * (1.0 - eased) // 90 → 0  (stands up)
+    return (incoming, outgoing)
+}
+
+private func smoothstep(_ x: Double) -> Double {
+    x * x * (3.0 - 2.0 * x)
+}
+
+// MARK: - Demo (self-driving)
+
+private struct PaperPopupView_DemoStage: View {
+    let size: CGSize
+    private let period: Double = 3.4
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let phase = t.truncatingRemainder(dividingBy: period) / period
+            let pageIndex = Int(t / period)
+
+            // Hold flat ~55% of the loop, turn the page over the remaining ~45%.
+            let progress = turnProgress(phase)
+
+            PaperPopupView_PopupSpread(
+                size: size,
+                progress: progress,
+                outgoingIndex: pageIndex,
+                incomingIndex: pageIndex + 1
+            )
+        }
+    }
+
+    private func turnProgress(_ phase: Double) -> Double {
+        let hold = 0.55
+        if phase < hold { return 0 }
+        return (phase - hold) / (1.0 - hold)
+    }
+}
+
+// MARK: - Interactive (drag-scrubbed)
+
+private struct PaperPopupView_InteractiveStage: View {
+    let size: CGSize
+
+    @State private var pageIndex: Int = 0
+    @State private var dragProgress: Double = 0   // live scrub 0…1
+    @State private var settleProgress: Double = 0 // animated commit/return
+
+    var body: some View {
+        let active = max(dragProgress, settleProgress)
+        PaperPopupView_PopupSpread(
+            size: size,
+            progress: active,
+            outgoingIndex: pageIndex,
+            incomingIndex: pageIndex + 1
+        )
+        .contentShape(Rectangle())
+        .gesture(turnGesture)
+    }
+
+    private var turnGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                // Dragging left advances the page; clamp 0…1.
+                let raw = -value.translation.width / max(size.width * 0.7, 1)
+                dragProgress = min(max(raw, 0), 1)
+            }
+            .onEnded { value in
+                let predicted = -value.predictedEndTranslation.width / max(size.width * 0.7, 1)
+                let shouldCommit = dragProgress > 0.5 || predicted > 0.85
+                if shouldCommit {
+                    withAnimation(.spring(response: 0.55, dampingFraction: 0.72)) {
+                        settleProgress = 1
+                    }
+                    // Advance after the fold completes, then reset the scrub state.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
+                        pageIndex += 1
+                        dragProgress = 0
+                        settleProgress = 0
+                    }
+                } else {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                        dragProgress = 0
+                        settleProgress = 0
+                    }
+                }
+            }
+    }
+}
+
+// MARK: - The spread: two hinged scenery layers sharing the spine
+
+private struct PaperPopupView_PopupSpread: View {
+    let size: CGSize
+    let progress: Double
+    let outgoingIndex: Int
+    let incomingIndex: Int
+
+    var body: some View {
+        let angles = hingeAngles(for: progress)
+        // Spine line: the hinge sits a bit below center so scenery stands above it.
+        let spineY = size.height * 0.74
+        let stageH = size.height * 0.52
+        let stageW = size.width * 0.80
+
+        ZStack {
+            // Outgoing scene — folds DOWN/back as the page turns.
+            PaperPopupView_PopupLayer(
+                scene: PaperPopupView_PopupScenes.scene(outgoingIndex),
+                angle: angles.outgoing,
+                stageW: stageW,
+                stageH: stageH
+            )
+            .position(x: size.width / 2, y: spineY)
+            .zIndex(zForAngle(angles.outgoing))
+
+            // Incoming scene — stands UP from the fold to face the viewer.
+            PaperPopupView_PopupLayer(
+                scene: PaperPopupView_PopupScenes.scene(incomingIndex),
+                angle: angles.incoming,
+                stageW: stageW,
+                stageH: stageH
+            )
+            .position(x: size.width / 2, y: spineY)
+            .zIndex(zForAngle(angles.incoming))
+        }
+    }
+
+    /// A layer that is more upright (angle nearer 0) should sit on top.
+    private func zForAngle(_ angle: Double) -> Double {
+        // 0° → high, ±90° → low.
+        2.0 - abs(angle) / 90.0
+    }
+}
+
+/// One scenery layer: its hinge edge coincides with the spread's spine, pivoting
+/// about its bottom edge with perspective so it pops up off the page.
+private struct PaperPopupView_PopupLayer: View {
+    let scene: PaperPopupView_PopupScene
+    let angle: Double
+    let stageW: CGFloat
+    let stageH: CGFloat
+
+    var body: some View {
+        PaperPopupView_SceneryArt(scene: scene, width: stageW, height: stageH)
+            .frame(width: stageW, height: stageH)
+            // Hinge about the bottom edge (the spine) with depth perspective.
+            .rotation3DEffect(
+                .degrees(angle),
+                axis: (x: 1, y: 0, z: 0),
+                anchor: .bottom,
+                perspective: 0.62
+            )
+            // Bottom of art rests ON the spine line (.position centers it there).
+            .offset(y: -stageH / 2)
+            // Fold shadow deepens as the piece lays back; never fully hides art.
+            .overlay {
+                Color.black
+                    .opacity(foldShade)
+                    .blendMode(.multiply)
+                    .allowsHitTesting(false)
+            }
+            .compositingGroup()
+            .opacity(layerOpacity)
+    }
+
+    /// Darken as the piece rotates away from upright (depth shading).
+    private var foldShade: Double {
+        let t = abs(angle) / 90.0
+        return 0.45 * t
+    }
+
+    /// Keep upright pieces fully visible; only the deeply-folded one dims a touch.
+    private var layerOpacity: Double {
+        let t = abs(angle) / 90.0
+        return 1.0 - 0.25 * t
+    }
+}
+
+// MARK: - Scenery art (bold silhouettes, readable at 120pt)
+
+private struct PaperPopupView_SceneryArt: View {
+    let scene: PaperPopupView_PopupScene
+    let width: CGFloat
+    let height: CGFloat
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            // Stand-up backdrop card (the "page" the scene is printed on).
+            RoundedRectangle(cornerRadius: width * 0.05, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [scene.sky.0, scene.sky.1],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+                .frame(width: width, height: height)
+                .overlay(
+                    RoundedRectangle(cornerRadius: width * 0.05, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.25), lineWidth: 1)
+                )
+
+            content
+                .frame(width: width, height: height)
+                .clipShape(RoundedRectangle(cornerRadius: width * 0.05, style: .continuous))
+
+            // Tab/base strip at the hinge that reads as the folded mount.
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [Color(red: 0.97, green: 0.95, blue: 0.88),
+                                 Color(red: 0.85, green: 0.80, blue: 0.70)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+                .frame(width: width, height: height * 0.07)
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch scene.kind {
+        case .meadow:    PaperPopupView_MeadowArt(scene: scene, w: width, h: height)
+        case .mountains: PaperPopupView_MountainArt(scene: scene, w: width, h: height)
+        case .city:      PaperPopupView_CityArt(scene: scene, w: width, h: height)
+        }
+    }
+}
+
+private struct PaperPopupView_MeadowArt: View {
+    let scene: PaperPopupView_PopupScene
+    let w: CGFloat
+    let h: CGFloat
+
+    var body: some View {
+        ZStack {
+            // Sun.
+            Circle()
+                .fill(scene.accent)
+                .frame(width: w * 0.20, height: w * 0.20)
+                .position(x: w * 0.76, y: h * 0.26)
+                .shadow(color: scene.accent.opacity(0.6), radius: w * 0.04)
+
+            // Rolling ground.
+            PaperPopupView_HillShape()
+                .fill(scene.ground)
+                .frame(width: w, height: h * 0.5)
+                .position(x: w / 2, y: h * 0.78)
+
+            // House.
+            PaperPopupView_HouseShape()
+                .fill(Color(red: 0.86, green: 0.42, blue: 0.34))
+                .frame(width: w * 0.28, height: h * 0.34)
+                .position(x: w * 0.36, y: h * 0.64)
+
+            // Trees.
+            PaperPopupView_TreeShape()
+                .fill(Color(red: 0.22, green: 0.50, blue: 0.30))
+                .frame(width: w * 0.16, height: h * 0.30)
+                .position(x: w * 0.66, y: h * 0.66)
+            PaperPopupView_TreeShape()
+                .fill(Color(red: 0.26, green: 0.56, blue: 0.34))
+                .frame(width: w * 0.12, height: h * 0.22)
+                .position(x: w * 0.80, y: h * 0.70)
+        }
+    }
+}
+
+private struct PaperPopupView_MountainArt: View {
+    let scene: PaperPopupView_PopupScene
+    let w: CGFloat
+    let h: CGFloat
+
+    var body: some View {
+        ZStack {
+            // Moon.
+            Circle()
+                .fill(scene.accent)
+                .frame(width: w * 0.16, height: w * 0.16)
+                .position(x: w * 0.74, y: h * 0.24)
+                .shadow(color: scene.accent.opacity(0.5), radius: w * 0.05)
+
+            // Back peaks.
+            PaperPopupView_PeaksShape(peaks: 3, jitter: 0.0)
+                .fill(scene.ground.opacity(0.7))
+                .frame(width: w, height: h * 0.55)
+                .position(x: w / 2, y: h * 0.74)
+
+            // Front peaks (snow-capped).
+            PaperPopupView_PeaksShape(peaks: 2, jitter: 0.12)
+                .fill(Color(red: 0.26, green: 0.30, blue: 0.46))
+                .frame(width: w, height: h * 0.42)
+                .position(x: w / 2, y: h * 0.82)
+
+            PaperPopupView_SnowCapsShape()
+                .fill(Color.white.opacity(0.9))
+                .frame(width: w, height: h * 0.42)
+                .position(x: w / 2, y: h * 0.82)
+        }
+    }
+}
+
+private struct PaperPopupView_CityArt: View {
+    let scene: PaperPopupView_PopupScene
+    let w: CGFloat
+    let h: CGFloat
+
+    var body: some View {
+        ZStack {
+            // Stars.
+            ForEach(0..<6, id: \.self) { i in
+                Circle()
+                    .fill(Color.white.opacity(0.85))
+                    .frame(width: w * 0.018, height: w * 0.018)
+                    .position(
+                        x: w * (0.12 + 0.14 * CGFloat(i)),
+                        y: h * (0.18 + 0.06 * CGFloat(i % 3))
+                    )
+            }
+            // Crescent accent.
+            Circle()
+                .fill(scene.accent)
+                .frame(width: w * 0.13, height: w * 0.13)
+                .position(x: w * 0.80, y: h * 0.22)
+
+            // Skyline.
+            PaperPopupView_SkylineShape()
+                .fill(
+                    LinearGradient(
+                        colors: [Color(red: 0.22, green: 0.24, blue: 0.40),
+                                 Color(red: 0.12, green: 0.13, blue: 0.24)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+                .frame(width: w, height: h * 0.55)
+                .position(x: w / 2, y: h * 0.76)
+
+            // Lit windows.
+            PaperPopupView_WindowsShape()
+                .fill(scene.accent.opacity(0.9))
+                .frame(width: w, height: h * 0.55)
+                .position(x: w / 2, y: h * 0.76)
+        }
+    }
+}
+
+// MARK: - Shapes
+
+private struct PaperPopupView_HillShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.midY))
+        p.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.midY),
+            control: CGPoint(x: rect.midX, y: rect.minY)
+        )
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        p.closeSubpath()
+        return p
+    }
+}
+
+private struct PaperPopupView_HouseShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let roofH = rect.height * 0.42
+        let bodyTop = rect.minY + roofH
+        // Roof.
+        p.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: bodyTop))
+        p.addLine(to: CGPoint(x: rect.minX, y: bodyTop))
+        p.closeSubpath()
+        // Body.
+        let bodyW = rect.width * 0.74
+        let bx = rect.minX + (rect.width - bodyW) / 2
+        p.addRect(CGRect(x: bx, y: bodyTop, width: bodyW, height: rect.maxY - bodyTop))
+        return p
+    }
+}
+
+private struct PaperPopupView_TreeShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        // Trunk.
+        let trunkW = rect.width * 0.18
+        let trunkH = rect.height * 0.26
+        p.addRect(CGRect(
+            x: rect.midX - trunkW / 2,
+            y: rect.maxY - trunkH,
+            width: trunkW, height: trunkH
+        ))
+        // Three stacked canopy triangles, widening toward the base.
+        let tiers = 3
+        let canopyH = rect.height - trunkH
+        for i in 0..<tiers {
+            let f = CGFloat(i)
+            let top: CGFloat = rect.minY + canopyH * (f / CGFloat(tiers)) * 0.8
+            let bottom: CGFloat = rect.minY + canopyH * (f + 1.4) / CGFloat(tiers) * 0.8
+            let tierW: CGFloat = rect.width * (0.42 + 0.18 * f)
+            p.move(to: CGPoint(x: rect.midX, y: top))
+            p.addLine(to: CGPoint(x: rect.midX + tierW / 2, y: bottom))
+            p.addLine(to: CGPoint(x: rect.midX - tierW / 2, y: bottom))
+            p.closeSubpath()
+        }
+        return p
+    }
+}
+
+private struct PaperPopupView_PeaksShape: Shape {
+    let peaks: Int
+    let jitter: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        let segment = rect.width / CGFloat(peaks)
+        for i in 0..<peaks {
+            let baseX = rect.minX + segment * CGFloat(i)
+            let peakX = baseX + segment * (0.5 + jitter * (i.isMultiple(of: 2) ? 1 : -1))
+            let peakY = rect.minY + rect.height * (0.05 + jitter)
+            p.addLine(to: CGPoint(x: peakX, y: peakY))
+            p.addLine(to: CGPoint(x: baseX + segment, y: rect.maxY))
+        }
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        p.closeSubpath()
+        return p
+    }
+}
+
+private struct PaperPopupView_SnowCapsShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let segment = rect.width / 2
+        for i in 0..<2 {
+            let baseX = rect.minX + segment * CGFloat(i)
+            let peakX = baseX + segment * (0.5 + 0.12 * (i.isMultiple(of: 2) ? 1 : -1))
+            let peakY = rect.minY + rect.height * 0.17
+            let capH = rect.height * 0.16
+            let leftX = peakX - segment * 0.16
+            let rightX = peakX + segment * 0.16
+            p.move(to: CGPoint(x: peakX, y: peakY))
+            p.addLine(to: CGPoint(x: rightX, y: peakY + capH))
+            p.addQuadCurve(
+                to: CGPoint(x: leftX, y: peakY + capH),
+                control: CGPoint(x: peakX, y: peakY + capH * 0.5)
+            )
+            p.closeSubpath()
+        }
+        return p
+    }
+}
+
+private struct PaperPopupView_SkylineShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let heights: [CGFloat] = [0.45, 0.72, 0.55, 0.88, 0.62, 0.78, 0.5]
+        let n = heights.count
+        let bw = rect.width / CGFloat(n)
+        p.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        for i in 0..<n {
+            let x0 = rect.minX + bw * CGFloat(i)
+            let topY = rect.maxY - rect.height * heights[i]
+            p.addLine(to: CGPoint(x: x0, y: topY))
+            p.addLine(to: CGPoint(x: x0 + bw, y: topY))
+        }
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        p.closeSubpath()
+        return p
+    }
+}
+
+private struct PaperPopupView_WindowsShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let heights: [CGFloat] = [0.45, 0.72, 0.55, 0.88, 0.62, 0.78, 0.5]
+        let n = heights.count
+        let bw = rect.width / CGFloat(n)
+        let win = bw * 0.18
+        for i in 0..<n {
+            let x0 = rect.minX + bw * CGFloat(i)
+            let topY = rect.maxY - rect.height * heights[i]
+            let rows = max(1, Int((rect.maxY - topY) / (win * 2.2)))
+            for r in 0..<rows {
+                for c in 0..<2 {
+                    if (r + c + i).isMultiple(of: 2) { continue }
+                    let wx = x0 + bw * (0.28 + 0.40 * CGFloat(c))
+                    let wy = topY + win * 1.6 + CGFloat(r) * win * 2.2
+                    if wy + win > rect.maxY { continue }
+                    p.addRect(CGRect(x: wx, y: wy, width: win, height: win * 1.3))
+                }
+            }
+        }
+        return p
+    }
+}
+"""###,
+        "ob-paper-tear": ###"""
+import SwiftUI
+
+// MARK: - PaperTearView
+// Page Tear Reveal — dragging from the page edge tears the current page away along a
+// procedurally jagged ripped-paper edge that follows your finger, revealing the next
+// page underneath with a soft torn-fiber shadow. Release past threshold flicks the torn
+// piece off; otherwise the seam springs closed. The demo loop tears a page on a ~3s cycle.
+struct PaperTearView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            Group {
+                if demo {
+                    PaperTearView_DemoTear(size: geo.size)
+                } else {
+                    PaperTearView_InteractiveTear(size: geo.size)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Demo (self-driving)
+private struct PaperTearView_DemoTear: View {
+    let size: CGSize
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let cycle: Double = 3.4
+            let phase = (t.truncatingRemainder(dividingBy: cycle)) / cycle // 0..1
+            let progress = demoProgress(phase)
+            let wobble = t * 1.6 // gentle ambient ripple
+
+            PaperTearView_PaperTearCanvas(size: size, progress: progress, wobble: wobble, falling: 0)
+        }
+    }
+
+    // Ramp up, hold open briefly, then reset quickly so a fresh page is always shown.
+    private func demoProgress(_ phase: Double) -> CGFloat {
+        let p: Double
+        if phase < 0.62 {
+            // ease-out tear from 0 -> 1
+            let x = phase / 0.62
+            p = 1 - pow(1 - x, 2.4)
+        } else if phase < 0.78 {
+            p = 1 // hold fully torn
+        } else {
+            // quick reset back to a fresh page
+            let x = (phase - 0.78) / 0.22
+            p = 1 - easeInOut(x)
+        }
+        return CGFloat(min(max(p, 0), 1))
+    }
+
+    private func easeInOut(_ x: Double) -> Double {
+        x < 0.5 ? 2 * x * x : 1 - pow(-2 * x + 2, 2) / 2
+    }
+}
+
+// MARK: - Interactive
+private struct PaperTearView_InteractiveTear: View {
+    let size: CGSize
+
+    @State private var progress: CGFloat = 0
+    @State private var dragStart: CGFloat = 0
+    @State private var falling: CGFloat = 0   // 0 attached, 1 fully flicked away
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            PaperTearView_PaperTearCanvas(size: size,
+                            progress: progress,
+                            wobble: t * 1.4,
+                            falling: falling)
+        }
+        .contentShape(Rectangle())
+        .gesture(tearGesture)
+    }
+
+    private var tearGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if falling > 0 { resetTorn() }
+                let w = max(size.width, 1)
+                let delta = value.translation.width / w
+                let raw = dragStart + delta
+                progress = clamp(raw)
+            }
+            .onEnded { value in
+                let w = max(size.width, 1)
+                let predicted = dragStart + value.predictedEndTranslation.width / w
+                let committed = progress > 0.5 || predicted > 0.78
+                if committed {
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.72)) {
+                        progress = 1
+                    }
+                    withAnimation(.spring(response: 0.55, dampingFraction: 0.6).delay(0.02)) {
+                        falling = 1
+                    }
+                    // After the torn sheet falls away, present the fresh page beneath.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.62) {
+                        resetTorn()
+                    }
+                } else {
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.7)) {
+                        progress = 0
+                    }
+                    dragStart = 0
+                }
+            }
+    }
+
+    private func resetTorn() {
+        progress = 0
+        falling = 0
+        dragStart = 0
+    }
+
+    private func clamp(_ v: CGFloat) -> CGFloat { min(max(v, 0), 1) }
+}
+
+// MARK: - Shared canvas renderer
+// Composites: bottom (next) page full-frame, then the top (current) page clipped to the
+// still-attached region, plus a torn-fiber shadow along the rip line. When `falling` > 0
+// the torn-off sheet slides and rotates away to reveal the fresh page.
+private struct PaperTearView_PaperTearCanvas: View {
+    let size: CGSize
+    let progress: CGFloat
+    let wobble: Double
+    let falling: CGFloat
+
+    var body: some View {
+        ZStack {
+            bottomPage
+            shadowBand
+            topPageLayer
+        }
+        .clipped()
+    }
+
+    // The next page, sitting beneath — always fully visible where the top page is torn.
+    private var bottomPage: some View {
+        PaperTearView_PaperPage(palette: .next)
+    }
+
+    // Soft torn-fiber shadow cast by the lifting/attached edge onto the page below.
+    private var shadowBand: some View {
+        PaperTearView_TornEdgeShape(progress: progress, wobble: wobble, fiber: true)
+            .stroke(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.05, green: 0.04, blue: 0.09).opacity(0.0),
+                        Color(red: 0.05, green: 0.04, blue: 0.09).opacity(0.55)
+                    ],
+                    startPoint: .leading, endPoint: .trailing
+                ),
+                style: StrokeStyle(lineWidth: max(size.width, size.height) * 0.018,
+                                   lineCap: .round, lineJoin: .round)
+            )
+            .blur(radius: max(size.width, size.height) * 0.012)
+            .offset(x: progress > 0 ? -size.width * 0.012 : 0)
+            .opacity(progress > 0.001 && falling < 0.5 ? 1 : 0)
+    }
+
+    // The current page, clipped to the attached region (rip line -> right edge),
+    // carrying the torn sheet off-screen when `falling` engages.
+    private var topPageLayer: some View {
+        PaperTearView_PaperPage(palette: .current)
+            .overlay(tornFiberHighlight)
+            .clipShape(PaperTearView_AttachedRegionShape(progress: progress, wobble: wobble))
+            .offset(x: fallingOffsetX, y: fallingOffsetY)
+            .rotationEffect(.degrees(Double(falling) * 7), anchor: .bottomTrailing)
+            .opacity(1 - Double(falling) * 0.35)
+    }
+
+    // A thin lit rim drawn right along the rip so the edge reads as ragged fibers.
+    private var tornFiberHighlight: some View {
+        PaperTearView_TornEdgeShape(progress: progress, wobble: wobble, fiber: false)
+            .stroke(
+                Color(red: 0.99, green: 0.98, blue: 0.95).opacity(0.85),
+                style: StrokeStyle(lineWidth: max(1.2, max(size.width, size.height) * 0.006),
+                                   lineCap: .round, lineJoin: .round)
+            )
+            .opacity(progress > 0.001 ? 1 : 0)
+    }
+
+    private var fallingOffsetX: CGFloat { -size.width * 0.5 * falling }
+    private var fallingOffsetY: CGFloat { size.height * 0.35 * falling }
+}
+
+// MARK: - Tear geometry
+// The rip is a near-vertical jagged line whose x-position = split. The jitter is a PURE
+// function of segment index (no RNG, no stored state) so the edge is byte-identical every
+// frame — it ripples only via the smooth `wobble` parameter, never boils.
+private struct PaperTearView_TornEdge {
+    let segments = 26
+
+    // Deterministic pseudo-random in [-1, 1] from an index — stable across all redraws.
+    func jitter(_ i: Int) -> CGFloat {
+        let s = sin(Double(i) * 12.9898 + 4.137) * 43758.5453
+        let f = s - floor(s)            // fract -> [0,1)
+        return CGFloat(f * 2 - 1)
+    }
+
+    func secondary(_ i: Int) -> CGFloat {
+        let s = sin(Double(i) * 7.233 + 1.91) * 21943.21
+        let f = s - floor(s)
+        return CGFloat(f * 2 - 1)
+    }
+
+    // Build the rip line points down the page at split x for the given size.
+    func points(in size: CGSize, progress: CGFloat, wobble: Double) -> [CGPoint] {
+        let splitX = size.width * progress
+        let amp = max(size.width, size.height) * 0.045   // scales with tile/detail
+        let micro = amp * 0.4
+        var pts: [CGPoint] = []
+        for i in 0...segments {
+            let ty = CGFloat(i) / CGFloat(segments)
+            let y = ty * size.height
+            // ambient ripple grows toward the free (top) end, fades at anchored ends
+            let envelope = sin(ty * .pi)
+            let ripple = sin(wobble + Double(i) * 0.7) * Double(amp) * 0.25 * Double(envelope)
+            let jag = jitter(i) * amp + secondary(i) * micro
+            let x = splitX + jag + CGFloat(ripple)
+            pts.append(CGPoint(x: x, y: y))
+        }
+        return pts
+    }
+}
+
+// MARK: - Attached region clip (top page keeps rip-line -> right edge)
+private struct PaperTearView_AttachedRegionShape: Shape {
+    var progress: CGFloat
+    var wobble: Double
+    private let edge = PaperTearView_TornEdge()
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let pts = edge.points(in: rect.size, progress: progress, wobble: wobble)
+        guard let first = pts.first else { return p }
+        p.move(to: first)
+        for pt in pts.dropFirst() { p.addLine(to: pt) }
+        // close along the right edge -> bottom-right -> top-right
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        p.closeSubpath()
+        return p
+    }
+}
+
+// MARK: - Rip line as a stroked Shape (used for shadow + fiber highlight)
+private struct PaperTearView_TornEdgeShape: Shape {
+    var progress: CGFloat
+    var wobble: Double
+    var fiber: Bool
+    private let edge = PaperTearView_TornEdge()
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let pts = edge.points(in: rect.size, progress: progress, wobble: wobble)
+        guard let first = pts.first else { return p }
+        p.move(to: first)
+        for pt in pts.dropFirst() { p.addLine(to: pt) }
+        return p
+    }
+}
+
+// MARK: - Drawn paper page (no assets)
+private struct PaperTearView_PaperPage: View {
+    enum Palette { case current, next }
+    let palette: Palette
+
+    var body: some View {
+        ZStack {
+            base
+            ruledLines
+            cornerLabel
+        }
+    }
+
+    private var base: some View {
+        LinearGradient(colors: gradientColors,
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+            .overlay(
+                RadialGradient(colors: [Color.white.opacity(0.10), Color.clear],
+                               center: .topLeading, startRadius: 0, endRadius: 260)
+            )
+    }
+
+    // Faint notepad rules so it reads as a real sheet at any size.
+    private var ruledLines: some View {
+        GeometryReader { g in
+            let count = 7
+            let step = g.size.height / CGFloat(count + 1)
+            Path { path in
+                for i in 1...count {
+                    let y = step * CGFloat(i)
+                    path.move(to: CGPoint(x: g.size.width * 0.10, y: y))
+                    path.addLine(to: CGPoint(x: g.size.width * 0.90, y: y))
+                }
+            }
+            .stroke(lineColor, lineWidth: 1)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var cornerLabel: some View {
+        GeometryReader { g in
+            Circle()
+                .fill(dotColor)
+                .frame(width: g.size.width * 0.16, height: g.size.width * 0.16)
+                .position(x: g.size.width * 0.22, y: g.size.height * 0.18)
+                .opacity(0.9)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var gradientColors: [Color] {
+        switch palette {
+        case .current:
+            return [Color(red: 0.97, green: 0.96, blue: 0.92),
+                    Color(red: 0.91, green: 0.89, blue: 0.83)]
+        case .next:
+            return [Color(red: 0.16, green: 0.20, blue: 0.34),
+                    Color(red: 0.09, green: 0.11, blue: 0.22)]
+        }
+    }
+
+    private var lineColor: Color {
+        switch palette {
+        case .current: return Color(red: 0.55, green: 0.60, blue: 0.78).opacity(0.45)
+        case .next:    return Color(red: 0.62, green: 0.72, blue: 1.0).opacity(0.28)
+        }
+    }
+
+    private var dotColor: Color {
+        switch palette {
+        case .current: return Color(red: 0.92, green: 0.45, blue: 0.40)
+        case .next:    return Color(red: 0.55, green: 0.84, blue: 0.92)
+        }
+    }
+}
+"""###,
+        "ob-permission-bell": ###"""
+import SwiftUI
+
+/// Wake-the-Bell notification permission hero.
+///
+/// A dim, sleeping notification bell that wakes when you long-press "Allow":
+/// it rocks harder and harder as you hold, sound-wave rings pulse outward, a red
+/// badge pops in with a spring, and on release past the threshold it settles with
+/// a happy nod. `demo == true` self-drives the full wake-and-ring cycle on a loop.
+struct PermissionBellView: View {
+    var demo: Bool = false
+
+    // Interactive hold state. `progress` itself is always derived analytically
+    // inside the TimelineView from these anchors, so there is never a blank frame.
+    @State private var isPressing: Bool = false
+    @State private var pressStart: Date = .distantPast
+    @State private var releaseAt: Date = .distantPast
+    @State private var releaseProgress: Double = 0
+    @State private var didLock: Bool = false
+    @State private var lockTick: Int = 0
+
+    // Tunables (seconds).
+    private let windUp: Double = 1.15          // hold time to reach full progress
+    private let lockThreshold: Double = 0.72   // progress needed to lock on release
+    private let releaseDecay: Double = 0.55    // calm-down duration after a short hold
+
+    var body: some View {
+        GeometryReader { geo in
+            let side: CGFloat = min(geo.size.width, geo.size.height)
+            TimelineView(.animation) { timeline in
+                let t: Double = timeline.date.timeIntervalSinceReferenceDate
+                let progress: Double = demo ? demoProgress(t) : livePressProgress(now: timeline.date)
+                let locked: Bool = demo ? (demoProgress(t) > lockThreshold && demoRinging(t))
+                                        : didLock
+                stage(side: side, t: t, progress: progress, locked: locked)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(holdGesture, including: demo ? .none : .all)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Haptics only in the live, interactive component — never in a grid of demo tiles.
+        .modifier(PermissionBellView_LockHaptic(tick: lockTick, enabled: !demo))
+    }
+
+    // MARK: - Composed stage
+
+    @ViewBuilder
+    private func stage(side: CGFloat, t: Double, progress: Double, locked: Bool) -> some View {
+        let p: Double = clamp01(progress)
+        // Bell rocks with an amplitude that ramps with progress. Frequency rises
+        // a touch as it winds up so it visibly speeds toward ringing.
+        let rockFreq: Double = 7.5 + p * 4.5
+        let rockAmp: Double = 27.0 * easeOut(p)
+        let rock: Double = sin(t * rockFreq) * rockAmp
+
+        // A gentle "settle nod" near lock: a small extra eased tilt that decays.
+        let nod: Double = locked ? sin(t * 9.0) * 3.0 * Double(1.0) : 0
+
+        let bellAngle: Double = rock + nod
+        let dim: Double = 0.46 + 0.54 * p        // never fully dark — always legible
+
+        ZStack {
+            backdrop(side: side, progress: p)
+
+            PermissionBellView_SoundWaveRings(side: side, t: t, progress: p, active: p > 0.18)
+
+            PermissionBellView_BellGlyph(side: side,
+                      angle: bellAngle,
+                      dim: dim,
+                      glow: p)
+
+            PermissionBellView_NotificationBadge(side: side, shown: locked, t: t)
+
+            promptLabel(side: side, progress: p, locked: locked)
+        }
+        .frame(width: side, height: side)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // Soft radial glow behind the bell that brightens as it wakes.
+    private func backdrop(side: CGFloat, progress: Double) -> some View {
+        let warm = Color(red: 1.0, green: 0.82, blue: 0.42)
+        return RadialGradient(
+            colors: [warm.opacity(0.28 * progress), .clear],
+            center: .init(x: 0.5, y: 0.42),
+            startRadius: 0,
+            endRadius: side * 0.5
+        )
+        .frame(width: side, height: side)
+        .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private func promptLabel(side: CGFloat, progress: Double, locked: Bool) -> some View {
+        let txt: String = locked ? "Notifications On" : (progress > 0.05 ? "Hold to wake…" : "Hold to Allow")
+        let on = Color(red: 0.36, green: 0.85, blue: 0.62)
+        let off = Color(red: 0.78, green: 0.80, blue: 0.86)
+        Text(txt)
+            .font(.system(size: max(9, side * 0.072), weight: .semibold, design: .rounded))
+            .foregroundStyle(locked ? on : off)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .padding(.horizontal, side * 0.05)
+            .frame(width: side, alignment: .center)
+            .offset(y: side * 0.40)
+            .allowsHitTesting(false)
+    }
+
+    // MARK: - Gesture (interactive only)
+
+    private var holdGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                if !isPressing {
+                    isPressing = true
+                    pressStart = Date()
+                    didLock = false
+                }
+            }
+            .onEnded { _ in
+                let held: Double = max(0, Date().timeIntervalSince(pressStart))
+                let reached: Double = clamp01(held / windUp)
+                isPressing = false
+                if reached >= lockThreshold {
+                    didLock = true
+                    lockTick &+= 1
+                } else {
+                    didLock = false
+                    releaseAt = Date()
+                    releaseProgress = reached
+                }
+            }
+    }
+
+    // MARK: - Progress sources
+
+    /// Live progress driven by *time held*, not drag distance.
+    private func livePressProgress(now: Date) -> Double {
+        if didLock { return 1.0 }
+        if isPressing {
+            let held: Double = max(0, now.timeIntervalSince(pressStart))
+            return clamp01(held / windUp)
+        }
+        // Calming back down after a short hold.
+        let since: Double = now.timeIntervalSince(releaseAt)
+        if since < releaseDecay && releaseProgress > 0 {
+            let k: Double = clamp01(since / releaseDecay)
+            return releaseProgress * (1.0 - easeOut(k))
+        }
+        return 0
+    }
+
+    /// Self-driving envelope: sleep → wind-up rock → ring/lock → settle nod → reset.
+    /// Loop length ~3.4s. Floored so the bell is never invisible.
+    private func demoProgress(_ t: Double) -> Double {
+        let loop: Double = 3.4
+        let phase: Double = (t.truncatingRemainder(dividingBy: loop) + loop)
+            .truncatingRemainder(dividingBy: loop)
+        if phase < 0.45 {                       // resting / waking start
+            return 0.05
+        } else if phase < 1.7 {                 // winding up
+            return easeInOut(clamp01((phase - 0.45) / 1.25))
+        } else if phase < 2.65 {                // held at full, ringing
+            return 1.0
+        } else {                                // settle back to sleep
+            return 1.0 - easeInOut(clamp01((phase - 2.65) / 0.75))
+        }
+    }
+
+    private func demoRinging(_ t: Double) -> Bool {
+        let loop: Double = 3.4
+        let phase: Double = (t.truncatingRemainder(dividingBy: loop) + loop)
+            .truncatingRemainder(dividingBy: loop)
+        return phase >= 1.55 && phase < 2.65
+    }
+
+    // MARK: - Math helpers
+
+    private func clamp01(_ v: Double) -> Double { min(1, max(0, v)) }
+    private func easeOut(_ x: Double) -> Double { 1 - pow(1 - clamp01(x), 3) }
+    private func easeInOut(_ x: Double) -> Double {
+        let c = clamp01(x)
+        return c < 0.5 ? 4 * c * c * c : 1 - pow(-2 * c + 2, 3) / 2
+    }
+}
+
+// MARK: - Bell glyph
+
+private struct PermissionBellView_BellGlyph: View {
+    let side: CGFloat
+    let angle: Double
+    let dim: Double
+    let glow: Double
+
+    var body: some View {
+        let bellSize: CGFloat = side * 0.46
+        let warm = Color(red: 1.0, green: 0.80, blue: 0.36)
+        // Direct RGB lerp from cool (sleeping) to warm (awake) by `glow`.
+        // Both endpoints are literal constants, so no UIKit color round-trip is needed.
+        let k: Double = min(1, max(0, glow))
+        let tint = Color(red: 0.62 + (1.0 - 0.62) * k,
+                         green: 0.66 + (0.80 - 0.66) * k,
+                         blue: 0.78 + (0.36 - 0.78) * k)
+
+        Image(systemName: "bell.fill")
+            .resizable()
+            .scaledToFit()
+            .frame(width: bellSize, height: bellSize)
+            .foregroundStyle(tint)
+            .opacity(dim)
+            .shadow(color: warm.opacity(0.55 * glow),
+                    radius: side * 0.05 * CGFloat(glow))
+            // Pivot from the crown so it swings like a hung bell.
+            .rotationEffect(.degrees(angle), anchor: .top)
+            .offset(y: -side * 0.04)
+            .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Sound-wave rings
+
+private struct PermissionBellView_SoundWaveRings: View {
+    let side: CGFloat
+    let t: Double
+    let progress: Double
+    let active: Bool
+
+    var body: some View {
+        let warm = Color(red: 1.0, green: 0.78, blue: 0.40)
+        let count = 3
+        let maxR: CGFloat = side * 0.42
+        let speed: Double = 0.7 + progress * 0.8   // rings emit faster as it winds up
+
+        ZStack {
+            ForEach(0..<count, id: \.self) { i in
+                let local = ringPhase(index: i, count: count, speed: speed)
+                let radius: CGFloat = maxR * CGFloat(local) * CGFloat(0.4 + progress * 0.6)
+                let opacity: Double = active ? (1.0 - local) * 0.7 * progress : 0
+                Circle()
+                    .stroke(warm.opacity(opacity),
+                            lineWidth: max(1.2, side * 0.02 * CGFloat(1.0 - local)))
+                    .frame(width: radius * 2, height: radius * 2)
+            }
+        }
+        .offset(y: -side * 0.04)
+        .allowsHitTesting(false)
+    }
+
+    private func ringPhase(index: Int, count: Int, speed: Double) -> Double {
+        let raw = t * speed + Double(index) / Double(count)
+        return raw.truncatingRemainder(dividingBy: 1.0)
+    }
+}
+
+// MARK: - Notification badge
+
+private struct PermissionBellView_NotificationBadge: View {
+    let side: CGFloat
+    let shown: Bool
+    let t: Double
+
+    var body: some View {
+        let badgeSize: CGFloat = side * 0.16
+        let red = Color(red: 0.96, green: 0.26, blue: 0.30)
+        // Subtle breathing while present, so a locked tile still feels alive.
+        let breathe: Double = shown ? 1.0 + sin(t * 4.0) * 0.04 : 0.0
+
+        Circle()
+            .fill(red)
+            .overlay(
+                Circle().stroke(Color.white.opacity(0.85), lineWidth: max(1, side * 0.012))
+            )
+            .frame(width: badgeSize, height: badgeSize)
+            .shadow(color: red.opacity(0.6), radius: side * 0.03)
+            .scaleEffect(CGFloat(breathe))
+            // Spring pop on appear / collapse on disappear.
+            .animation(.spring(response: 0.34, dampingFraction: 0.42), value: shown)
+            .offset(x: side * 0.16, y: -side * 0.18)
+            .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Haptic on lock (interactive only)
+
+private struct PermissionBellView_LockHaptic: ViewModifier {
+    let tick: Int
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.sensoryFeedback(.success, trigger: tick)
+        } else {
+            content
+        }
+    }
+}
+"""###,
+        "ob-radar-lock": ###"""
+import SwiftUI
+
+// MARK: - Radar Lock-On Permission
+// A location-permission hero: a sweeping radar hunts a wandering blip, then on
+// "grant" the reticle snaps inward to lock on, a pin bounces down, and a
+// "located" ring ripples out. demo == true self-drives the full hunt→lock loop;
+// demo == false locks on tap and replays.
+
+struct RadarLockView: View {
+    var demo: Bool = false
+
+    // Frozen blip position captured at the moment of a real tap-grant.
+    @State private var lockedBlip: CGPoint = .zero
+    // Increments on each tap to re-fire the KeyframeAnimator lock choreography.
+    @State private var tapCount: Int = 0
+    // Drives the "located" / settled state after a real lock.
+    @State private var hasLocked: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            if demo {
+                demoRadar(in: size)
+            } else {
+                interactiveRadar(in: size)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Demo (self-driving, single TimelineView, single phase function)
+
+    private func demoRadar(in size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let s = RadarLockView_RadarState.demoState(at: t, size: size)
+            RadarLockView_RadarSceneView(state: s, showLocatedLabel: s.lock.ring > 0.05)
+        }
+    }
+
+    // MARK: Interactive (sweep on its own clock + KeyframeAnimator lock)
+
+    private func interactiveRadar(in size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let geom = RadarLockView_RadarGeometry(size: size)
+            let sweepAngle = RadarLockView_RadarState.huntSweepAngle(at: t)
+            let liveBlip = hasLocked ? lockedBlip
+                                     : RadarLockView_RadarState.huntBlip(at: t, geom: geom)
+
+            KeyframeAnimator(initialValue: RadarLockView_LockProgress(),
+                             trigger: tapCount) { lock in
+                let state = RadarLockView_RadarState(
+                    sweepAngle: sweepAngle,
+                    blip: hasLocked ? lockedBlip : liveBlip,
+                    lock: lock,
+                    geom: geom
+                )
+                RadarLockView_RadarSceneView(state: state, showLocatedLabel: lock.ring > 0.05)
+            } keyframes: { _ in
+                // Reticle snaps inward (overshoot then settle).
+                KeyframeTrack(\.reticle) {
+                    SpringKeyframe(1.0, duration: 0.45, spring: .bouncy)
+                    LinearKeyframe(1.0, duration: 1.6)
+                }
+                // Pin bounces down shortly after the reticle bites.
+                KeyframeTrack(\.pin) {
+                    LinearKeyframe(0.0, duration: 0.30)
+                    SpringKeyframe(1.0, duration: 0.55,
+                                   spring: .init(duration: 0.55, bounce: 0.55))
+                    LinearKeyframe(1.0, duration: 1.20)
+                }
+                // "Located" ring ripples out last and fades.
+                KeyframeTrack(\.ring) {
+                    LinearKeyframe(0.0, duration: 0.55)
+                    CubicKeyframe(1.0, duration: 0.95)
+                    LinearKeyframe(1.0, duration: 0.55)
+                }
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            captureAndLock(in: size)
+        }
+        .sensoryFeedback(.success, trigger: tapCount)
+    }
+
+    private func captureAndLock(in size: CGSize) {
+        let geom = RadarLockView_RadarGeometry(size: size)
+        let t = Date().timeIntervalSinceReferenceDate
+        // Snapshot the blip's live position so lock elements don't drift.
+        lockedBlip = RadarLockView_RadarState.huntBlip(at: t, geom: geom)
+        hasLocked = true
+        tapCount += 1
+    }
+}
+
+// MARK: - Geometry
+
+private struct RadarLockView_RadarGeometry {
+    let center: CGPoint
+    let radius: CGFloat
+
+    init(size: CGSize) {
+        center = CGPoint(x: size.width / 2, y: size.height / 2)
+        radius = min(size.width, size.height) * 0.5 * 0.84
+    }
+}
+
+// MARK: - Lock progress (multi-track animatable struct)
+
+private struct RadarLockView_LockProgress: Equatable {
+    var reticle: CGFloat = 0   // 0 = wide open / invisible, 1 = locked tight
+    var pin: CGFloat = 0       // 0 = above, 1 = dropped & settled
+    var ring: CGFloat = 0      // 0 = none, 1 = fully expanded & faded
+}
+
+// MARK: - Full radar state (pure value the renderer consumes)
+
+private struct RadarLockView_RadarState {
+    var sweepAngle: Double      // radians
+    var blip: CGPoint           // absolute point
+    var lock: RadarLockView_LockProgress
+    var geom: RadarLockView_RadarGeometry
+
+    // --- Hunt sub-functions (shared by demo & interactive) ---
+
+    static func huntSweepAngle(at t: TimeInterval) -> Double {
+        // Continuous clockwise sweep, ~1 rev / 2.6s.
+        let rev = 2.6
+        return (t.truncatingRemainder(dividingBy: rev) / rev) * 2 * .pi
+    }
+
+    static func huntBlip(at t: TimeInterval, geom: RadarLockView_RadarGeometry) -> CGPoint {
+        // A wandering blip on two out-of-phase sines, kept inside the dish.
+        let rx = geom.radius * 0.52
+        let ry = geom.radius * 0.40
+        let ax = sin(t * 0.62) * cos(t * 0.27)
+        let ay = sin(t * 0.48 + 1.3)
+        let x = geom.center.x + CGFloat(ax) * rx
+        let y = geom.center.y + CGFloat(ay) * ry
+        return CGPoint(x: x, y: y)
+    }
+
+    // --- Demo state: single phase function over a ~3.4s loop ---
+
+    static func demoState(at t: TimeInterval, size: CGSize) -> RadarLockView_RadarState {
+        let geom = RadarLockView_RadarGeometry(size: size)
+        let period = 3.4
+        let p = t.truncatingRemainder(dividingBy: period) / period // 0..1
+        let huntEnd = 0.46
+
+        let sweep = huntSweepAngle(at: t)
+
+        if p < huntEnd {
+            // Hunting: blip wanders, no lock elements.
+            let blip = huntBlip(at: t, geom: geom)
+            return RadarLockView_RadarState(sweepAngle: sweep, blip: blip,
+                              lock: RadarLockView_LockProgress(), geom: geom)
+        }
+
+        // Lock window: freeze the blip at the moment hunting ended.
+        let freezeT = t - (p - huntEnd) * period
+        let frozenBlip = huntBlip(at: freezeT, geom: geom)
+
+        // Local progress through the lock window.
+        let lp = (p - huntEnd) / (1.0 - huntEnd) // 0..1
+
+        var lock = RadarLockView_LockProgress()
+        lock.reticle = bouncyRamp(lp, start: 0.00, end: 0.34)
+        lock.pin     = bouncyRamp(lp, start: 0.22, end: 0.62)
+        lock.ring    = smoothRamp(lp, start: 0.46, end: 1.00)
+
+        return RadarLockView_RadarState(sweepAngle: sweep, blip: frozenBlip,
+                          lock: lock, geom: geom)
+    }
+
+    // Eased ramp with a slight overshoot, clamped, for snap-in feel.
+    static func bouncyRamp(_ x: CGFloat, start: CGFloat, end: CGFloat) -> CGFloat {
+        let u = clamped((x - start) / max(end - start, 0.0001))
+        let eased = 1 - pow(1 - u, 3)
+        let overshoot = sin(u * .pi) * 0.10 * (1 - u)
+        return min(1.0, eased + overshoot)
+    }
+
+    static func smoothRamp(_ x: CGFloat, start: CGFloat, end: CGFloat) -> CGFloat {
+        let u = clamped((x - start) / max(end - start, 0.0001))
+        return u * u * (3 - 2 * u) // smoothstep
+    }
+
+    static func clamped(_ v: CGFloat) -> CGFloat { min(1, max(0, v)) }
+}
+
+// MARK: - Scene renderer (the single shared view)
+
+private struct RadarLockView_RadarSceneView: View {
+    let state: RadarLockView_RadarState
+    var showLocatedLabel: Bool
+
+    private var palette: RadarLockView_RadarPalette { RadarLockView_RadarPalette() }
+
+    var body: some View {
+        ZStack {
+            background
+            sweepAndDish
+            blipDot
+            reticle
+            locatedRing
+            pin
+            label
+        }
+    }
+
+    // Background gradient fill behind the dish.
+    private var background: some View {
+        RadialGradient(
+            colors: [palette.bgInner, palette.bgOuter],
+            center: .center,
+            startRadius: 0,
+            endRadius: state.geom.radius * 1.4
+        )
+    }
+
+    // Canvas: concentric rings, cross-hair grid, sweep wedge + arm.
+    private var sweepAndDish: some View {
+        Canvas { ctx, _ in
+            drawDish(in: &ctx)
+            drawSweep(in: &ctx)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func drawDish(in ctx: inout GraphicsContext) {
+        let c = state.geom.center
+        let r = state.geom.radius
+
+        // Concentric rings.
+        for i in 1...4 {
+            let rr = r * CGFloat(i) / 4.0
+            let rect = CGRect(x: c.x - rr, y: c.y - rr, width: rr * 2, height: rr * 2)
+            ctx.stroke(
+                Circle().path(in: rect),
+                with: .color(palette.grid.opacity(i == 4 ? 0.55 : 0.30)),
+                lineWidth: i == 4 ? 1.6 : 0.9
+            )
+        }
+
+        // Cross-hair grid lines.
+        var cross = Path()
+        cross.move(to: CGPoint(x: c.x - r, y: c.y))
+        cross.addLine(to: CGPoint(x: c.x + r, y: c.y))
+        cross.move(to: CGPoint(x: c.x, y: c.y - r))
+        cross.addLine(to: CGPoint(x: c.x, y: c.y + r))
+        ctx.stroke(cross, with: .color(palette.grid.opacity(0.22)), lineWidth: 0.8)
+    }
+
+    private func drawSweep(in ctx: inout GraphicsContext) {
+        let c = state.geom.center
+        let r = state.geom.radius
+        let angle = state.sweepAngle
+
+        // Trailing wedge: a cheap filled fan tapering in opacity behind the arm.
+        let wedgeSpan = Double.pi * 0.42
+        let steps = 9
+        for i in 0..<steps {
+            let f0 = Double(i) / Double(steps)
+            let f1 = Double(i + 1) / Double(steps)
+            let a0 = angle - wedgeSpan * f0
+            let a1 = angle - wedgeSpan * f1
+            var seg = Path()
+            seg.move(to: c)
+            seg.addLine(to: point(c, r, a0))
+            seg.addLine(to: point(c, r, a1))
+            seg.closeSubpath()
+            let op = (1.0 - f0) * 0.22
+            ctx.fill(seg, with: .color(palette.sweep.opacity(op)))
+        }
+
+        // Leading arm.
+        var arm = Path()
+        arm.move(to: c)
+        arm.addLine(to: point(c, r, angle))
+        ctx.stroke(arm, with: .color(palette.sweep.opacity(0.95)), lineWidth: 2.0)
+
+        // Hub.
+        let hubR = r * 0.045
+        let hub = CGRect(x: c.x - hubR, y: c.y - hubR, width: hubR * 2, height: hubR * 2)
+        ctx.fill(Circle().path(in: hub), with: .color(palette.sweep.opacity(0.9)))
+    }
+
+    private func point(_ c: CGPoint, _ r: CGFloat, _ a: Double) -> CGPoint {
+        CGPoint(x: c.x + r * CGFloat(cos(a)), y: c.y + r * CGFloat(sin(a)))
+    }
+
+    // The wandering / locked blip.
+    private var blipDot: some View {
+        let r = state.geom.radius
+        let baseR = r * 0.05
+        // Blip dims a touch once the reticle bites (it's "caught").
+        let glow = 1.0 - state.lock.reticle * 0.25
+        return Circle()
+            .fill(palette.blip)
+            .frame(width: baseR * 2, height: baseR * 2)
+            .shadow(color: palette.blip.opacity(0.8 * glow), radius: baseR * 1.2)
+            .position(state.blip)
+            .opacity(0.85 + 0.15 * glow)
+    }
+
+    // Reticle: four corner brackets that snap inward onto the blip.
+    private var reticle: some View {
+        let p = state.lock.reticle
+        let r = state.geom.radius
+        // Wide when open, tight when locked.
+        let span = r * (0.42 - 0.30 * p)
+        let opacity = min(1.0, p * 1.6)
+        return RadarLockView_ReticleShape(span: span)
+            .stroke(palette.reticle.opacity(opacity),
+                    style: StrokeStyle(lineWidth: 2.0, lineCap: .round))
+            .frame(width: span * 2, height: span * 2)
+            .rotationEffect(.degrees(Double((1 - p) * 35)))
+            .position(state.blip)
+    }
+
+    // "Located" ring ripple expanding out from the lock point.
+    private var locatedRing: some View {
+        let p = state.lock.ring
+        let r = state.geom.radius
+        let maxR = r * 0.95
+        let cur = r * 0.10 + maxR * p
+        let opacity = max(0.0, (1.0 - p)) * 0.9
+        return Circle()
+            .stroke(palette.ring.opacity(opacity),
+                    style: StrokeStyle(lineWidth: 2.5))
+            .frame(width: cur * 2, height: cur * 2)
+            .position(state.blip)
+            .opacity(p > 0.001 ? 1 : 0)
+    }
+
+    // Pin that bounces down onto the lock point.
+    private var pin: some View {
+        let p = state.lock.pin
+        let r = state.geom.radius
+        let pinH = r * 0.34
+        // Rises from above and settles at the blip.
+        let dropY = -pinH * 1.6 * (1 - p)
+        let opacity = min(1.0, p * 2.2)
+        let anchor = CGPoint(x: state.blip.x, y: state.blip.y + dropY)
+        return RadarLockView_PinShape()
+            .fill(palette.pin)
+            .frame(width: pinH * 0.62, height: pinH)
+            // Anchor the tip at the bottom of the frame onto the point.
+            .offset(y: -pinH / 2)
+            .shadow(color: .black.opacity(0.35 * Double(p)), radius: r * 0.03, y: r * 0.02)
+            .scaleEffect(0.85 + 0.15 * p)
+            .position(anchor)
+            .opacity(opacity)
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        if showLocatedLabel {
+            VStack {
+                Spacer()
+                Text("LOCATED")
+                    .font(.system(size: max(10, state.geom.radius * 0.14),
+                                  weight: .bold, design: .rounded))
+                    .tracking(2)
+                    .foregroundStyle(palette.ring)
+                    .padding(.bottom, state.geom.radius * 0.06)
+            }
+            .allowsHitTesting(false)
+            .transition(.opacity)
+        }
+    }
+}
+
+// MARK: - Shapes
+
+private struct RadarLockView_ReticleShape: Shape {
+    var span: CGFloat
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let c = CGPoint(x: rect.midX, y: rect.midY)
+        let s = span
+        let arm = s * 0.45 // length of each corner bracket arm
+        let corners: [(CGFloat, CGFloat)] = [(-1, -1), (1, -1), (1, 1), (-1, 1)]
+        for (sx, sy) in corners {
+            let cx = c.x + sx * s
+            let cy = c.y + sy * s
+            path.move(to: CGPoint(x: cx - sx * arm, y: cy))
+            path.addLine(to: CGPoint(x: cx, y: cy))
+            path.addLine(to: CGPoint(x: cx, y: cy - sy * arm))
+        }
+        return path
+    }
+}
+
+// A classic map pin: round head + tapered tail, tip at the bottom center.
+private struct RadarLockView_PinShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let w = rect.width
+        let h = rect.height
+        let headR = w * 0.5
+        let headC = CGPoint(x: rect.midX, y: rect.minY + headR)
+
+        // Head circle.
+        path.addEllipse(in: CGRect(x: headC.x - headR, y: rect.minY,
+                                   width: headR * 2, height: headR * 2))
+        // Tail to the tip.
+        let tip = CGPoint(x: rect.midX, y: rect.maxY)
+        path.move(to: CGPoint(x: headC.x - headR * 0.78, y: headC.y + headR * 0.55))
+        path.addQuadCurve(to: tip,
+                          control: CGPoint(x: headC.x - headR * 0.30, y: h * 0.78))
+        path.addLine(to: tip)
+        path.addQuadCurve(to: CGPoint(x: headC.x + headR * 0.78, y: headC.y + headR * 0.55),
+                          control: CGPoint(x: headC.x + headR * 0.30, y: h * 0.78))
+        path.closeSubpath()
+        return path
+    }
+}
+
+// MARK: - Palette
+
+private struct RadarLockView_RadarPalette {
+    let bgInner = Color(red: 0.07, green: 0.16, blue: 0.13)
+    let bgOuter = Color(red: 0.03, green: 0.06, blue: 0.07)
+    let grid    = Color(red: 0.35, green: 0.95, blue: 0.65)
+    let sweep   = Color(red: 0.40, green: 1.00, blue: 0.70)
+    let blip    = Color(red: 0.55, green: 1.00, blue: 0.78)
+    let reticle = Color(red: 1.00, green: 0.92, blue: 0.45)
+    let ring    = Color(red: 0.55, green: 0.95, blue: 1.00)
+    let pin     = Color(red: 1.00, green: 0.40, blue: 0.42)
+}
+"""###,
+        "ob-symbol-assembly": ###"""
+import SwiftUI
+
+// MARK: - Symbol Assembly Hero
+//
+// A scattered cloud of small particles flies in and locks together into a
+// crisp SF Symbol, settling with a bounce. Swiping (interactive) explodes the
+// symbol back into particles that re-converge into the next symbol; idle, it
+// auto-cycles through the symbol set on a loop.
+//
+// Two modes:
+//   demo == true  -> self-driving TimelineView loop (assemble -> hold -> explode -> next)
+//   demo == false -> interactive DragGesture(minimumDistance: 0) scrubs the
+//                     scatter; releasing past threshold advances/reverts the symbol.
+//
+// Design notes (the traps that sink this exact animation):
+//   * Every particle's scatter origin + target offset + stagger is a DETERMINISTIC
+//     function of its index. Nothing is randomized inside the Canvas/Timeline body,
+//     so the swarm stays a coherent shape instead of shimmering static.
+//   * Targets are sampled around the glyph's bounding region (NOT pixel-sampled),
+//     and the real SF Symbol Image crossfades on top to sell the shape.
+//   * SymbolAssemblyView_Particle opacity is decoupled from the symbol fade, so the mid-explode frame
+//     (where both symbol images are near-zero) still shows a legible swarm.
+
+struct SymbolAssemblyView: View {
+    var demo: Bool = false
+
+    // Symbols guaranteed available on iOS 17.
+    private let symbols: [SymbolAssemblyView_SymbolStyle] = [
+        SymbolAssemblyView_SymbolStyle(name: "sparkles",
+                    color: Color(red: 0.62, green: 0.51, blue: 0.98)),
+        SymbolAssemblyView_SymbolStyle(name: "heart.fill",
+                    color: Color(red: 0.98, green: 0.44, blue: 0.55)),
+        SymbolAssemblyView_SymbolStyle(name: "bolt.fill",
+                    color: Color(red: 0.99, green: 0.79, blue: 0.36)),
+        SymbolAssemblyView_SymbolStyle(name: "leaf.fill",
+                    color: Color(red: 0.44, green: 0.84, blue: 0.60)),
+        SymbolAssemblyView_SymbolStyle(name: "star.fill",
+                    color: Color(red: 0.40, green: 0.74, blue: 0.99))
+    ]
+
+    private let particleCount: Int = 54
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            content(in: size)
+                .frame(width: size.width, height: size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(backgroundFill)
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        if demo {
+            SymbolAssemblyView_DemoStage(symbols: symbols,
+                      particleCount: particleCount,
+                      size: size)
+        } else {
+            SymbolAssemblyView_InteractiveStage(symbols: symbols,
+                             particleCount: particleCount,
+                             size: size)
+        }
+    }
+
+    private var backgroundFill: some View {
+        RadialGradient(
+            colors: [
+                Color(red: 0.10, green: 0.07, blue: 0.13),
+                Color(red: 0.05, green: 0.04, blue: 0.08)
+            ],
+            center: .center,
+            startRadius: 4,
+            endRadius: 260
+        )
+    }
+}
+
+// MARK: - Symbol descriptor
+
+private struct SymbolAssemblyView_SymbolStyle {
+    let name: String
+    let color: Color
+}
+
+// MARK: - SymbolAssemblyView_Particle model (fully deterministic per index)
+
+private struct SymbolAssemblyView_Particle {
+    /// Direction (unit-ish) the particle scatters toward, as a fraction of the radius.
+    let scatter: CGPoint
+    /// Target offset from center as a fraction of the glyph radius.
+    let target: CGPoint
+    /// Per-particle dot radius as a fraction of min dimension.
+    let dotScale: CGFloat
+    /// Stagger 0..1 — later particles arrive later.
+    let delay: CGFloat
+    /// Subtle hue shift so the swarm isn't monotone.
+    let tint: CGFloat
+}
+
+/// Builds the particle set ONCE from the index. No per-frame randomness:
+/// a cheap integer hash gives stable pseudo-random values per index.
+private func makeParticles(count: Int) -> [SymbolAssemblyView_Particle] {
+    (0..<count).map { i in
+        let a = hashUnit(i &* 2 &+ 1)          // scatter angle seed
+        let b = hashUnit(i &* 7 &+ 13)         // scatter distance seed
+        let c = hashUnit(i &* 3 &+ 5)          // target angle seed
+        let d = hashUnit(i &* 11 &+ 17)        // target radial seed
+        let e = hashUnit(i &* 5 &+ 23)         // dot size seed
+        let f = hashUnit(i &* 13 &+ 31)        // tint seed
+
+        // Scatter: spread across a wide ring well outside the glyph.
+        let scatterAngle = a * 2.0 * Double.pi
+        let scatterDist  = 1.55 + b * 1.05      // 1.55x .. 2.6x of glyph radius
+        let scatter = CGPoint(
+            x: CGFloat(cos(scatterAngle) * scatterDist),
+            y: CGFloat(sin(scatterAngle) * scatterDist)
+        )
+
+        // Target: a filled-disk distribution (sqrt for even area coverage)
+        // biased slightly outward so the swarm reads as the glyph's silhouette.
+        let targetAngle = c * 2.0 * Double.pi
+        let targetRad   = (0.18 + sqrt(d) * 0.82)   // 0.18 .. 1.0 of glyph radius
+        let target = CGPoint(
+            x: CGFloat(cos(targetAngle) * targetRad),
+            y: CGFloat(sin(targetAngle) * targetRad)
+        )
+
+        return SymbolAssemblyView_Particle(
+            scatter: scatter,
+            target: target,
+            dotScale: CGFloat(0.014 + e * 0.020),
+            delay: CGFloat(b * 0.45),               // staggered arrival
+            tint: CGFloat(f)
+        )
+    }
+}
+
+/// Deterministic 0..1 pseudo-random from an integer (Wang-style mix).
+private func hashUnit(_ value: Int) -> Double {
+    var x = UInt64(bitPattern: Int64(value)) &+ 0x9E3779B97F4A7C15
+    x = (x ^ (x >> 30)) &* 0xBF58476D1CE4E5B9
+    x = (x ^ (x >> 27)) &* 0x94D049BB133111EB
+    x = x ^ (x >> 31)
+    return Double(x % 1_000_000) / 1_000_000.0
+}
+
+// MARK: - SymbolAssemblyView_Resolved particle position / appearance (kept OUT of body)
+
+private struct SymbolAssemblyView_Resolved {
+    let position: CGPoint
+    let radius: CGFloat
+    let opacity: Double
+}
+
+/// progress: 0 = fully scattered, 1 = fully assembled (locked into glyph).
+private func resolve(_ p: SymbolAssemblyView_Particle,
+                     progress: CGFloat,
+                     center: CGPoint,
+                     glyphRadius: CGFloat,
+                     minDim: CGFloat) -> SymbolAssemblyView_Resolved {
+    // Per-particle eased local progress with stagger so they don't arrive in lockstep.
+    let span: CGFloat = 1.0 - p.delay
+    let raw = (progress - p.delay) / max(span, 0.0001)
+    let t = smoothstep(clamp01(raw))
+
+    let from = CGPoint(x: p.scatter.x * glyphRadius,
+                       y: p.scatter.y * glyphRadius)
+    let to   = CGPoint(x: p.target.x * glyphRadius,
+                       y: p.target.y * glyphRadius)
+
+    let ox = lerp(from.x, to.x, t)
+    let oy = lerp(from.y, to.y, t)
+
+    let pos = CGPoint(x: center.x + ox, y: center.y + oy)
+    let radius = p.dotScale * minDim
+
+    // Opacity NEVER hits zero anywhere in the cycle: scattered particles stay
+    // clearly visible (this guarantees the mid-explode frame is never blank).
+    // They fade only slightly as they lock in (the symbol image takes over).
+    let scatteredOpacity: Double = 0.92
+    let assembledOpacity: Double = 0.34
+    let opacity = lerp(scatteredOpacity, assembledOpacity, t)
+
+    return SymbolAssemblyView_Resolved(position: pos, radius: radius, opacity: opacity)
+}
+
+// MARK: - Canvas particle layer
+
+private struct SymbolAssemblyView_ParticleCanvas: View {
+    let particles: [SymbolAssemblyView_Particle]
+    let progress: CGFloat        // 0 scattered .. 1 assembled
+    let color: Color
+    let size: CGSize
+
+    var body: some View {
+        Canvas { context, _ in
+            let minDim = min(size.width, size.height)
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let glyphRadius = minDim * 0.34
+
+            for p in particles {
+                let r = resolve(p,
+                                progress: progress,
+                                center: center,
+                                glyphRadius: glyphRadius,
+                                minDim: minDim)
+
+                let rect = CGRect(x: r.position.x - r.radius,
+                                  y: r.position.y - r.radius,
+                                  width: r.radius * 2,
+                                  height: r.radius * 2)
+
+                let dotColor = color.opacity(0.55 + p.tint * 0.45)
+                context.opacity = r.opacity
+                context.fill(Path(ellipseIn: rect), with: .color(dotColor))
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Symbol image (crossfades in on lock)
+
+private struct SymbolAssemblyView_GlyphImage: View {
+    let style: SymbolAssemblyView_SymbolStyle
+    let opacity: Double
+    let bounceTrigger: Int      // changes drive symbolEffect(.bounce)
+    let size: CGSize
+
+    var body: some View {
+        let minDim = min(size.width, size.height)
+        let fontSize = minDim * 0.46
+
+        Image(systemName: style.name)
+            .font(.system(size: fontSize, weight: .semibold))
+            .foregroundStyle(style.color)
+            .symbolRenderingMode(.hierarchical)
+            .modifier(SymbolAssemblyView_BounceModifier(trigger: bounceTrigger))
+            .shadow(color: style.color.opacity(0.55 * opacity),
+                    radius: minDim * 0.05)
+            .opacity(opacity)
+            .allowsHitTesting(false)
+    }
+}
+
+/// symbolEffect(.bounce, value:) is iOS-17-safe, so no availability guard needed.
+private struct SymbolAssemblyView_BounceModifier: ViewModifier {
+    let trigger: Int
+    func body(content: Content) -> some View {
+        content.symbolEffect(.bounce, value: trigger)
+    }
+}
+
+// MARK: - Demo stage (self-driving)
+
+private struct SymbolAssemblyView_DemoStage: View {
+    let symbols: [SymbolAssemblyView_SymbolStyle]
+    let particleCount: Int
+    let size: CGSize
+
+    private let particles: [SymbolAssemblyView_Particle]
+    private let period: Double = 3.0     // seconds per symbol cycle
+
+    init(symbols: [SymbolAssemblyView_SymbolStyle], particleCount: Int, size: CGSize) {
+        self.symbols = symbols
+        self.particleCount = particleCount
+        self.size = size
+        self.particles = makeParticles(count: particleCount)
+    }
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let phase = cyclePhase(at: t)
+
+            ZStack {
+                SymbolAssemblyView_ParticleCanvas(particles: particles,
+                               progress: phase.progress,
+                               color: symbols[phase.index].color,
+                               size: size)
+
+                SymbolAssemblyView_GlyphImage(style: symbols[phase.index],
+                           opacity: symbolOpacity(for: phase.progress),
+                           bounceTrigger: phase.index,
+                           size: size)
+                    .scaleEffect(symbolScale(for: phase.progress))
+            }
+        }
+    }
+
+    struct Phase {
+        let index: Int
+        let progress: CGFloat    // 0 scattered .. 1 assembled
+    }
+
+    /// Maps absolute time into (symbol index, assemble progress).
+    /// Each cycle: assemble (0->1) -> hold(1) -> explode (1->0).
+    private func cyclePhase(at time: Double) -> Phase {
+        let total = time / period
+        let index = Int(floor(total)) % symbols.count
+        let local = total - floor(total)        // 0..1 within this symbol
+
+        let progress: CGFloat
+        if local < 0.38 {
+            // assemble
+            progress = CGFloat(local / 0.38)
+        } else if local < 0.72 {
+            // hold assembled
+            progress = 1.0
+        } else {
+            // explode back to scattered (handoff to next symbol's assemble)
+            progress = CGFloat(1.0 - (local - 0.72) / 0.28)
+        }
+        return Phase(index: index, progress: clamp01(progress))
+    }
+
+    private func symbolOpacity(for progress: CGFloat) -> Double {
+        // Symbol only appears once particles are mostly home.
+        Double(smoothstep(clamp01((progress - 0.7) / 0.3)))
+    }
+
+    private func symbolScale(for progress: CGFloat) -> CGFloat {
+        // Tiny settle bounce as it locks.
+        let s = smoothstep(clamp01((progress - 0.7) / 0.3))
+        return 0.86 + 0.14 * s + 0.04 * CGFloat(sin(Double(s) * Double.pi))
+    }
+}
+
+// MARK: - Interactive stage (real DragGesture)
+
+private struct SymbolAssemblyView_InteractiveStage: View {
+    let symbols: [SymbolAssemblyView_SymbolStyle]
+    let particleCount: Int
+    let size: CGSize
+
+    private let particles: [SymbolAssemblyView_Particle]
+
+    @State private var index: Int = 0
+    /// 0 scattered .. 1 assembled. Resting state is fully assembled (1).
+    @State private var progress: CGFloat = 1.0
+    @State private var dragging: Bool = false
+    @State private var bounceTrigger: Int = 0
+
+    init(symbols: [SymbolAssemblyView_SymbolStyle], particleCount: Int, size: CGSize) {
+        self.symbols = symbols
+        self.particleCount = particleCount
+        self.size = size
+        self.particles = makeParticles(count: particleCount)
+    }
+
+    var body: some View {
+        ZStack {
+            SymbolAssemblyView_ParticleCanvas(particles: particles,
+                           progress: progress,
+                           color: symbols[index].color,
+                           size: size)
+
+            SymbolAssemblyView_GlyphImage(style: symbols[index],
+                       opacity: symbolOpacity(for: progress),
+                       bounceTrigger: bounceTrigger,
+                       size: size)
+                .scaleEffect(symbolScale(for: progress))
+
+            hintLabel
+        }
+        .contentShape(Rectangle())
+        .gesture(dragGesture)
+    }
+
+    private var hintLabel: some View {
+        VStack {
+            Spacer()
+            Text("Swipe to rebuild")
+                .font(.system(size: max(9, min(size.width, size.height) * 0.07),
+                              weight: .medium))
+                .foregroundStyle(.white.opacity(progress > 0.9 ? 0.5 : 0.0))
+                .padding(.bottom, min(size.width, size.height) * 0.06)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                dragging = true
+                // Horizontal drag scrubs the symbol apart: more drag -> more scatter.
+                let span = max(size.width * 0.55, 1)
+                let amount = min(abs(value.translation.width) / span, 1.0)
+                progress = clamp01(1.0 - amount)
+            }
+            .onEnded { value in
+                dragging = false
+                let span = max(size.width * 0.55, 1)
+                let predicted = abs(value.predictedEndTranslation.width) / span
+                let actual = abs(value.translation.width) / span
+
+                if max(predicted, actual) > 0.5 {
+                    advanceSymbol(forward: value.translation.width < 0)
+                } else {
+                    // Snap back assembled.
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.7)) {
+                        progress = 1.0
+                    }
+                }
+            }
+    }
+
+    private func advanceSymbol(forward: Bool) {
+        // Explode fully, swap symbol, then converge into the new one with a bounce.
+        withAnimation(.easeIn(duration: 0.18)) {
+            progress = 0.0
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            let count = symbols.count
+            index = forward ? (index + 1) % count
+                            : (index - 1 + count) % count
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.62)) {
+                progress = 1.0
+            }
+            bounceTrigger &+= 1
+        }
+    }
+
+    private func symbolOpacity(for progress: CGFloat) -> Double {
+        Double(smoothstep(clamp01((progress - 0.7) / 0.3)))
+    }
+
+    private func symbolScale(for progress: CGFloat) -> CGFloat {
+        let s = smoothstep(clamp01((progress - 0.7) / 0.3))
+        return 0.86 + 0.14 * s
+    }
+}
+
+// MARK: - Math helpers
+
+private func clamp01(_ x: CGFloat) -> CGFloat { min(max(x, 0), 1) }
+
+private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat {
+    a + (b - a) * t
+}
+
+private func smoothstep(_ x: CGFloat) -> CGFloat {
+    let t = clamp01(x)
+    return t * t * (3 - 2 * t)
+}
+"""###,
         "tr-clock-pie-wipe": ###"""
 import SwiftUI
 

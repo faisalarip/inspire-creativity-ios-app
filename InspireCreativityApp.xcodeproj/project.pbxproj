@@ -11,6 +11,7 @@
 		010F31D9BABD385D1A9CEA70 /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEB7FD6D0E9A8A53A3C95972 /* PaywallView.swift */; };
 		0112A3E1FF3C44522C40FD22 /* RotateGearTrainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35357A91C39A0DBD0E0C90BC /* RotateGearTrainView.swift */; };
 		01E3C29DA7DA37FEA29FCC77 /* AccordionStretchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75EEC94784C95555C61C2FAF /* AccordionStretchView.swift */; };
+		02BC3873D84955DA2354241A /* OdometerDotsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60427FCF3F39BB5B051FFD71 /* OdometerDotsView.swift */; };
 		0343B6FD8D6D943EE4598BE7 /* BrowseViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47F9550584FD300878A00C10 /* BrowseViewModel.swift */; };
 		04C7B566F14E0A2C4AAE2B6C /* MetaballMergeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F1D6355086CAD815EBCC81E /* MetaballMergeView.swift */; };
 		091A8A85A3CDF5B95A135C55 /* MagneticPoetryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61FBE8A746A8D24927A79EA6 /* MagneticPoetryView.swift */; };
@@ -30,6 +31,7 @@
 		21181CFF6BDEB34FE8FA9690 /* Marquee3dView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 170EF1BFC14EF2317DB3BCC9 /* Marquee3dView.swift */; };
 		214A05E5C42E24789A6319AC /* FlipClockToggleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4E5F456B1ED4232F2CB8290 /* FlipClockToggleView.swift */; };
 		21595E0EADA8CF11A35A98F3 /* DepthStackPushView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6787F1CEE96075CE6B36ED6A /* DepthStackPushView.swift */; };
+		216BE99097E23477967879EE /* FerrofluidDotsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A95644011F2EB7F2977266E8 /* FerrofluidDotsView.swift */; };
 		21F01ED577ECC58C2A0D7A13 /* Difficulty.swift in Sources */ = {isa = PBXBuildFile; fileRef = 139A513AEC3305ADEF1024ED /* Difficulty.swift */; };
 		2205EF106F9F15CA7B2E0219 /* DnaHelixView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0694341F8340E65571A74E5 /* DnaHelixView.swift */; };
 		245C01AAFB6FBBBEAE9968B9 /* StaticDischargeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D51FD023A3F5AEF3D2E6CC62 /* StaticDischargeView.swift */; };
@@ -40,6 +42,9 @@
 		27A7FA34CCF784A8F25719EC /* OrigamiUnfoldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A100CEB36FEB8C7A5971894 /* OrigamiUnfoldView.swift */; };
 		286DBB862F7E1710ED61B00B /* HeroCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F884AF643F2A03F7498F3EDB /* HeroCard.swift */; };
 		2A14F7E3D0F75DE96523090E /* TactileCounterFlipView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED8D2CDA1B143FCF2DE93116 /* TactileCounterFlipView.swift */; };
+		2A3AE5E3E497B9E555CCEFC7 /* PermissionBellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E196A223AFD846500215A007 /* PermissionBellView.swift */; };
+		2AB5B81541A250ADF7745D6F /* PaperTearView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8CA694332C3772500A8F7FC /* PaperTearView.swift */; };
+		2BA6512491F1656B7AC718B1 /* MagneticGrabDrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BF698437D7ECE7E004268BB /* MagneticGrabDrawerView.swift */; };
 		2BC6FA03498A13093DCC0F90 /* SwipeStackShuffleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDE82FCB6FB76477F26C6773 /* SwipeStackShuffleView.swift */; };
 		2F3CCB17876C5D4828C866E4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A01F56928DFCE630027E76A /* RootView.swift */; };
 		303503E950CDA54185D56288 /* LiquidFlaskFillView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C791FC1F46858D0B6C8A6D0 /* LiquidFlaskFillView.swift */; };
@@ -55,6 +60,7 @@
 		3773A8858A77E31B48690156 /* DetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 411F3E0F2A3ADCCC3E07957A /* DetailViewModel.swift */; };
 		38A9A175F6029975F75ED3F2 /* RubberBandSheetMorphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2F8869BAB9D239E1E309435 /* RubberBandSheetMorphView.swift */; };
 		38F63E3A3CCC6F1CFB330B02 /* AnimationCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15F24EB8C54EE4A03CECC637 /* AnimationCard.swift */; };
+		3A31C2836CE28734940F185C /* OrigamiFoldTabsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 039EA3FA5E0FBCF0D8CD598E /* OrigamiFoldTabsView.swift */; };
 		3AF7C3DEBDB49E7FA84B75ED /* KnurledStepperView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BA930BE33055FA9B0E480B7 /* KnurledStepperView.swift */; };
 		3C8E5ED2AE017A243B759F9E /* SwipeCurtainPartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2FA135432B4311CC755D1298 /* SwipeCurtainPartView.swift */; };
 		3D182AA758147979C31C574E /* AuroraPreviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67A8F329E29EA6E4C8D2C620 /* AuroraPreviews.swift */; };
@@ -73,10 +79,12 @@
 		46D88684076430FFA4E2611C /* SocialAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3D86A2772663765B1B8AD1C /* SocialAuthService.swift */; };
 		4804C0513A2B626F37D8E067 /* BrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AC4FA0F701F0DD31050AD9C /* BrowseView.swift */; };
 		49A26CEF9837FBD3BFC92062 /* CollapsingChevronCrumbsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9286C437E4A2561FFB77BC81 /* CollapsingChevronCrumbsView.swift */; };
+		4A566948438929E9AA6E39A6 /* ColorBleedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED7F09D744FF0F6C88756C40 /* ColorBleedView.swift */; };
 		4B786DD6D4D428A25C0BF27B /* AnimationItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 132C538C5CD2F760463FCF8E /* AnimationItem.swift */; };
 		4D2308714EEBF813AD3D4CB6 /* CreativePreviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA75BD038E4E82FAEA107CBB /* CreativePreviews.swift */; };
 		4DBC4EC8C1B522CF4244C173 /* LongPressMeltView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BBF5AFD6DE398B6A7867709 /* LongPressMeltView.swift */; };
 		4F65A18F9515D1F0EE06E28D /* GradientFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE02328DBEA11A067FC4127 /* GradientFlowView.swift */; };
+		5069ED7E25CD93BCC0CA6E5E /* OrigamiHeroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E0DBF56F5E78A0BAF0F9AB2 /* OrigamiHeroView.swift */; };
 		53436DBECFEB8FEC3EE06D2D /* FlingPaperPlaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F499CABA98FA34A2EFC414C2 /* FlingPaperPlaneView.swift */; };
 		5396D4FBA3FFD6C54FA4163F /* TwoFingerTearSeamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6975E2B59B32CE6985F9996B /* TwoFingerTearSeamView.swift */; };
 		548350AC51D2D15BB21987C4 /* OtpCascadeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97EC98780C194E82CA688AC0 /* OtpCascadeView.swift */; };
@@ -88,6 +96,7 @@
 		5702E26B29E29FEB506CE5EA /* TearPerforationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEE5A84B9C4126E5E34AEE4F /* TearPerforationView.swift */; };
 		57569B12B1DBCD2981CBE33F /* PendulumNewtonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB6582DDE83A343828671BD /* PendulumNewtonView.swift */; };
 		57DFAE95B63E7059367B736E /* SpotlightSweepTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFFB651C9D17010439F46181 /* SpotlightSweepTextView.swift */; };
+		590C44EDAD60C8B0BDB9B89B /* SymbolAssemblyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94F1835E23780B71740409B3 /* SymbolAssemblyView.swift */; };
 		5AF1B4E6DCEFBDCB1AC27822 /* ConfettiLettersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5EEA0182546D2106210378 /* ConfettiLettersView.swift */; };
 		5B6A3B6FFDEC654C8242FB64 /* ParticleAssembleLogoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31CC49938FE9D1F6FB5F551F /* ParticleAssembleLogoView.swift */; };
 		5BD4089203E6020F3FC037B9 /* ThermalPressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B53609E3E4E910B3ACC13E6 /* ThermalPressView.swift */; };
@@ -103,6 +112,7 @@
 		62DB68304AE5F6B289E3EEEE /* PinShakeSuccessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFAA611B0323FC1465DC405C /* PinShakeSuccessView.swift */; };
 		62EB47BABA30BEA21B956484 /* VortexSpiralView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F26BB3F00AF051346ED3B6F2 /* VortexSpiralView.swift */; };
 		6602AC1B3DFFC379FA3A27E6 /* KnitBraidView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F3CE0F2A56FD2F10E6DBCC3 /* KnitBraidView.swift */; };
+		66D2D8FD441DAFDD90D0AD35 /* PagecurlDrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFA37AC81384F066B478D2A3 /* PagecurlDrawerView.swift */; };
 		66F917C5C11690960EEBE378 /* ThrowAndCatchOrbitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D445C2E44953FECE6F90AB4B /* ThrowAndCatchOrbitView.swift */; };
 		67FCA2FFD0D303579D09417E /* RatingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E872C6A233E789C02029A285 /* RatingView.swift */; };
 		68DF636E59819BB9452F1A7C /* GlassShatterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8629FCD4490840B09A8AF225 /* GlassShatterView.swift */; };
@@ -116,6 +126,7 @@
 		6CA2684EF43EF3538B86F82F /* EdgeSwipePageCurlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2D0143ED68FE154478CA0D1 /* EdgeSwipePageCurlView.swift */; };
 		6F9C0DB337CEB48DA881CBBA /* ProBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFDAC0DB5D6B97DE0FF62E14 /* ProBadge.swift */; };
 		6FA34D0C521CFAB49D33AB36 /* DrawerCascadeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D93BA63D315F2243AD0F0332 /* DrawerCascadeView.swift */; };
+		71A70D3B4F4387D6AAA0DE43 /* ParallaxDeckTabsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C5D267C1B8307996EC393C /* ParallaxDeckTabsView.swift */; };
 		7251799D235F62796DB744F0 /* CopyVanishView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03E43B8E7A3EEE217AECAE71 /* CopyVanishView.swift */; };
 		72A11C8AFCACA9E76949CF4A /* AnimationCatalogSeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9437562A4BD888F3E3B8FEB7 /* AnimationCatalogSeed.swift */; };
 		72AD48D1C32F4C49EF3D1216 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D5F2E519E1E3FD8303A29D15 /* Preview Assets.xcassets */; };
@@ -130,6 +141,7 @@
 		7F8EAE332EAA03712E4CB743 /* GenieWarpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25E0A8D421B3F17211AAD853 /* GenieWarpView.swift */; };
 		7FE14B9C8D1A3B6EE9168571 /* DragLiquidFillTiltView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B636CE11DDC00E3CE25D695B /* DragLiquidFillTiltView.swift */; };
 		803BC01D569CF6A615077789 /* MoodMorphRatingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDDEF8090EB09A91E353E021 /* MoodMorphRatingView.swift */; };
+		81434912DF135278B11BB03B /* InkbleedSegmentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3288925741A3C7A6F3FB1B36 /* InkbleedSegmentView.swift */; };
 		81C64B7C917273492DFCC900 /* RadarSweepView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9FE5553CF2B51CF17AABB9D /* RadarSweepView.swift */; };
 		8209D3F5A6F84A50E183D1C4 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41E2CA19008E4095446DFDD3 /* SearchView.swift */; };
 		825479FA1600C510DB31EEF1 /* FlingPinballBumpersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5A83D5F49BE5AA451EC3AC1 /* FlingPinballBumpersView.swift */; };
@@ -138,6 +150,7 @@
 		86D6C5B2AFFA5C39FB4CDCFB /* PagePeelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F80BAC9D3634440B0DCFF3BA /* PagePeelView.swift */; };
 		871704859E5F1DACFA93B81C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2D7586E1E77DA3D2DFAB881 /* Foundation.framework */; };
 		87C1620BBB47B9A64F6A2E7C /* RadioInkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5D0E3CC4239E364091B2F5B /* RadioInkView.swift */; };
+		8B4F2E72E08A535DCFB4DC58 /* MagneticSnapDockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0DF0BC6A2DE2BBBB459D0D /* MagneticSnapDockView.swift */; };
 		8C59429469B262F5E49B2C57 /* ThumbFlipLikeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F40099A4840DDF395BC758 /* ThumbFlipLikeView.swift */; };
 		8D1E5AC76744E3E1698E426C /* FanDeckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06EE30DC21A52A26A6DA8BC2 /* FanDeckView.swift */; };
 		8D4E469776682DAFE6D5EF0D /* NeonFlickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7B3C1055F9F37F5F69622FA /* NeonFlickerView.swift */; };
@@ -145,6 +158,8 @@
 		90677EED8BEACF9DB9D25769 /* AnimationPreviewRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AC5A43E55628209613E297E /* AnimationPreviewRegistry.swift */; };
 		921B37A7AC8504479C9FE40A /* JellyDragBlobView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B43732A20CD3F2FA920290F7 /* JellyDragBlobView.swift */; };
 		943F2098A30BD33D1B62FCEA /* MorsePulseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BBF1B7B45281B4B2598BC43 /* MorsePulseView.swift */; };
+		9632C0CD6BE614B0C5ADA639 /* PaperPopupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70024B1C7E6C67FB37C01B56 /* PaperPopupView.swift */; };
+		9658A6C9542687B1BBB2FB2C /* DepthDioramaView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1FFD0D0F8C8A0538F91A320 /* DepthDioramaView.swift */; };
 		974A7B90B561E10D30F14155 /* PurchaseRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 959AF64BF0F8536C8885F891 /* PurchaseRepository.swift */; };
 		975D377965B0E6D63138A7CC /* SwipeDominoCascadeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19B9127CEE43FEB8CD2E467A /* SwipeDominoCascadeView.swift */; };
 		97F6358CB2A2369D7A1AED9F /* FavoritesRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56FE1D93A4E036DDEE1BABFB /* FavoritesRepository.swift */; };
@@ -161,6 +176,7 @@
 		9E0DBDC20B65F1B6CC21A886 /* ElasticRopeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E62DF6C009F124077079CF0 /* ElasticRopeView.swift */; };
 		9E8B94FD897D233C1259E0DA /* HeatMirage.metal in Sources */ = {isa = PBXBuildFile; fileRef = AAF1F67C5AC8D4841F1166F2 /* HeatMirage.metal */; };
 		9FD5D976DE98EAEE7D534BE5 /* PinchCollapseGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AEA8E26388833F35CA554A4 /* PinchCollapseGridView.swift */; };
+		A038DE0A42A735610041286E /* ConstellationHeroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D80D4CAD87F963D2E48D4149 /* ConstellationHeroView.swift */; };
 		A10646899BA311ACD73882D3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = CBC451507EFC0E1F6FF23208 /* PrivacyInfo.xcprivacy */; };
 		A1536C0590689B4D6677C912 /* CoinFlipStackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E055D0AF4FD8F7F18693EDC /* CoinFlipStackView.swift */; };
 		A32E22D51B38D84164856770 /* SlideToConfirmView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4777F0AE8ECB9092AB5E218C /* SlideToConfirmView.swift */; };
@@ -177,6 +193,7 @@
 		A81791B2E1E09629DBEBC548 /* MagneticRadioSnapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A8C3C91116B11AA8509692 /* MagneticRadioSnapView.swift */; };
 		A8734D09F03A93E2AE94B0F9 /* MercuryFillView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8ED1672F0282CCC1E3CDFFE3 /* MercuryFillView.swift */; };
 		A962A89EFEE5760BAF15F1CD /* HoldDragSlingshotAimView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F86EACA029ACD86DBECE0F1 /* HoldDragSlingshotAimView.swift */; };
+		A96826B1B269B90704D3F6AC /* RadarLockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F895F98C4EA1E4634B15D34 /* RadarLockView.swift */; };
 		AA7E182CD0FDDE7187FAE8D9 /* FerrofluidSpikeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21E38B9E2EE29EABA6F0E264 /* FerrofluidSpikeView.swift */; };
 		AA8F48E9EFA8E28AAE0106B3 /* TearReceiptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6A1CCE10D6AB12D08812865 /* TearReceiptView.swift */; };
 		AB1123A8E45ACA40107256FC /* PeelAwayCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9969A5201420094F6CD42E65 /* PeelAwayCardView.swift */; };
@@ -218,6 +235,7 @@
 		D9228AAF0A58561B817A2656 /* SwiftCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935D098AF14DDA0F49C9DC8B /* SwiftCodeView.swift */; };
 		D9CCD50286276CBD2AC112A4 /* PunchoutCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1825BD4A68E66667911BD63C /* PunchoutCheckView.swift */; };
 		DA9B0DAFCC2DC9F10FB669C1 /* VolumeFluidView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 473305573637A34DB5274FAF /* VolumeFluidView.swift */; };
+		DAD02CB2C20A1E1252755A8F /* RollingBeadTabsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03511C3E866077DD8D5D75DB /* RollingBeadTabsView.swift */; };
 		DCC00700D93A5F0529DE77D4 /* ZipperUnzipView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14D5D0F960C8C1E074EDD681 /* ZipperUnzipView.swift */; };
 		DD431C3096DCA0D068126A1E /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066F04F8C34E6BA806207CB2 /* StoreManager.swift */; };
 		DDB674BAB282F7DCB87923DF /* FoldOrigamiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A36E661CCCAB429513EB7D1 /* FoldOrigamiView.swift */; };
@@ -245,6 +263,7 @@
 		FA878F90F4A002E73BFEAA54 /* GlassShatterSettleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82F73253939283D6444C5164 /* GlassShatterSettleView.swift */; };
 		FBFA322952BE6E458F7F7091 /* BouncingPayloadView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD975E5DC5FE1B4CB037870F /* BouncingPayloadView.swift */; };
 		FC2BDBE32BE03F78D8850C16 /* LiquidFillView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 697DDB5C2C62AC60CB2D61C1 /* LiquidFillView.swift */; };
+		FD049BC00B5B6B59BC1CF06B /* OrbitalSatelliteMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3E597F14468C7E3364D245 /* OrbitalSatelliteMenuView.swift */; };
 		FD1E880A9061F4FECDA99866 /* BespokeSeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B33E8615462F6DB3135BDE3 /* BespokeSeed.swift */; };
 		FE0474A255E41C3079BBFDD0 /* DragElasticGridWarpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22DCD11BEBD9C32C40E4393C /* DragElasticGridWarpView.swift */; };
 		FE10942CCC07CB93FAEBA9CA /* SplitFlapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7059F20C7075324D67766B7 /* SplitFlapView.swift */; };
@@ -263,6 +282,8 @@
 /* Begin PBXFileReference section */
 		0230972310E91968E26ABD5E /* BubbleWrapPopView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BubbleWrapPopView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/BubbleWrapPopView.swift; sourceTree = "<group>"; };
 		033038572D9397EFBE11BDA6 /* IconButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconButton.swift; sourceTree = "<group>"; };
+		03511C3E866077DD8D5D75DB /* RollingBeadTabsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RollingBeadTabsView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/RollingBeadTabsView.swift; sourceTree = "<group>"; };
+		039EA3FA5E0FBCF0D8CD598E /* OrigamiFoldTabsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OrigamiFoldTabsView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/OrigamiFoldTabsView.swift; sourceTree = "<group>"; };
 		03E43B8E7A3EEE217AECAE71 /* CopyVanishView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CopyVanishView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/CopyVanishView.swift; sourceTree = "<group>"; };
 		066F04F8C34E6BA806207CB2 /* StoreManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
 		06EE30DC21A52A26A6DA8BC2 /* FanDeckView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FanDeckView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/FanDeckView.swift; sourceTree = "<group>"; };
@@ -302,11 +323,13 @@
 		285ECCB3C202B1CDD1639600 /* PaywallViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallViewModel.swift; sourceTree = "<group>"; };
 		2C5F461F15679801F8B87BA1 /* AuroraCodeGen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuroraCodeGen.swift; sourceTree = "<group>"; };
 		2CE4F0C7112E7E24D6033AB2 /* AuthSessionCodableTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthSessionCodableTests.swift; sourceTree = "<group>"; };
+		2E0DBF56F5E78A0BAF0F9AB2 /* OrigamiHeroView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OrigamiHeroView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/OrigamiHeroView.swift; sourceTree = "<group>"; };
 		2F3CE0F2A56FD2F10E6DBCC3 /* KnitBraidView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = KnitBraidView.swift; path = InspireCreativityApp/Animations/Catalog/Loaders/KnitBraidView.swift; sourceTree = "<group>"; };
 		2F86EACA029ACD86DBECE0F1 /* HoldDragSlingshotAimView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HoldDragSlingshotAimView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/HoldDragSlingshotAimView.swift; sourceTree = "<group>"; };
 		2FA135432B4311CC755D1298 /* SwipeCurtainPartView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SwipeCurtainPartView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/SwipeCurtainPartView.swift; sourceTree = "<group>"; };
 		3163399E3EEB394753E8EA26 /* LibraryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViewModel.swift; sourceTree = "<group>"; };
 		31CC49938FE9D1F6FB5F551F /* ParticleAssembleLogoView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ParticleAssembleLogoView.swift; path = InspireCreativityApp/Animations/Catalog/Loaders/ParticleAssembleLogoView.swift; sourceTree = "<group>"; };
+		3288925741A3C7A6F3FB1B36 /* InkbleedSegmentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InkbleedSegmentView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/InkbleedSegmentView.swift; sourceTree = "<group>"; };
 		328CF05BD82582AB0DD93EDC /* ColumnSlatSlideView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ColumnSlatSlideView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/ColumnSlatSlideView.swift; sourceTree = "<group>"; };
 		3449310CC5054890B09E6758 /* ShatterReformView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShatterReformView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/ShatterReformView.swift; sourceTree = "<group>"; };
 		35357A91C39A0DBD0E0C90BC /* RotateGearTrainView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RotateGearTrainView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/RotateGearTrainView.swift; sourceTree = "<group>"; };
@@ -320,6 +343,7 @@
 		3AC5A43E55628209613E297E /* AnimationPreviewRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationPreviewRegistry.swift; sourceTree = "<group>"; };
 		3EEE673CCC6108989B566198 /* MetaballOrbitView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MetaballOrbitView.swift; path = InspireCreativityApp/Animations/Catalog/Loaders/MetaballOrbitView.swift; sourceTree = "<group>"; };
 		3F1C1FB3ECA59597C3523E39 /* TraceCheckmarkView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TraceCheckmarkView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/TraceCheckmarkView.swift; sourceTree = "<group>"; };
+		3F895F98C4EA1E4634B15D34 /* RadarLockView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RadarLockView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/RadarLockView.swift; sourceTree = "<group>"; };
 		41069A9D2B8A714765711BBB /* KnobDetentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = KnobDetentView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/KnobDetentView.swift; sourceTree = "<group>"; };
 		411F3E0F2A3ADCCC3E07957A /* DetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailViewModel.swift; sourceTree = "<group>"; };
 		417A69ECA0C324A4E976A55C /* ParticleAssembleCheckView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ParticleAssembleCheckView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/ParticleAssembleCheckView.swift; sourceTree = "<group>"; };
@@ -353,6 +377,7 @@
 		5EF880BE97E4D575B2EE4D42 /* StretchPillSwitchView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StretchPillSwitchView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/StretchPillSwitchView.swift; sourceTree = "<group>"; };
 		5F1D6355086CAD815EBCC81E /* MetaballMergeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MetaballMergeView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/MetaballMergeView.swift; sourceTree = "<group>"; };
 		5F396DCAE73BF48FD8FF5110 /* ScrubberWaveView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ScrubberWaveView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/ScrubberWaveView.swift; sourceTree = "<group>"; };
+		60427FCF3F39BB5B051FFD71 /* OdometerDotsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OdometerDotsView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/OdometerDotsView.swift; sourceTree = "<group>"; };
 		61FBE8A746A8D24927A79EA6 /* MagneticPoetryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticPoetryView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/MagneticPoetryView.swift; sourceTree = "<group>"; };
 		621B6409DE398398BC15BF22 /* IrisShutterView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = IrisShutterView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/IrisShutterView.swift; sourceTree = "<group>"; };
 		6231D97F09CFF8978A45474D /* SocialAuthSessionMappingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SocialAuthSessionMappingTests.swift; sourceTree = "<group>"; };
@@ -369,9 +394,11 @@
 		6AC4FA0F701F0DD31050AD9C /* BrowseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowseView.swift; sourceTree = "<group>"; };
 		6B0ECFBF14AF0C1DBA837A2F /* OrigamiFoldView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OrigamiFoldView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/OrigamiFoldView.swift; sourceTree = "<group>"; };
 		6BBF1B7B45281B4B2598BC43 /* MorsePulseView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MorsePulseView.swift; path = InspireCreativityApp/Animations/Catalog/Loaders/MorsePulseView.swift; sourceTree = "<group>"; };
+		6BF698437D7ECE7E004268BB /* MagneticGrabDrawerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticGrabDrawerView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/MagneticGrabDrawerView.swift; sourceTree = "<group>"; };
 		6C52936F7B6A641A15CDC64E /* DragReorderSpringView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DragReorderSpringView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/DragReorderSpringView.swift; sourceTree = "<group>"; };
 		6D2BC5440216EA187C44C459 /* RotateDialKnobView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RotateDialKnobView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/RotateDialKnobView.swift; sourceTree = "<group>"; };
 		6E5351838AADEC6D82AFDF40 /* TypewriterCursorView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TypewriterCursorView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/TypewriterCursorView.swift; sourceTree = "<group>"; };
+		70024B1C7E6C67FB37C01B56 /* PaperPopupView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PaperPopupView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/PaperPopupView.swift; sourceTree = "<group>"; };
 		70BB057ADD4B5D993ACF14BA /* ClockPieWipeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ClockPieWipeView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/ClockPieWipeView.swift; sourceTree = "<group>"; };
 		7525E3EA05DCEDAA5EAF9A6D /* TheaterCurtainView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TheaterCurtainView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/TheaterCurtainView.swift; sourceTree = "<group>"; };
 		75EEC94784C95555C61C2FAF /* AccordionStretchView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AccordionStretchView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/AccordionStretchView.swift; sourceTree = "<group>"; };
@@ -402,6 +429,7 @@
 		935D098AF14DDA0F49C9DC8B /* SwiftCodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftCodeView.swift; sourceTree = "<group>"; };
 		9437562A4BD888F3E3B8FEB7 /* AnimationCatalogSeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationCatalogSeed.swift; sourceTree = "<group>"; };
 		94EF677A1038D5C944234F40 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
+		94F1835E23780B71740409B3 /* SymbolAssemblyView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SymbolAssemblyView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/SymbolAssemblyView.swift; sourceTree = "<group>"; };
 		959AF64BF0F8536C8885F891 /* PurchaseRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseRepository.swift; sourceTree = "<group>"; };
 		97EC98780C194E82CA688AC0 /* OtpCascadeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OtpCascadeView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/OtpCascadeView.swift; sourceTree = "<group>"; };
 		9969A5201420094F6CD42E65 /* PeelAwayCardView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PeelAwayCardView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/PeelAwayCardView.swift; sourceTree = "<group>"; };
@@ -415,6 +443,7 @@
 		A101CAC165FBDDB4146BDA2C /* StaggeredStarRatingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StaggeredStarRatingView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/StaggeredStarRatingView.swift; sourceTree = "<group>"; };
 		A16EAA347BC3F5A6E5143E84 /* InkBleedToggleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InkBleedToggleView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/InkBleedToggleView.swift; sourceTree = "<group>"; };
 		A1CE6F322EE6F5D423B3D96C /* FavoriteFoldView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FavoriteFoldView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/FavoriteFoldView.swift; sourceTree = "<group>"; };
+		A1FFD0D0F8C8A0538F91A320 /* DepthDioramaView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DepthDioramaView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/DepthDioramaView.swift; sourceTree = "<group>"; };
 		A23DAF26A4DDB0BDFD8E9E62 /* MagneticSnapToggleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticSnapToggleView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/MagneticSnapToggleView.swift; sourceTree = "<group>"; };
 		A2D7586E1E77DA3D2DFAB881 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		A332D11ACAB227309C906699 /* InspireCreativityApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspireCreativityApp.swift; sourceTree = "<group>"; };
@@ -424,11 +453,13 @@
 		A5E732010C44DA939BEC3410 /* AuroraPackPromoCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuroraPackPromoCard.swift; sourceTree = "<group>"; };
 		A7059F20C7075324D67766B7 /* SplitFlapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SplitFlapView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/SplitFlapView.swift; sourceTree = "<group>"; };
 		A7B3C1055F9F37F5F69622FA /* NeonFlickerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NeonFlickerView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/NeonFlickerView.swift; sourceTree = "<group>"; };
+		A95644011F2EB7F2977266E8 /* FerrofluidDotsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FerrofluidDotsView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/FerrofluidDotsView.swift; sourceTree = "<group>"; };
 		AA75BD038E4E82FAEA107CBB /* CreativePreviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreativePreviews.swift; sourceTree = "<group>"; };
 		AAF1F67C5AC8D4841F1166F2 /* HeatMirage.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = HeatMirage.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/HeatMirage.metal; sourceTree = "<group>"; };
 		AB312229AEDC94F2DD50012A /* PullToTriggerBowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PullToTriggerBowView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/PullToTriggerBowView.swift; sourceTree = "<group>"; };
 		AC940BBE4EFB42C2419D0663 /* HeatMirageView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HeatMirageView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/HeatMirageView.swift; sourceTree = "<group>"; };
 		ACCF4D0ECA9616FDD5417407 /* HoldChargeBurstView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HoldChargeBurstView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/HoldChargeBurstView.swift; sourceTree = "<group>"; };
+		AE3E597F14468C7E3364D245 /* OrbitalSatelliteMenuView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OrbitalSatelliteMenuView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/OrbitalSatelliteMenuView.swift; sourceTree = "<group>"; };
 		AEE5A84B9C4126E5E34AEE4F /* TearPerforationView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TearPerforationView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/TearPerforationView.swift; sourceTree = "<group>"; };
 		AEEE421B8B862C66D6DA3494 /* OrbitBadgeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OrbitBadgeView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/OrbitBadgeView.swift; sourceTree = "<group>"; };
 		AFD298655CB231D0297A971D /* CopyShredView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CopyShredView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/CopyShredView.swift; sourceTree = "<group>"; };
@@ -440,6 +471,8 @@
 		B636CE11DDC00E3CE25D695B /* DragLiquidFillTiltView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DragLiquidFillTiltView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/DragLiquidFillTiltView.swift; sourceTree = "<group>"; };
 		B6AA8A9B711C01CC8F9CE3F5 /* JellyCountBadgeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = JellyCountBadgeView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/JellyCountBadgeView.swift; sourceTree = "<group>"; };
 		B6F40099A4840DDF395BC758 /* ThumbFlipLikeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ThumbFlipLikeView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/ThumbFlipLikeView.swift; sourceTree = "<group>"; };
+		B8CA694332C3772500A8F7FC /* PaperTearView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PaperTearView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/PaperTearView.swift; sourceTree = "<group>"; };
+		BA0DF0BC6A2DE2BBBB459D0D /* MagneticSnapDockView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticSnapDockView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/MagneticSnapDockView.swift; sourceTree = "<group>"; };
 		BB52AF9F87962635702D0F49 /* RotateVinylScrubView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RotateVinylScrubView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/RotateVinylScrubView.swift; sourceTree = "<group>"; };
 		BBB6582DDE83A343828671BD /* PendulumNewtonView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PendulumNewtonView.swift; path = InspireCreativityApp/Animations/Catalog/Loaders/PendulumNewtonView.swift; sourceTree = "<group>"; };
 		BD1563398AE8C653A8513DC1 /* FlipClockProgressView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FlipClockProgressView.swift; path = InspireCreativityApp/Animations/Catalog/Loaders/FlipClockProgressView.swift; sourceTree = "<group>"; };
@@ -473,11 +506,15 @@
 		D6A1CCE10D6AB12D08812865 /* TearReceiptView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TearReceiptView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/TearReceiptView.swift; sourceTree = "<group>"; };
 		D719BD58DFD32E988D50E17F /* DominoSegmentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DominoSegmentView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/DominoSegmentView.swift; sourceTree = "<group>"; };
 		D801DA85F2E4716F8D1E5706 /* StampInkView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StampInkView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/StampInkView.swift; sourceTree = "<group>"; };
+		D80D4CAD87F963D2E48D4149 /* ConstellationHeroView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConstellationHeroView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/ConstellationHeroView.swift; sourceTree = "<group>"; };
 		D93BA63D315F2243AD0F0332 /* DrawerCascadeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DrawerCascadeView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/DrawerCascadeView.swift; sourceTree = "<group>"; };
 		D978EA3B7380013024868C2C /* PinchFocusDepthView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PinchFocusDepthView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/PinchFocusDepthView.swift; sourceTree = "<group>"; };
 		DD7BC8965FC5EABE5EC84610 /* CodeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeSheet.swift; sourceTree = "<group>"; };
 		DF5C1CC8D1BEE7464719BBD2 /* ZipperUnzipTransitionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ZipperUnzipTransitionView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/ZipperUnzipTransitionView.swift; sourceTree = "<group>"; };
+		DFA37AC81384F066B478D2A3 /* PagecurlDrawerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PagecurlDrawerView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/PagecurlDrawerView.swift; sourceTree = "<group>"; };
 		E0A26A73E32CA21847D50130 /* InspireCreativityAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = InspireCreativityAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E196A223AFD846500215A007 /* PermissionBellView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PermissionBellView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/PermissionBellView.swift; sourceTree = "<group>"; };
+		E2C5D267C1B8307996EC393C /* ParallaxDeckTabsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ParallaxDeckTabsView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/ParallaxDeckTabsView.swift; sourceTree = "<group>"; };
 		E359BB92170C0ED91B2520CF /* AuroraCodeGenTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuroraCodeGenTests.swift; sourceTree = "<group>"; };
 		E39BF1FCB37B50337508B31E /* BlindsRevealView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BlindsRevealView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/BlindsRevealView.swift; sourceTree = "<group>"; };
 		E56FC46709681EFE06DD638D /* AccordionFoldListView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AccordionFoldListView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/AccordionFoldListView.swift; sourceTree = "<group>"; };
@@ -488,6 +525,7 @@
 		EA8184AB99520780EA38DE62 /* AppContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppContainer.swift; sourceTree = "<group>"; };
 		EBA2741E26DB5539EAD51C34 /* AuthStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthStoreTests.swift; sourceTree = "<group>"; };
 		EC3FF3731A4CF56440DDB8CD /* BreathIdleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BreathIdleView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/BreathIdleView.swift; sourceTree = "<group>"; };
+		ED7F09D744FF0F6C88756C40 /* ColorBleedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ColorBleedView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/ColorBleedView.swift; sourceTree = "<group>"; };
 		ED8D2CDA1B143FCF2DE93116 /* TactileCounterFlipView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TactileCounterFlipView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/TactileCounterFlipView.swift; sourceTree = "<group>"; };
 		EDDEF8090EB09A91E353E021 /* MoodMorphRatingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MoodMorphRatingView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/MoodMorphRatingView.swift; sourceTree = "<group>"; };
 		EDE82FCB6FB76477F26C6773 /* SwipeStackShuffleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SwipeStackShuffleView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/SwipeStackShuffleView.swift; sourceTree = "<group>"; };
@@ -812,6 +850,14 @@
 				425D0F805EB53AE9C7B46263 /* ConcertinaSidebarView.swift */,
 				7CFBBBA1CE70084528774427 /* FlipboardSegmentView.swift */,
 				4BBEA1F18DD88B0C7CE0BC19 /* GenieMagnifyDockView.swift */,
+				3288925741A3C7A6F3FB1B36 /* InkbleedSegmentView.swift */,
+				6BF698437D7ECE7E004268BB /* MagneticGrabDrawerView.swift */,
+				BA0DF0BC6A2DE2BBBB459D0D /* MagneticSnapDockView.swift */,
+				AE3E597F14468C7E3364D245 /* OrbitalSatelliteMenuView.swift */,
+				039EA3FA5E0FBCF0D8CD598E /* OrigamiFoldTabsView.swift */,
+				DFA37AC81384F066B478D2A3 /* PagecurlDrawerView.swift */,
+				E2C5D267C1B8307996EC393C /* ParallaxDeckTabsView.swift */,
+				03511C3E866077DD8D5D75DB /* RollingBeadTabsView.swift */,
 			);
 			name = Navigation;
 			sourceTree = SOURCE_ROOT;
@@ -945,6 +991,24 @@
 			name = TextEffects;
 			sourceTree = SOURCE_ROOT;
 		};
+		B14E2F7E5CAE0E8F994CDC5E /* Onboarding */ = {
+			isa = PBXGroup;
+			children = (
+				ED7F09D744FF0F6C88756C40 /* ColorBleedView.swift */,
+				D80D4CAD87F963D2E48D4149 /* ConstellationHeroView.swift */,
+				A1FFD0D0F8C8A0538F91A320 /* DepthDioramaView.swift */,
+				A95644011F2EB7F2977266E8 /* FerrofluidDotsView.swift */,
+				60427FCF3F39BB5B051FFD71 /* OdometerDotsView.swift */,
+				2E0DBF56F5E78A0BAF0F9AB2 /* OrigamiHeroView.swift */,
+				70024B1C7E6C67FB37C01B56 /* PaperPopupView.swift */,
+				B8CA694332C3772500A8F7FC /* PaperTearView.swift */,
+				E196A223AFD846500215A007 /* PermissionBellView.swift */,
+				3F895F98C4EA1E4634B15D34 /* RadarLockView.swift */,
+				94F1835E23780B71740409B3 /* SymbolAssemblyView.swift */,
+			);
+			name = Onboarding;
+			sourceTree = SOURCE_ROOT;
+		};
 		B23D89B2D2DF3745A003AEB1 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -1039,6 +1103,7 @@
 				4135E647AE773014B8BDACD6 /* Transitions */,
 				7D3B4FCA439A0682A62C10AD /* Loaders */,
 				8A23E9FAAC6E1893AC9DB884 /* Navigation */,
+				B14E2F7E5CAE0E8F994CDC5E /* Onboarding */,
 			);
 			name = Catalog;
 			sourceTree = SOURCE_ROOT;
@@ -1373,6 +1438,25 @@
 				D6D960F701F21637FBCED599 /* ConcertinaSidebarView.swift in Sources */,
 				24C7A4DBC259FE3A76825DFA /* FlipboardSegmentView.swift in Sources */,
 				5E8C4313154D2CAF38BCD9A6 /* GenieMagnifyDockView.swift in Sources */,
+				81434912DF135278B11BB03B /* InkbleedSegmentView.swift in Sources */,
+				2BA6512491F1656B7AC718B1 /* MagneticGrabDrawerView.swift in Sources */,
+				8B4F2E72E08A535DCFB4DC58 /* MagneticSnapDockView.swift in Sources */,
+				FD049BC00B5B6B59BC1CF06B /* OrbitalSatelliteMenuView.swift in Sources */,
+				3A31C2836CE28734940F185C /* OrigamiFoldTabsView.swift in Sources */,
+				66D2D8FD441DAFDD90D0AD35 /* PagecurlDrawerView.swift in Sources */,
+				71A70D3B4F4387D6AAA0DE43 /* ParallaxDeckTabsView.swift in Sources */,
+				DAD02CB2C20A1E1252755A8F /* RollingBeadTabsView.swift in Sources */,
+				4A566948438929E9AA6E39A6 /* ColorBleedView.swift in Sources */,
+				A038DE0A42A735610041286E /* ConstellationHeroView.swift in Sources */,
+				9658A6C9542687B1BBB2FB2C /* DepthDioramaView.swift in Sources */,
+				216BE99097E23477967879EE /* FerrofluidDotsView.swift in Sources */,
+				02BC3873D84955DA2354241A /* OdometerDotsView.swift in Sources */,
+				5069ED7E25CD93BCC0CA6E5E /* OrigamiHeroView.swift in Sources */,
+				9632C0CD6BE614B0C5ADA639 /* PaperPopupView.swift in Sources */,
+				2AB5B81541A250ADF7745D6F /* PaperTearView.swift in Sources */,
+				2A3AE5E3E497B9E555CCEFC7 /* PermissionBellView.swift in Sources */,
+				A96826B1B269B90704D3F6AC /* RadarLockView.swift in Sources */,
+				590C44EDAD60C8B0BDB9B89B /* SymbolAssemblyView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

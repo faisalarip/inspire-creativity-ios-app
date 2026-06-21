@@ -20,15 +20,49 @@ INTEGRATED = os.path.join(cl.ROOT, "Tools/integrated_ids.json")
 def swift_str(s: str) -> str:
     return json.dumps(" ".join(s.split()), ensure_ascii=False)  # collapse whitespace, escape
 
-def normalize(src: str) -> str:
-    """Auto-fix the two systemic compile hazards seen in calibration:
-    1. Strip `#Preview` blocks — they go ambiguous (`SwiftUI.Preview` vs
-       `UIKit.Preview`) whenever a file imports UIKit, and add no catalog value.
-    2. A local `extension Color { init(hex:) }` collides with the app's
-       `HexColor.init(hex:)` (access level doesn't disambiguate same-signature
-       members on a type). Rename the external label to `hexCode`, keep the
-       internal name `hex` so the body is untouched and the snippet stays
-       self-contained & paste-ready.
+_TYPEDECL = re.compile(r'^(?:public |final |private |fileprivate )?(?:struct|class|enum|protocol|actor) ([A-Za-z_][A-Za-z0-9_]*)')
+_HELPER = re.compile(r'^private (?:struct|class|enum|actor) ([A-Za-z_][A-Za-z0-9_]*)', re.M)
+
+def reserved_symbols():
+    """Top-level type names defined OUTSIDE the bespoke Catalog — a generated
+    helper must not collide with these (module-visible) names."""
+    res = set()
+    base = os.path.join(cl.ROOT, "InspireCreativityApp")
+    for dp, _, fs in os.walk(base):
+        if "Animations/Catalog" in dp:
+            continue
+        for f in fs:
+            if not f.endswith(".swift"):
+                continue
+            for line in open(os.path.join(dp, f), encoding="utf-8", errors="replace"):
+                m = _TYPEDECL.match(line)
+                if m:
+                    res.add(m.group(1))
+    return res
+
+def _privatize_helpers(src, typename):
+    """Mark every top-level declaration `private` EXCEPT the main `<typename>`
+    view, so helper structs/funcs/extensions never collide across the 200+ files."""
+    out = []
+    for line in src.split("\n"):
+        m = re.match(r'^(struct|class|enum|actor|func|extension)\b(.*)$', line)
+        if m:
+            kw = m.group(1)
+            name = None
+            if kw != "extension":
+                nm = re.match(r'\s+([A-Za-z_][A-Za-z0-9_]*)', m.group(2))
+                name = nm.group(1) if nm else None
+            if not (kw != "extension" and name == typename):
+                line = "private " + line
+        out.append(line)
+    return "\n".join(out)
+
+def normalize(src: str, typename: str, reserved: set) -> str:
+    """Auto-fix every systemic compile hazard found across Gates 1-3:
+    1. Strip `#Preview` blocks (ambiguous SwiftUI.Preview vs UIKit.Preview when UIKit imported).
+    2. Rename a local `Color(hex:)` helper's external label to `hexCode` (collides with app HexColor).
+    3. Privatize all top-level helpers except the main view (cross-file name collisions).
+    4. Rename any private helper type that collides with an app-internal symbol (e.g. Chip, BlobShape).
     """
     out = src
     while True:
@@ -50,6 +84,9 @@ def normalize(src: str) -> str:
         out = out[:m.start()] + out[i + 1:]
     if 'extension Color' in out and '(hex:' in out:
         out = out.replace('init(hex:', 'init(hexCode hex:').replace('Color(hex:', 'Color(hexCode:')
+    out = _privatize_helpers(out, typename)
+    for name in (set(_HELPER.findall(out)) & reserved):
+        out = re.sub(rf'\b{name}\b', f'{typename}_{name}', out)
     return out.rstrip() + '\n'
 
 def insert_before_marker(path, marker, block):
@@ -70,6 +107,7 @@ def main():
     if isinstance(gen, dict) and "results" in gen:
         gen = gen["results"]
 
+    reserved = reserved_symbols()
     new_files, reg_lines, seed_lines, done_ids, skipped = [], [], [], [], []
     for item in gen:
         if not item:
@@ -78,7 +116,7 @@ def main():
         spec = specs.get(cid)
         if not spec:
             skipped.append(f"{cid} (no spec)"); continue
-        src = normalize((item.get("viewSource") or "").strip())
+        src = normalize((item.get("viewSource") or "").strip(), spec["typeName"], reserved)
         if "struct " not in src or spec["typeName"] not in src:
             skipped.append(f"{cid} (viewSource missing struct {spec['typeName']})"); continue
 

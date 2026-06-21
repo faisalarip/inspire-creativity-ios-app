@@ -3780,6 +3780,8194 @@ private extension Color {
     }
 }
 """###,
+        "ges-fling-paper-plane": ###"""
+import SwiftUI
+
+/// Fling a folded paper plane and it launches along your vector, then glides in a
+/// gentle banking descent with subtle pitch bobbing before nosing down to land.
+///
+/// - `demo == true`  → a self-driving `TimelineView(.animation)` loop auto-launches the
+///   plane each cycle, glides it in a banking descent and lands it on the pad, then resets.
+/// - `demo == false` → a real interactive component: drag the plane, release to fling it
+///   along your vector (seeded from `predictedEndTranslation`), watch it glide and land,
+///   then drag again to re-throw.
+struct FlingPaperPlaneView: View {
+    var demo: Bool = false
+
+    // Interactive launch parameters. The TimelineView closure is a PURE function of these
+    // plus elapsed time — nothing is integrated/accumulated during the render pass.
+    @State private var launchDate: Date? = nil
+    @State private var launchVelocity: CGVector = .zero   // normalized units / second
+    @State private var dragOrigin: CGPoint = .zero        // normalized launch point
+    @State private var dragTranslation: CGSize = .zero    // live finger offset (points)
+    @State private var isDragging: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            ZStack {
+                background
+                if demo {
+                    demoLayer(in: size)
+                } else {
+                    interactiveLayer(in: size)
+                }
+            }
+            .frame(width: size.width, height: size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
+}
+
+// MARK: - Backdrop
+
+private extension FlingPaperPlaneView {
+    var background: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.09, green: 0.12, blue: 0.22),
+                Color(red: 0.05, green: 0.06, blue: 0.12)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+}
+
+// MARK: - Demo (self-driving) layer
+
+private extension FlingPaperPlaneView {
+    /// Total loop length in seconds. The last `restFraction` of it shows the plane resting
+    /// on the pad so the cycle seam reads as an intentional pause, never a blank teleport.
+    var cycle: Double { 3.4 }
+    var restFraction: Double { 0.16 }
+
+    func demoLayer(in size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let phase = loopPhase(timeline.date)
+            let launch = demoLaunchVelocity()
+            let origin = demoOrigin
+            let flightSpan = cycle * (1.0 - restFraction)
+            // During the rest beat, freeze at the landed state of the last flight frame.
+            let elapsed = min(phase, flightSpan)
+            let state = glideState(t: elapsed, v0: launch, origin: origin, in: size)
+
+            ZStack(alignment: .topLeading) {
+                landingPad(at: demoLandingPoint, in: size)
+                glideTrail(state: state, in: size)
+                planeAndShadow(state: state, in: size)
+            }
+            .frame(width: size.width, height: size.height)
+        }
+    }
+
+    /// Position within the current loop, in seconds [0, cycle).
+    func loopPhase(_ date: Date) -> Double {
+        let t = date.timeIntervalSinceReferenceDate
+        return t.truncatingRemainder(dividingBy: cycle)
+    }
+
+    /// Launch point for the auto loop: lower-left pad.
+    var demoOrigin: CGPoint { CGPoint(x: 0.16, y: 0.78) }
+
+    /// Fixed launch vector for the loop. Negative y == upward in view space.
+    func demoLaunchVelocity() -> CGVector {
+        CGVector(dx: 0.62, dy: -0.92)
+    }
+
+    /// Where the demo plane actually touches down — derived from the same closed-form
+    /// glide model (and pinned to `ground`) so the pad sits exactly under the landed plane.
+    /// The four constants MUST match the locals in `glideState`.
+    var demoLandingPoint: CGPoint {
+        let v = demoLaunchVelocity()
+        let o = demoOrigin
+        let k: Double = 1.55
+        let gravity: Double = 0.46
+        let lift: Double = 0.34
+        let ground: CGFloat = 0.82
+        let tLand = landingTime(v0: v, origin: o, k: k, gravity: gravity,
+                                lift: lift, ground: ground)
+        let landed = trajectory(t: tLand, v0: v, origin: o,
+                                k: k, gravity: gravity, lift: lift)
+        return CGPoint(x: landed.x, y: Double(ground))
+    }
+}
+
+// MARK: - Interactive layer
+
+private extension FlingPaperPlaneView {
+    func interactiveLayer(in size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let state = currentInteractiveState(now: timeline.date, in: size)
+            ZStack(alignment: .topLeading) {
+                landingPad(at: restOrigin, in: size)
+                glideTrail(state: state, in: size)
+                planeAndShadow(state: state, in: size)
+            }
+            .frame(width: size.width, height: size.height)
+            .contentShape(Rectangle())
+            .gesture(dragGesture(in: size))
+        }
+    }
+
+    /// Resolve the plane state for interactive mode across its three beats:
+    /// idle-at-rest, dragging-with-finger, and post-release glide.
+    func currentInteractiveState(now: Date, in size: CGSize) -> GlideState {
+        if isDragging {
+            return draggingState(in: size)
+        }
+        guard let launchDate else {
+            return restState(at: restOrigin)
+        }
+        let t = now.timeIntervalSince(launchDate)
+        return glideState(t: t, v0: launchVelocity, origin: dragOrigin, in: size)
+    }
+
+    /// The home pad position for the interactive plane.
+    var restOrigin: CGPoint { CGPoint(x: 0.5, y: 0.7) }
+
+    /// Plane held under the finger: tracks the live translation, nose tilts toward motion.
+    func draggingState(in size: CGSize) -> GlideState {
+        let w = max(size.width, 1)
+        let h = max(size.height, 1)
+        let pos = CGPoint(
+            x: dragOrigin.x + dragTranslation.width / w,
+            y: dragOrigin.y + dragTranslation.height / h
+        )
+        // Tilt the nose toward where the launch will go (opposite the pull-back).
+        let pullX = -dragTranslation.width
+        let pullY = -dragTranslation.height
+        let mag = hypot(pullX, pullY)
+        let heading: Double = mag > 6 ? atan2(pullY, pullX) : -.pi / 2
+        return GlideState(
+            position: clampInside(pos),
+            rotation: heading,
+            scale: 1.06,
+            shadowSpread: 0.9
+        )
+    }
+
+    func dragGesture(in size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if !isDragging {
+                    isDragging = true
+                    launchDate = nil
+                    // Grab from wherever the plane rests.
+                    dragOrigin = restOrigin
+                }
+                dragTranslation = value.translation
+            }
+            .onEnded { value in
+                isDragging = false
+                let w = max(size.width, 1)
+                let h = max(size.height, 1)
+                // Seed the launch vector from the overshoot (predicted - current).
+                // `predictedEndTranslation` is available since iOS 13; this avoids relying
+                // on `DragGesture.Value.velocity`.
+                let overX = value.predictedEndTranslation.width - value.translation.width
+                let overY = value.predictedEndTranslation.height - value.translation.height
+                let releasePoint = CGPoint(
+                    x: dragOrigin.x + value.translation.width / w,
+                    y: dragOrigin.y + value.translation.height / h
+                )
+                let vScale: CGFloat = 1.9
+                var v = CGVector(dx: overX / w * vScale, dy: overY / h * vScale)
+                v = clampVelocity(v)
+                dragOrigin = clampInside(releasePoint)
+                launchVelocity = v
+                launchDate = Date()
+            }
+    }
+}
+
+// MARK: - Shared glide model (pure function of time)
+
+/// A fully-resolved render state. Computed deterministically from launch params + time;
+/// never mutated during the render pass.
+private struct GlideState {
+    var position: CGPoint      // normalized [0,1] view fractions
+    var rotation: Double       // radians; 0 == nose pointing +x
+    var scale: CGFloat         // 1 == baseline
+    var shadowSpread: CGFloat  // 0 (tight, near ground) .. 1 (soft, high up)
+}
+
+private extension FlingPaperPlaneView {
+    /// Closed-form glide. No ODE stepping — every value is a direct function of `t`.
+    ///
+    /// Horizontal drift bleeds off exponentially (lift/drag): `x = v0x·(1 − e^(−k t))/k`.
+    /// Vertically the plane holds (lift) then steepens (gravity wins) into a nose-down
+    /// descent. Heading follows the velocity derivative so "nosing down to land" falls out
+    /// for free. After touchdown the plane is pinned and a damped-sinusoid settle owns the
+    /// rotation (so an at-rest `atan2` of near-zero velocity can't jitter the nose).
+    func glideState(t: Double, v0: CGVector, origin: CGPoint, in size: CGSize) -> GlideState {
+        guard t > 0 else { return restState(at: origin) }
+
+        let k: Double = 1.55         // horizontal drag constant
+        let gravity: Double = 0.46   // descent strength
+        let lift: Double = 0.34      // early upward hold
+        let ground: CGFloat = 0.82   // landing height (view fraction)
+
+        let raw = trajectory(t: t, v0: v0, origin: origin, k: k, gravity: gravity, lift: lift)
+        let tLand = landingTime(v0: v0, origin: origin, k: k, gravity: gravity,
+                                lift: lift, ground: ground)
+
+        if t >= tLand {
+            // Post-landing: pin on the ground; rotation eases via a damped wobble settle.
+            let landed = trajectory(t: tLand, v0: v0, origin: origin,
+                                    k: k, gravity: gravity, lift: lift)
+            let landedPos = CGPoint(x: landed.x, y: Double(ground))
+            let settle = landingSettle(since: t - tLand)
+            return GlideState(
+                position: clampInside(landedPos),
+                rotation: settle,
+                scale: 1.0,
+                shadowSpread: 0.05
+            )
+        }
+
+        // In-flight: heading from the trajectory's velocity, plus pitch-bob and bank.
+        let vel = trajectoryVelocity(t: t, v0: v0, k: k, gravity: gravity, lift: lift)
+        let heading = atan2(vel.dy, vel.dx)
+        let pitchBob: Double = 0.10 * sin(t * 6.2)
+        let bank = bankAngle(forwardSpeed: vel.dx)
+        let altitude = max(0.0, Double((ground - CGFloat(raw.y)) / ground))
+
+        return GlideState(
+            position: clampInside(raw),
+            rotation: heading + pitchBob + bank,
+            scale: 1.0 + 0.05 * CGFloat(altitude),
+            shadowSpread: CGFloat(altitude)
+        )
+    }
+
+    /// Closed-form position at time `t` (normalized view fractions).
+    func trajectory(t: Double, v0: CGVector, origin: CGPoint,
+                    k: Double, gravity: Double, lift: Double) -> CGPoint {
+        let decay = (1.0 - exp(-k * t)) / k
+        let x = Double(origin.x) + Double(v0.dx) * decay
+        // Vertical: initial velocity (incl. lift hold) bleeds via the same decay,
+        // then gravity adds an accelerating downward term.
+        let vy0 = Double(v0.dy) - lift   // more negative early -> rises/holds
+        let y = Double(origin.y) + vy0 * decay + 0.5 * gravity * t * t
+        return CGPoint(x: x, y: y)
+    }
+
+    /// Analytic velocity (derivative of `trajectory`) used for the flight heading.
+    func trajectoryVelocity(t: Double, v0: CGVector,
+                            k: Double, gravity: Double, lift: Double) -> CGVector {
+        let dDecay = exp(-k * t)         // d/dt of (1 − e^(−k t))/k
+        let vx = Double(v0.dx) * dDecay
+        let vy0 = Double(v0.dy) - lift
+        let vy = vy0 * dDecay + gravity * t
+        return CGVector(dx: vx, dy: vy)
+    }
+
+    /// Find (by sampling) the first time the path crosses the ground line.
+    func landingTime(v0: CGVector, origin: CGPoint, k: Double, gravity: Double,
+                     lift: Double, ground: CGFloat) -> Double {
+        var t = 0.04
+        let step = 0.02
+        let limit = 6.0
+        while t < limit {
+            let p = trajectory(t: t, v0: v0, origin: origin,
+                               k: k, gravity: gravity, lift: lift)
+            if CGFloat(p.y) >= ground { return t }
+            t += step
+        }
+        return limit
+    }
+
+    /// Damped-sinusoid settle for the post-landing nose wobble, easing to level (0).
+    func landingSettle(since dt: Double) -> Double {
+        let amp = 0.20
+        let damp = 5.0
+        let omega = 13.0
+        return amp * exp(-damp * dt) * cos(omega * dt)
+    }
+
+    /// Bank scaled by forward speed — faster drift, more bank.
+    func bankAngle(forwardSpeed vx: Double) -> Double {
+        let normalized = max(-1.0, min(1.0, vx / 0.8))
+        return 0.12 * normalized
+    }
+
+    func restState(at origin: CGPoint) -> GlideState {
+        GlideState(
+            position: origin,
+            rotation: -.pi / 2 + 0.05,   // resting nose slightly up
+            scale: 1.0,
+            shadowSpread: 0.05
+        )
+    }
+
+    func clampInside(_ p: CGPoint) -> CGPoint {
+        CGPoint(
+            x: min(0.94, max(0.06, p.x)),
+            y: min(0.92, max(0.06, p.y))
+        )
+    }
+
+    func clampVelocity(_ v: CGVector) -> CGVector {
+        let maxMag: CGFloat = 1.7
+        let mag = hypot(v.dx, v.dy)
+        guard mag > maxMag else { return v }
+        let s = maxMag / mag
+        return CGVector(dx: v.dx * s, dy: v.dy * s)
+    }
+}
+
+// MARK: - Rendering
+
+private extension FlingPaperPlaneView {
+    func planeAndShadow(state: GlideState, in size: CGSize) -> some View {
+        let span = min(size.width, size.height)
+        let planeSize = span * 0.22 * state.scale
+        let center = CGPoint(x: state.position.x * size.width,
+                             y: state.position.y * size.height)
+        // Contact shadow sits below the plane; softens & spreads with altitude.
+        let shadowDrop = span * (0.06 + 0.18 * state.shadowSpread)
+        let shadowScale = 1.0 - 0.45 * state.shadowSpread
+        let shadowOpacity = 0.30 - 0.18 * Double(state.shadowSpread)
+
+        return ZStack {
+            Ellipse()
+                .fill(Color(red: 0, green: 0, blue: 0).opacity(shadowOpacity))
+                .frame(width: planeSize * 0.9 * shadowScale,
+                       height: planeSize * 0.26 * shadowScale)
+                .blur(radius: 3 + 6 * state.shadowSpread)
+                .position(x: center.x, y: center.y + shadowDrop)
+
+            PaperPlaneShape()
+                .fill(planeBodyGradient)
+                .overlay(
+                    PaperPlaneShape()
+                        .stroke(Color(red: 1, green: 1, blue: 1).opacity(0.55),
+                                lineWidth: 0.8)
+                )
+                .overlay(
+                    PaperCreaseShape()
+                        .stroke(Color(red: 0.10, green: 0.12, blue: 0.20).opacity(0.5),
+                                lineWidth: 0.8)
+                )
+                .frame(width: planeSize, height: planeSize)
+                .rotationEffect(.radians(state.rotation))
+                .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(0.25),
+                        radius: 2, x: 0, y: 1)
+                .position(center)
+        }
+    }
+
+    var planeBodyGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.98, green: 0.98, blue: 1.0),
+                Color(red: 0.80, green: 0.84, blue: 0.94)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    /// A faint motion trail behind the plane while it is airborne and moving.
+    func glideTrail(state: GlideState, in size: CGSize) -> some View {
+        let span = min(size.width, size.height)
+        let center = CGPoint(x: state.position.x * size.width,
+                             y: state.position.y * size.height)
+        let len = span * 0.5 * state.shadowSpread
+        let dx = cos(state.rotation)
+        let dy = sin(state.rotation)
+        let tail = CGPoint(x: center.x - dx * len, y: center.y - dy * len)
+        let tipOpacity = 0.22 * Double(state.shadowSpread)
+
+        return Path { p in
+            p.move(to: center)
+            p.addLine(to: tail)
+        }
+        .stroke(
+            LinearGradient(
+                colors: [
+                    Color(red: 1, green: 1, blue: 1).opacity(0.0),
+                    Color(red: 0.7, green: 0.8, blue: 1.0).opacity(tipOpacity)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            ),
+            style: StrokeStyle(lineWidth: 2, lineCap: .round)
+        )
+        .allowsHitTesting(false)
+    }
+
+    func landingPad(at origin: CGPoint, in size: CGSize) -> some View {
+        let w = min(size.width, size.height) * 0.22
+        let p = CGPoint(x: origin.x * size.width, y: origin.y * size.height)
+        return Capsule()
+            .fill(Color(red: 1, green: 1, blue: 1).opacity(0.05))
+            .frame(width: w, height: w * 0.16)
+            .position(x: p.x, y: p.y + w * 0.30)
+            .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Plane geometry
+
+/// A folded paper-plane silhouette. Nose points toward +x (rotation 0).
+private struct PaperPlaneShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let w = rect.width
+        let h = rect.height
+        let nose = CGPoint(x: rect.minX + w * 0.98, y: rect.midY)
+        let topTail = CGPoint(x: rect.minX + w * 0.02, y: rect.minY + h * 0.16)
+        let tailNotch = CGPoint(x: rect.minX + w * 0.28, y: rect.midY)
+        let bottomTail = CGPoint(x: rect.minX + w * 0.02, y: rect.maxY - h * 0.16)
+
+        p.move(to: nose)
+        p.addLine(to: topTail)
+        p.addLine(to: tailNotch)
+        p.addLine(to: bottomTail)
+        p.closeSubpath()
+        return p
+    }
+}
+
+/// The center crease line of the fold (drawn as a subtle dividing line).
+private struct PaperCreaseShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let nose = CGPoint(x: rect.minX + rect.width * 0.98, y: rect.midY)
+        let tail = CGPoint(x: rect.minX + rect.width * 0.28, y: rect.midY)
+        p.move(to: nose)
+        p.addLine(to: tail)
+        return p
+    }
+}
+"""###,
+        "ges-fling-pinball-bumpers": ###"""
+import SwiftUI
+
+// MARK: - FlingPinballBumpersView
+// Fling a ball into a field of bumpers. Each hit reflects the ball with a touch
+// of extra energy (restitution > 1) and flashes / scale-pops the bumper. The ball
+// ricochets, decays with friction, and (interactively) you can fling it with a drag.
+// demo == true  -> self-playing: auto re-launches the ball every few seconds.
+// demo == false -> drag to fling; physics keeps coasting between flings.
+struct FlingPinballBumpersView: View {
+    var demo: Bool = false
+
+    // MARK: Simulation state
+    @State private var sim = PinballSim()
+    @State private var lastTick: Date? = nil
+    @State private var lastLaunch: Date? = nil
+    @State private var configuredSize: CGSize = .zero
+    @State private var hitCount: Int = 0
+    @State private var dragStart: CGPoint? = nil
+
+    var body: some View {
+        GeometryReader { geo in
+            TimelineView(.animation) { context in
+                Canvas { ctx, _ in
+                    drawField(into: ctx, size: geo.size, now: context.date)
+                } symbols: {
+                    // no external symbols needed
+                }
+                .contentShape(Rectangle())
+                .gesture(flingGesture(size: geo.size))
+                .onChange(of: context.date) { _, now in
+                    advance(now: now, size: geo.size)
+                }
+            }
+            .onChange(of: geo.size) { _, newSize in
+                configureIfNeeded(size: newSize)
+            }
+            .onAppear { configureIfNeeded(size: geo.size) }
+        }
+        .background(boardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .sensoryFeedback(.impact(flexibility: .soft), trigger: hitCount)
+    }
+
+    // MARK: Background
+    private var boardBackground: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.05, green: 0.05, blue: 0.10),
+                        Color(red: 0.10, green: 0.08, blue: 0.18)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+    }
+
+    // MARK: Configuration (first valid frame only)
+    private func configureIfNeeded(size: CGSize) {
+        guard size.width > 1, size.height > 1 else { return }
+        guard size != configuredSize else { return }
+        configuredSize = size
+        sim.configure(size: size)
+        if lastLaunch == nil {
+            // Seed an initial launch so demo never starts blank / static.
+            launch(in: size, seededByTime: true)
+        } else {
+            // On resize, keep the ball but re-clamp it into the new bounds.
+            sim.clampIntoBounds(size: size)
+        }
+    }
+
+    // MARK: Per-frame advance
+    private func advance(now: Date, size: CGSize) {
+        guard size.width > 1, size.height > 1 else { return }
+        guard sim.isConfigured else {
+            configureIfNeeded(size: size)
+            lastTick = now
+            return
+        }
+
+        let previous: Date = lastTick ?? now
+        lastTick = now
+        var dt: Double = now.timeIntervalSince(previous)
+        if dt <= 0 { return }
+        // Clamp dt so a stalled frame can't teleport the ball through a bumper.
+        dt = min(dt, 1.0 / 30.0)
+
+        // Demo: time-based re-launch keeps it alive regardless of where the ball rests.
+        if demo {
+            let elapsed: Double = now.timeIntervalSince(lastLaunch ?? now)
+            if elapsed > 3.4 {
+                launch(in: size, seededByTime: true)
+            }
+        }
+
+        let hits: Int = sim.step(dt: dt, size: size, now: now)
+        if hits > 0 {
+            hitCount += hits
+        }
+    }
+
+    // MARK: Launch helpers
+    private func launch(in size: CGSize, seededByTime: Bool) {
+        let now = Date()
+        lastLaunch = now
+        sim.resetBall(size: size, now: now, seeded: seededByTime)
+    }
+
+    private func flingGesture(size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if dragStart == nil {
+                    dragStart = value.startLocation
+                    // Park the ball under the finger while aiming.
+                    sim.holdBall(at: value.location, size: size)
+                } else {
+                    sim.holdBall(at: value.location, size: size)
+                }
+            }
+            .onEnded { value in
+                dragStart = nil
+                // velocity is CGSize, points/sec, available iOS 17+.
+                let v: CGSize = value.velocity
+                sim.flingBall(from: value.location, velocity: v, size: size)
+                lastLaunch = Date()
+            }
+    }
+
+    // MARK: Drawing
+    private func drawField(into ctx: GraphicsContext, size: CGSize, now: Date) {
+        guard sim.isConfigured else { return }
+        drawWalls(into: ctx, size: size)
+        for bumper in sim.bumpers {
+            drawBumper(bumper, into: ctx, size: size, now: now)
+        }
+        drawBall(into: ctx, size: size)
+    }
+
+    private func drawWalls(into ctx: GraphicsContext, size: CGSize) {
+        let inset: CGFloat = wallInset(size)
+        let rect = CGRect(
+            x: inset, y: inset,
+            width: size.width - inset * 2,
+            height: size.height - inset * 2
+        )
+        let path = Path(roundedRect: rect, cornerRadius: 14, style: .continuous)
+        ctx.stroke(
+            path,
+            with: .color(Color(red: 0.30, green: 0.34, blue: 0.55).opacity(0.55)),
+            lineWidth: max(1.0, size.width * 0.012)
+        )
+    }
+
+    private func drawBumper(_ bumper: Bumper, into ctx: GraphicsContext, size: CGSize, now: Date) {
+        let center = bumper.center(in: size)
+        let radius: CGFloat = bumper.radius(in: size)
+        let pop: CGFloat = bumper.popScale(now: now)
+        let glow: Double = bumper.glow(now: now)
+        let r: CGFloat = radius * pop
+
+        let rect = CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
+
+        // Outer halo when freshly hit.
+        if glow > 0.02 {
+            let haloR: CGFloat = r * 1.55
+            let haloRect = CGRect(
+                x: center.x - haloR, y: center.y - haloR,
+                width: haloR * 2, height: haloR * 2
+            )
+            ctx.fill(
+                Circle().path(in: haloRect),
+                with: .color(bumper.tint.color.opacity(0.35 * glow))
+            )
+        }
+
+        // Body with a radial-ish gradient feel (two stacked fills).
+        let base: RGB = bumper.tint
+        let lit: RGB = base.mix(with: .white, amount: 0.55 * glow + 0.10)
+        ctx.fill(Circle().path(in: rect), with: .color(lit.color))
+
+        let innerR: CGFloat = r * 0.62
+        let innerRect = CGRect(
+            x: center.x - innerR, y: center.y - innerR,
+            width: innerR * 2, height: innerR * 2
+        )
+        ctx.fill(
+            Circle().path(in: innerRect),
+            with: .color(base.mix(with: .black, amount: 0.25).color)
+        )
+
+        // Bright center cap.
+        let capR: CGFloat = r * 0.30
+        let capRect = CGRect(
+            x: center.x - capR, y: center.y - capR,
+            width: capR * 2, height: capR * 2
+        )
+        ctx.fill(
+            Circle().path(in: capRect),
+            with: .color(RGB.white.mix(with: base, amount: 0.30).color.opacity(0.85))
+        )
+
+        // Rim ring.
+        ctx.stroke(
+            Circle().path(in: rect),
+            with: .color(Color.white.opacity(0.25 + 0.5 * glow)),
+            lineWidth: max(1.0, r * 0.07)
+        )
+    }
+
+    private func drawBall(into ctx: GraphicsContext, size: CGSize) {
+        let radius: CGFloat = sim.ballRadius(in: size)
+        let p = sim.ball
+        // Contact shadow.
+        let shadowRect = CGRect(
+            x: p.x - radius * 1.05,
+            y: p.y - radius * 0.85 + radius * 0.6,
+            width: radius * 2.1,
+            height: radius * 1.7
+        )
+        ctx.fill(Ellipse().path(in: shadowRect), with: .color(Color.black.opacity(0.30)))
+
+        let rect = CGRect(x: p.x - radius, y: p.y - radius, width: radius * 2, height: radius * 2)
+        // Steel body.
+        ctx.fill(
+            Circle().path(in: rect),
+            with: .color(Color(red: 0.78, green: 0.82, blue: 0.90))
+        )
+        // Shading underside.
+        let lowR: CGFloat = radius * 0.85
+        let lowRect = CGRect(
+            x: p.x - lowR + radius * 0.10,
+            y: p.y - lowR + radius * 0.25,
+            width: lowR * 2, height: lowR * 2
+        )
+        ctx.fill(
+            Circle().path(in: lowRect),
+            with: .color(Color(red: 0.45, green: 0.50, blue: 0.62).opacity(0.65))
+        )
+        // Specular highlight.
+        let hiR: CGFloat = radius * 0.34
+        let hiRect = CGRect(
+            x: p.x - radius * 0.40 - hiR * 0.5,
+            y: p.y - radius * 0.40 - hiR * 0.5,
+            width: hiR * 2, height: hiR * 2
+        )
+        ctx.fill(Circle().path(in: hiRect), with: .color(Color.white.opacity(0.9)))
+    }
+
+    // MARK: Layout helpers
+    private func wallInset(_ size: CGSize) -> CGFloat {
+        return min(size.width, size.height) * 0.04
+    }
+}
+
+// MARK: - Self-contained RGB color (no UIKit dependency)
+private struct RGB {
+    var r: Double
+    var g: Double
+    var b: Double
+
+    var color: Color { Color(red: r, green: g, blue: b) }
+
+    static let white = RGB(r: 1, g: 1, b: 1)
+    static let black = RGB(r: 0, g: 0, b: 0)
+
+    func mix(with other: RGB, amount: Double) -> RGB {
+        let t = max(0.0, min(1.0, amount))
+        return RGB(
+            r: r + (other.r - r) * t,
+            g: g + (other.g - g) * t,
+            b: b + (other.b - b) * t
+        )
+    }
+}
+
+// MARK: - Bumper model
+private struct Bumper: Identifiable {
+    let id: Int
+    var nx: CGFloat          // normalized center x [0,1]
+    var ny: CGFloat          // normalized center y [0,1]
+    var nr: CGFloat          // normalized radius (relative to min dimension)
+    var tint: RGB
+    var lastHit: Date? = nil
+
+    func center(in size: CGSize) -> CGPoint {
+        CGPoint(x: nx * size.width, y: ny * size.height)
+    }
+
+    func radius(in size: CGSize) -> CGFloat {
+        nr * min(size.width, size.height)
+    }
+
+    // Brief spring-like scale pop after a hit (decays over ~0.45s).
+    func popScale(now: Date) -> CGFloat {
+        guard let hit = lastHit else { return 1.0 }
+        let t: Double = now.timeIntervalSince(hit)
+        if t < 0 || t > 0.5 { return 1.0 }
+        let decay: Double = exp(-t * 9.0)
+        let wobble: Double = sin(t * 26.0)
+        return 1.0 + CGFloat(0.22 * decay * wobble + 0.10 * decay)
+    }
+
+    // Flash brightness after a hit (decays over ~0.35s).
+    func glow(now: Date) -> Double {
+        guard let hit = lastHit else { return 0 }
+        let t: Double = now.timeIntervalSince(hit)
+        if t < 0 || t > 0.5 { return 0 }
+        return exp(-t * 8.0)
+    }
+}
+
+// MARK: - Pinball simulation
+private struct PinballSim {
+    var ball: CGPoint = .zero
+    var velocity: CGSize = .zero      // points / second
+    var bumpers: [Bumper] = []
+    var isConfigured: Bool = false
+    var held: Bool = false
+
+    // Tunable constants (relative to min dimension where spatial).
+    private let ballNR: CGFloat = 0.052
+    private let friction: Double = 0.55          // per-second velocity retention base
+    private let restitution: Double = 1.08       // > 1 adds energy on bumper hits
+    private let wallRestitution: Double = 0.86
+    private let maxSpeedFactor: Double = 3.2     // * minDim per second (anti-runaway)
+    private let minLaunchFactor: Double = 1.6
+
+    func ballRadius(in size: CGSize) -> CGFloat {
+        ballNR * min(size.width, size.height)
+    }
+
+    private func wallInset(_ size: CGSize) -> CGFloat {
+        min(size.width, size.height) * 0.04
+    }
+
+    mutating func configure(size: CGSize) {
+        bumpers = Self.makeBumpers()
+        if !isConfigured {
+            ball = CGPoint(x: size.width * 0.5, y: size.height * 0.72)
+            velocity = .zero
+        }
+        isConfigured = true
+    }
+
+    private static func makeBumpers() -> [Bumper] {
+        // Normalized layout — looks balanced in a tile and a big detail view.
+        let tintA = RGB(r: 0.96, g: 0.36, b: 0.45)
+        let tintB = RGB(r: 0.36, g: 0.72, b: 0.98)
+        let tintC = RGB(r: 0.99, g: 0.78, b: 0.30)
+        let tintD = RGB(r: 0.55, g: 0.92, b: 0.62)
+        return [
+            Bumper(id: 0, nx: 0.30, ny: 0.26, nr: 0.105, tint: tintA),
+            Bumper(id: 1, nx: 0.70, ny: 0.26, nr: 0.105, tint: tintB),
+            Bumper(id: 2, nx: 0.50, ny: 0.45, nr: 0.115, tint: tintC),
+            Bumper(id: 3, nx: 0.25, ny: 0.60, nr: 0.090, tint: tintD),
+            Bumper(id: 4, nx: 0.75, ny: 0.60, nr: 0.090, tint: tintD),
+            Bumper(id: 5, nx: 0.50, ny: 0.78, nr: 0.080, tint: tintA)
+        ]
+    }
+
+    private func maxSpeed(in size: CGSize) -> Double {
+        maxSpeedFactor * Double(min(size.width, size.height))
+    }
+
+    mutating func clampIntoBounds(size: CGSize) {
+        let r: CGFloat = ballRadius(in: size)
+        let inset: CGFloat = wallInset(size)
+        ball.x = min(max(ball.x, inset + r), size.width - inset - r)
+        ball.y = min(max(ball.y, inset + r), size.height - inset - r)
+    }
+
+    mutating func resetBall(size: CGSize, now: Date, seeded: Bool) {
+        held = false
+        ball = CGPoint(x: size.width * 0.5, y: size.height * 0.80)
+        let minDim = Double(min(size.width, size.height))
+        if seeded {
+            // Aim generally upward into the bumper field, with horizontal variety.
+            let spread: Double = Double.random(in: -0.5 ... 0.5)
+            let speed: Double = minDim * Double.random(in: 1.9 ... 2.6)
+            let angle: Double = (-Double.pi / 2) + spread
+            velocity = CGSize(width: cos(angle) * speed, height: sin(angle) * speed)
+        }
+    }
+
+    mutating func holdBall(at point: CGPoint, size: CGSize) {
+        held = true
+        velocity = .zero
+        ball = point
+        clampIntoBounds(size: size)
+    }
+
+    mutating func flingBall(from point: CGPoint, velocity v: CGSize, size: CGSize) {
+        held = false
+        ball = point
+        clampIntoBounds(size: size)
+        var vx = Double(v.width)
+        var vy = Double(v.height)
+        let minDim = Double(min(size.width, size.height))
+        let minLaunch = minLaunchFactor * minDim
+        let speed = (vx * vx + vy * vy).squareRoot()
+        if speed < minLaunch {
+            // Give a gentle default shove upward if the flick was tiny.
+            if speed < 1 {
+                vx = 0
+                vy = -minLaunch
+            } else {
+                let scale = minLaunch / speed
+                vx *= scale
+                vy *= scale
+            }
+        }
+        velocity = CGSize(width: vx, height: vy)
+        clampSpeed(in: size)
+    }
+
+    private mutating func clampSpeed(in size: CGSize) {
+        let limit = maxSpeed(in: size)
+        let vx = Double(velocity.width)
+        let vy = Double(velocity.height)
+        let s = (vx * vx + vy * vy).squareRoot()
+        if s > limit, s > 0 {
+            let k = limit / s
+            velocity = CGSize(width: vx * k, height: vy * k)
+        }
+    }
+
+    // Returns number of bumper hits this frame (for haptics).
+    mutating func step(dt: Double, size: CGSize, now: Date) -> Int {
+        if held { return 0 }
+        var hits = 0
+        let substeps = 3
+        let h = dt / Double(substeps)
+        for _ in 0..<substeps {
+            hits += integrate(h: h, size: size, now: now)
+        }
+        // Friction (frame-rate independent exponential-ish decay).
+        let retain = pow(friction, dt)
+        velocity = CGSize(width: Double(velocity.width) * retain,
+                          height: Double(velocity.height) * retain)
+        // Settle to rest if very slow to avoid endless micro-drift.
+        let minDim = Double(min(size.width, size.height))
+        let restThreshold = minDim * 0.06
+        let sp = (Double(velocity.width) * Double(velocity.width)
+                  + Double(velocity.height) * Double(velocity.height)).squareRoot()
+        if sp < restThreshold {
+            velocity = CGSize(width: Double(velocity.width) * 0.85,
+                              height: Double(velocity.height) * 0.85)
+        }
+        return hits
+    }
+
+    private mutating func integrate(h: Double, size: CGSize, now: Date) -> Int {
+        ball.x += CGFloat(Double(velocity.width) * h)
+        ball.y += CGFloat(Double(velocity.height) * h)
+        var hits = 0
+        hits += resolveWalls(size: size)
+        hits += resolveBumpers(size: size, now: now)
+        clampSpeed(in: size)
+        return hits
+    }
+
+    private mutating func resolveWalls(size: CGSize) -> Int {
+        let r: CGFloat = ballRadius(in: size)
+        let inset: CGFloat = wallInset(size)
+        let left = inset + r
+        let right = size.width - inset - r
+        let top = inset + r
+        let bottom = size.height - inset - r
+        var bounced = false
+
+        if ball.x < left {
+            ball.x = left
+            velocity.width = abs(velocity.width) * CGFloat(wallRestitution)
+            bounced = true
+        } else if ball.x > right {
+            ball.x = right
+            velocity.width = -abs(velocity.width) * CGFloat(wallRestitution)
+            bounced = true
+        }
+        if ball.y < top {
+            ball.y = top
+            velocity.height = abs(velocity.height) * CGFloat(wallRestitution)
+            bounced = true
+        } else if ball.y > bottom {
+            ball.y = bottom
+            velocity.height = -abs(velocity.height) * CGFloat(wallRestitution)
+            bounced = true
+        }
+        return bounced ? 0 : 0   // wall bounces don't fire bumper haptics
+    }
+
+    private mutating func resolveBumpers(size: CGSize, now: Date) -> Int {
+        let br: CGFloat = ballRadius(in: size)
+        var hits = 0
+        for i in bumpers.indices {
+            let c = bumpers[i].center(in: size)
+            let rad = bumpers[i].radius(in: size)
+            let dx = Double(ball.x - c.x)
+            let dy = Double(ball.y - c.y)
+            let dist = (dx * dx + dy * dy).squareRoot()
+            let minDist = Double(br + rad)
+            if dist < minDist && dist > 0.0001 {
+                // Push ball out along the contact normal.
+                let nx = dx / dist
+                let ny = dy / dist
+                let overlap = minDist - dist
+                ball.x += CGFloat(nx * overlap)
+                ball.y += CGFloat(ny * overlap)
+
+                // Reflect velocity about the normal, add restitution energy.
+                let vx = Double(velocity.width)
+                let vy = Double(velocity.height)
+                let vDotN = vx * nx + vy * ny
+                if vDotN < 0 {
+                    let rx = vx - 2 * vDotN * nx
+                    let ry = vy - 2 * vDotN * ny
+                    velocity = CGSize(width: rx * restitution, height: ry * restitution)
+                    // Add a small radial kick so it feels lively even on grazes.
+                    let minDim = Double(min(size.width, size.height))
+                    let kick = minDim * 0.20
+                    velocity.width += CGFloat(nx * kick)
+                    velocity.height += CGFloat(ny * kick)
+                    clampSpeed(in: size)
+                    bumpers[i].lastHit = now
+                    hits += 1
+                }
+            }
+        }
+        return hits
+    }
+}
+"""###,
+        "ges-fling-spinner-coast": ###"""
+import SwiftUI
+
+/// Fortune Wheel Flick — flick a segmented wheel and it spins with angular
+/// momentum, a ticking flap clacking past each segment and slowing with
+/// friction until the pointer eases into a final wedge.
+///
+/// - `demo == true`  : self-driving loop re-flicks the wheel every cycle.
+/// - `demo == false` : real `DragGesture` flick with friction-decay coast,
+///                     analytic snap-to-wedge, deflecting clicker flap and
+///                     per-tick haptics.
+struct FlingSpinnerCoastView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+
+            if demo {
+                DemoSpinner(side: side, center: center)
+            } else {
+                InteractiveSpinner(side: side, center: center)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.051, green: 0.055, blue: 0.086))
+    }
+}
+
+// MARK: - Shared geometry / palette
+
+private enum Wheel {
+    static let segments: Int = 8
+    static var seg: Double { (2 * .pi) / Double(segments) }
+
+    /// The fixed pointer sits at 12 o'clock. In screen space that direction is
+    /// `-.pi/2` (straight up). A wedge "center" is what we want resting under
+    /// the pointer, so the snap target solves for the wedge center aligning
+    /// with the pointer angle.
+    static let pointerAngle: Double = -.pi / 2
+
+    /// Decay constant (1/seconds). k·cycleDuration must stay ≥ ~5 so the
+    /// residual position gap at a demo cycle boundary is invisible.
+    static let friction: Double = 1.9
+
+    static let wedgeColors: [Color] = [
+        Color(red: 0.93, green: 0.36, blue: 0.42),
+        Color(red: 0.98, green: 0.70, blue: 0.32),
+        Color(red: 0.40, green: 0.80, blue: 0.58),
+        Color(red: 0.36, green: 0.62, blue: 0.93),
+        Color(red: 0.74, green: 0.50, blue: 0.93),
+        Color(red: 0.98, green: 0.52, blue: 0.66),
+        Color(red: 0.46, green: 0.84, blue: 0.86),
+        Color(red: 0.96, green: 0.84, blue: 0.40)
+    ]
+
+    /// Rotation that lands the nearest wedge center under the fixed pointer.
+    ///
+    /// Wedge `i` spans `[i·seg, (i+1)·seg]` with center `i·seg + seg/2`. After a
+    /// wheel rotation `θ` that center sits at screen angle `i·seg + seg/2 + θ`.
+    /// Requiring it to equal `pointerAngle` gives valid rotations
+    /// `θ = (pointerAngle - seg/2) + n·seg`. We snap to the one nearest `rest`.
+    static func snappedRest(_ rest: Double) -> Double {
+        let offset = pointerAngle - seg / 2
+        let n = (rest - offset) / seg
+        return n.rounded() * seg + offset
+    }
+}
+
+// MARK: - Spin model (pure, analytic)
+
+private struct SpinModel {
+    /// angle(t) = S − (S − start)·exp(−k·t)
+    /// At t=0 → start, at t→∞ → S (a snapped wedge center under the pointer).
+    static func angle(start: Double, target: Double, elapsed: Double) -> Double {
+        let k = Wheel.friction
+        return target - (target - start) * exp(-k * elapsed)
+    }
+
+    /// Instantaneous angular speed magnitude — drives flap deflection so the
+    /// clicker only flicks while the wheel is actually moving.
+    static func angularSpeed(start: Double, target: Double, elapsed: Double) -> Double {
+        let k = Wheel.friction
+        return abs((target - start) * k * exp(-k * elapsed))
+    }
+
+    /// Signed direction of rotation (for flap lean side).
+    static func direction(start: Double, target: Double) -> Double {
+        (target - start) >= 0 ? 1 : -1
+    }
+}
+
+// MARK: - Demo (self-driving)
+
+private struct DemoSpinner: View {
+    let side: CGFloat
+    let center: CGPoint
+
+    private let cycle: Double = 3.4
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let cycleIndex = floor(t / cycle)
+            let tau = t - cycleIndex * cycle
+
+            // Each cycle advances an integer number of wedges so every target
+            // is a true wedge center; accumulating the base gives a continuous
+            // re-flick with no backwards jump.
+            let wedgesPerCycle: Double = 5
+            let baseStart = Wheel.snappedRest(0)
+            let start = baseStart + cycleIndex * wedgesPerCycle * Wheel.seg
+            let target = start + wedgesPerCycle * Wheel.seg
+
+            let angle = SpinModel.angle(start: start, target: target, elapsed: tau)
+            let speed = SpinModel.angularSpeed(start: start, target: target, elapsed: tau)
+            let dir = SpinModel.direction(start: start, target: target)
+
+            SpinnerStage(
+                side: side,
+                center: center,
+                rotation: angle,
+                flapDeflection: flapDeflection(angle: angle, speed: speed, dir: dir),
+                tickIndex: 0,
+                hapticsEnabled: false
+            )
+        }
+    }
+}
+
+// MARK: - Interactive
+
+private struct InteractiveSpinner: View {
+    let side: CGFloat
+    let center: CGPoint
+
+    // Coasting state
+    @State private var startAngle: Double = Wheel.snappedRest(0)
+    @State private var targetAngle: Double = Wheel.snappedRest(0)
+    @State private var flingDate: Date = .distantPast
+
+    // Dragging state
+    @State private var isDragging: Bool = false
+    @State private var dragBaseAngle: Double = Wheel.snappedRest(0)
+    @State private var accumulatedFinger: Double = 0
+    @State private var lastFingerAngle: Double = 0
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let elapsed = context.date.timeIntervalSince(flingDate)
+            let render = renderState(elapsed: elapsed)
+
+            SpinnerStage(
+                side: side,
+                center: center,
+                rotation: render.angle,
+                flapDeflection: flapDeflection(angle: render.angle, speed: render.speed, dir: render.dir),
+                tickIndex: render.tickIndex,
+                hapticsEnabled: true
+            )
+        }
+        .contentShape(Rectangle())
+        .gesture(spinGesture)
+    }
+
+    private struct RenderState {
+        var angle: Double
+        var speed: Double
+        var dir: Double
+        var tickIndex: Int
+    }
+
+    private func renderState(elapsed: Double) -> RenderState {
+        let angle: Double
+        let speed: Double
+        let dir: Double
+        if isDragging {
+            angle = dragBaseAngle + accumulatedFinger
+            speed = 0
+            dir = accumulatedFinger >= 0 ? 1 : -1
+        } else {
+            angle = SpinModel.angle(start: startAngle, target: targetAngle, elapsed: max(0, elapsed))
+            speed = SpinModel.angularSpeed(start: startAngle, target: targetAngle, elapsed: max(0, elapsed))
+            dir = SpinModel.direction(start: startAngle, target: targetAngle)
+        }
+        let tickIndex = Int(floor(angle / Wheel.seg))
+        return RenderState(angle: angle, speed: speed, dir: dir, tickIndex: tickIndex)
+    }
+
+    private var spinGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let fingerAngle = atan2(
+                    value.location.y - center.y,
+                    value.location.x - center.x
+                )
+                if !isDragging {
+                    isDragging = true
+                    // Resume from wherever the coast currently sits.
+                    let elapsed = Date().timeIntervalSince(flingDate)
+                    dragBaseAngle = SpinModel.angle(
+                        start: startAngle, target: targetAngle, elapsed: max(0, elapsed)
+                    )
+                    accumulatedFinger = 0
+                    lastFingerAngle = fingerAngle
+                }
+                // Normalize wrap-around to [-pi, pi] so crossing the atan2 seam
+                // doesn't produce a giant jump.
+                var delta = fingerAngle - lastFingerAngle
+                if delta > .pi { delta -= 2 * .pi }
+                if delta < -.pi { delta += 2 * .pi }
+                accumulatedFinger += delta
+                lastFingerAngle = fingerAngle
+            }
+            .onEnded { value in
+                let current = dragBaseAngle + accumulatedFinger
+                let omega = angularVelocity(value: value)
+
+                // Natural exponential rest, then snap that rest to a wedge center.
+                let rest = current + omega / Wheel.friction
+                let snapped = Wheel.snappedRest(rest)
+
+                startAngle = current
+                targetAngle = snapped
+                flingDate = Date()
+
+                isDragging = false
+                accumulatedFinger = 0
+            }
+    }
+
+    /// Angular launch velocity from the drag's predicted end (iOS 17-safe).
+    private func angularVelocity(value: DragGesture.Value) -> Double {
+        let rx = value.location.x - center.x
+        let ry = value.location.y - center.y
+        let r2 = rx * rx + ry * ry
+        guard r2 > 1 else { return 0 }
+
+        // Predicted "remaining" motion is proportional to release velocity.
+        let px = value.predictedEndTranslation.width - value.translation.width
+        let py = value.predictedEndTranslation.height - value.translation.height
+
+        let gain: Double = 7.5
+        let cross = rx * py - ry * px
+        return gain * cross / r2
+    }
+}
+
+// MARK: - Flap deflection (shared, analytic)
+
+/// The clicker flap deflects sharply as a peg passes 12 o'clock, scaled by the
+/// current angular speed so it sits flat at rest. `pow(.., 8)` produces a tight
+/// clack right at each boundary that springs back across the wedge.
+private func flapDeflection(angle: Double, speed: Double, dir: Double) -> Double {
+    let phase = angle / Wheel.seg
+    let frac = phase - floor(phase)            // 0..1 across one wedge
+    // Distance to the nearest boundary (0 or 1), folded to 0..0.5.
+    let toBoundary = min(frac, 1 - frac)
+    let edge = pow(1 - toBoundary * 2, 8)      // 1 at a boundary, ~0 mid-wedge
+    let speedFactor = min(1.0, speed / 6.0)
+    let maxDefl: Double = 0.42
+    return maxDefl * speedFactor * edge * (dir >= 0 ? 1 : -1)
+}
+
+// MARK: - Visual stage
+
+private struct SpinnerStage: View {
+    let side: CGFloat
+    let center: CGPoint
+    let rotation: Double
+    let flapDeflection: Double
+    let tickIndex: Int
+    let hapticsEnabled: Bool
+
+    var body: some View {
+        let r = side * 0.40
+
+        ZStack {
+            WheelFace(radius: r)
+                .rotationEffect(.radians(rotation))
+                .position(center)
+
+            HubCap(radius: r * 0.18)
+                .position(center)
+
+            ClickerFlap(radius: r, deflection: flapDeflection)
+                .position(x: center.x, y: center.y - r)
+        }
+        .modifier(TickHaptics(enabled: hapticsEnabled, tickIndex: tickIndex))
+    }
+}
+
+// MARK: - Wheel face
+
+private struct WheelFace: View {
+    let radius: CGFloat
+
+    var body: some View {
+        Canvas { ctx, size in
+            let c = CGPoint(x: size.width / 2, y: size.height / 2)
+            let r = radius
+            let seg = Wheel.seg
+
+            // Outer rim
+            let rimRect = CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2)
+            ctx.fill(
+                Circle().path(in: rimRect.insetBy(dx: -r * 0.06, dy: -r * 0.06)),
+                with: .color(Color(red: 0.16, green: 0.17, blue: 0.22))
+            )
+
+            // Wedges
+            for i in 0..<Wheel.segments {
+                let a0 = Double(i) * seg
+                let a1 = Double(i + 1) * seg
+                var path = Path()
+                path.move(to: c)
+                path.addArc(
+                    center: c,
+                    radius: r,
+                    startAngle: .radians(a0),
+                    endAngle: .radians(a1),
+                    clockwise: false
+                )
+                path.closeSubpath()
+
+                let base = Wheel.wedgeColors[i % Wheel.wedgeColors.count]
+                ctx.fill(path, with: .color(base))
+
+                // Subtle radial shade for depth, clipped to the wedge.
+                ctx.fill(
+                    path,
+                    with: .radialGradient(
+                        Gradient(colors: [
+                            Color.white.opacity(0.12),
+                            Color.clear,
+                            Color.black.opacity(0.18)
+                        ]),
+                        center: c,
+                        startRadius: 0,
+                        endRadius: r
+                    )
+                )
+            }
+
+            // Pegs at each boundary (what the flap clacks against).
+            for i in 0..<Wheel.segments {
+                let a = Double(i) * seg
+                let p = CGPoint(
+                    x: c.x + cos(a) * r * 0.97,
+                    y: c.y + sin(a) * r * 0.97
+                )
+                let pegR = r * 0.045
+                let pegRect = CGRect(
+                    x: p.x - pegR, y: p.y - pegR,
+                    width: pegR * 2, height: pegR * 2
+                )
+                ctx.fill(Circle().path(in: pegRect), with: .color(.white.opacity(0.9)))
+                ctx.fill(
+                    Circle().path(in: pegRect.insetBy(dx: pegR * 0.4, dy: pegR * 0.4)),
+                    with: .color(Color(red: 0.22, green: 0.23, blue: 0.30))
+                )
+            }
+        }
+        .frame(width: radius * 2.2, height: radius * 2.2)
+    }
+}
+
+// MARK: - Hub
+
+private struct HubCap: View {
+    let radius: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.93, green: 0.94, blue: 0.98),
+                            Color(red: 0.62, green: 0.64, blue: 0.72)
+                        ],
+                        center: .topLeading,
+                        startRadius: 0,
+                        endRadius: radius * 2
+                    )
+                )
+            Circle()
+                .stroke(Color.black.opacity(0.25), lineWidth: max(1, radius * 0.12))
+        }
+        .frame(width: radius * 2, height: radius * 2)
+        .shadow(color: .black.opacity(0.4), radius: radius * 0.3, y: radius * 0.2)
+    }
+}
+
+// MARK: - Clicker flap (fixed at 12 o'clock)
+
+private struct ClickerFlap: View {
+    let radius: CGFloat
+    let deflection: Double
+
+    var body: some View {
+        let w = radius * 0.16
+        let h = radius * 0.34
+
+        FlapShape()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.97, green: 0.97, blue: 1.0),
+                        Color(red: 0.78, green: 0.80, blue: 0.88)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay(
+                FlapShape().stroke(Color.black.opacity(0.25), lineWidth: 1)
+            )
+            .frame(width: w, height: h)
+            .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+            // Pivot at the top so the flap swings like a hinged clicker.
+            .rotationEffect(.radians(deflection), anchor: .top)
+            .offset(y: -h * 0.15)
+    }
+}
+
+private struct FlapShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let topInset = rect.width * 0.12
+        p.move(to: CGPoint(x: rect.minX + topInset, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX - topInset, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX - topInset, y: rect.maxY * 0.55))
+        p.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))           // point
+        p.addLine(to: CGPoint(x: rect.minX + topInset, y: rect.maxY * 0.55))
+        p.closeSubpath()
+        return p
+    }
+}
+
+// MARK: - Haptics modifier
+
+private struct TickHaptics: ViewModifier {
+    let enabled: Bool
+    let tickIndex: Int
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.sensoryFeedback(.impact(weight: .light), trigger: tickIndex)
+        } else {
+            content
+        }
+    }
+}
+"""###,
+        "ges-gravity-bin-toss": ###"""
+import SwiftUI
+
+// MARK: - Gravity Bin Toss
+// Fling chips toward a bin; they arc under gravity, bounce off the rim and each
+// other, and pile up with stacking collisions. demo == true self-drives by
+// auto-tossing one chip per cycle; demo == false reads a DragGesture fling.
+//
+// Single shared simulation core: only the spawn trigger differs between modes.
+// All physics scale to the GeometryReader size so it works in a 120pt tile and
+// a large detail area alike. iOS 17. No external dependencies.
+
+struct GravityBinTossView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            GravityBinTossCore(demo: demo, size: geo.size)
+                .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - GravityBinTossView_Chip model
+
+private struct GravityBinTossView_Chip: Identifiable {
+    let id: Int
+    var position: CGPoint
+    var velocity: CGVector
+    var radius: CGFloat
+    var spin: CGFloat        // current rotation, radians
+    var spinRate: CGFloat    // radians / second
+    var hue: Double          // base color hue 0..1
+    var settled: Bool = false
+    var bornAt: TimeInterval
+}
+
+// MARK: - Simulation core
+
+private struct GravityBinTossCore: View {
+    let demo: Bool
+    let size: CGSize
+
+    @State private var chips: [GravityBinTossView_Chip] = []
+    @State private var nextID: Int = 0
+    @State private var lastTick: Date? = nil
+    @State private var spawnAccumulator: Double = 0
+    @State private var collisionCount: Int = 0   // haptic trigger (only bumped when !demo)
+    @State private var fadeOut: Double = 1.0      // demo reset fade
+    @State private var resetting: Bool = false
+
+    // Live drag preview
+    @State private var dragStart: CGPoint? = nil
+    @State private var dragCurrent: CGPoint? = nil
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            ZStack {
+                background
+                Canvas { ctx, _ in
+                    drawScene(into: ctx)
+                }
+                .opacity(fadeOut)
+
+                // Aim preview line while dragging (interactive only).
+                aimPreview
+            }
+            .onChange(of: timeline.date) { _, now in
+                tick(now)
+            }
+        }
+        .contentShape(Rectangle())
+        .gesture(flingGesture, including: demo ? .subviews : .all)
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: collisionCount)
+    }
+
+    // MARK: Layout helpers (all proportional to size)
+
+    private var unit: CGFloat { min(size.width, size.height) }
+
+    private var chipRadius: CGFloat { max(unit * 0.052, 3) }
+
+    private var gravity: CGFloat { size.height * 3.4 } // pt / s^2
+
+    private var binRect: CGRect {
+        let w = size.width * 0.46
+        let h = size.height * 0.5
+        let x = (size.width - w) / 2
+        let y = size.height - h - size.height * 0.06
+        return CGRect(x: x, y: y, width: w, height: h)
+    }
+
+    private var wallThickness: CGFloat { max(unit * 0.022, 2) }
+
+    private var floorY: CGFloat { binRect.maxY }
+
+    private var maxChips: Int { 16 }
+
+    // Spawn origin for demo / auto toss.
+    private var spawnPoint: CGPoint {
+        CGPoint(x: size.width * 0.16, y: size.height * 0.26)
+    }
+
+    // MARK: Background
+
+    private var background: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.05, green: 0.055, blue: 0.09),
+                Color(red: 0.10, green: 0.11, blue: 0.17)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    // MARK: Aim preview overlay
+
+    @ViewBuilder
+    private var aimPreview: some View {
+        if let start = dragStart, let current = dragCurrent {
+            Path { p in
+                p.move(to: start)
+                p.addLine(to: current)
+            }
+            .stroke(
+                Color(red: 1.0, green: 0.82, blue: 0.35).opacity(0.55),
+                style: StrokeStyle(lineWidth: max(unit * 0.012, 1.5), lineCap: .round, dash: [unit * 0.05, unit * 0.04])
+            )
+            Circle()
+                .fill(Color(red: 1.0, green: 0.82, blue: 0.35).opacity(0.85))
+                .frame(width: chipRadius * 1.8, height: chipRadius * 1.8)
+                .position(current)
+        }
+    }
+
+    // MARK: Drawing
+
+    private func drawScene(into ctx: GraphicsContext) {
+        drawBin(into: ctx)
+        for chip in chips {
+            drawChip(chip, into: ctx)
+        }
+    }
+
+    private func drawBin(into ctx: GraphicsContext) {
+        let r = binRect
+        let wt = wallThickness
+        let rimColor = Color(red: 0.62, green: 0.66, blue: 0.82)
+        let innerColor = Color(red: 0.13, green: 0.14, blue: 0.22)
+
+        // Inner well (subtle, so empty bin is never blank-looking).
+        let well = Path(roundedRect: r.insetBy(dx: wt * 0.4, dy: wt * 0.4),
+                        cornerRadius: wt)
+        ctx.fill(well, with: .color(innerColor))
+
+        // Left wall
+        let leftWall = Path(roundedRect: CGRect(x: r.minX - wt / 2, y: r.minY, width: wt, height: r.height),
+                            cornerRadius: wt / 2)
+        // Right wall
+        let rightWall = Path(roundedRect: CGRect(x: r.maxX - wt / 2, y: r.minY, width: wt, height: r.height),
+                             cornerRadius: wt / 2)
+        // Floor
+        let floor = Path(roundedRect: CGRect(x: r.minX - wt / 2, y: r.maxY - wt / 2, width: r.width + wt, height: wt),
+                         cornerRadius: wt / 2)
+
+        ctx.fill(leftWall, with: .color(rimColor))
+        ctx.fill(rightWall, with: .color(rimColor))
+        ctx.fill(floor, with: .color(rimColor))
+
+        // Rim caps (highlight) so the rim reads as a tactile lip the chips hit.
+        let cap = chipRadius * 0.5
+        for x in [r.minX, r.maxX] {
+            let dot = Path(ellipseIn: CGRect(x: x - cap, y: r.minY - cap, width: cap * 2, height: cap * 2))
+            ctx.fill(dot, with: .color(Color(red: 0.85, green: 0.88, blue: 1.0)))
+        }
+    }
+
+    private func drawChip(_ chip: GravityBinTossView_Chip, into ctx: GraphicsContext) {
+        let rect = CGRect(x: chip.position.x - chip.radius,
+                          y: chip.position.y - chip.radius,
+                          width: chip.radius * 2,
+                          height: chip.radius * 2)
+
+        let base = chipColor(chip.hue)
+        let highlight = chipColor(chip.hue, brighten: 0.28)
+
+        // Soft contact shadow under the chip.
+        let shadow = Path(ellipseIn: rect.offsetBy(dx: 0, dy: chip.radius * 0.35))
+        ctx.fill(shadow, with: .color(Color.black.opacity(0.22)))
+
+        // GravityBinTossView_Chip body with a radial sheen.
+        let body = Path(ellipseIn: rect)
+        ctx.fill(
+            body,
+            with: .radialGradient(
+                Gradient(colors: [highlight, base]),
+                center: CGPoint(x: chip.position.x - chip.radius * 0.35,
+                                y: chip.position.y - chip.radius * 0.35),
+                startRadius: 0,
+                endRadius: chip.radius * 1.4
+            )
+        )
+
+        // Rim ring + a notch mark to convey spin.
+        ctx.stroke(body, with: .color(Color.white.opacity(0.32)), lineWidth: max(chip.radius * 0.12, 0.6))
+
+        let notchLen = chip.radius * 0.72
+        var notch = Path()
+        notch.move(to: chip.position)
+        notch.addLine(to: CGPoint(x: chip.position.x + cos(chip.spin) * notchLen,
+                                  y: chip.position.y + sin(chip.spin) * notchLen))
+        ctx.stroke(notch, with: .color(Color.white.opacity(0.5)), lineWidth: max(chip.radius * 0.14, 0.7))
+    }
+
+    private func chipColor(_ hue: Double, brighten: Double = 0) -> Color {
+        Color(hue: hue, saturation: 0.62, brightness: min(0.95, 0.78 + brighten))
+    }
+
+    // MARK: Physics tick
+
+    private func tick(_ now: Date) {
+        guard let last = lastTick else {
+            lastTick = now
+            return
+        }
+        let rawDt = now.timeIntervalSince(last)
+        lastTick = now
+        // Clamp dt: first frames / return-from-background must not fling chips through walls.
+        let dt = CGFloat(min(max(rawDt, 0), 1.0 / 30.0))
+        guard dt > 0 else { return }
+
+        handleSpawning(now: now)
+        if dt > 0 {
+            stepPhysics(dt: dt, now: now.timeIntervalSince1970)
+        }
+        handleDemoReset(now: now)
+    }
+
+    // MARK: Spawning
+
+    private func handleSpawning(now: Date) {
+        guard demo else { return }
+        guard !resetting else { return }
+        spawnAccumulator += 1.0 / 60.0
+        // One toss roughly every ~0.85s; cycle of fill -> reset handled separately.
+        let interval: Double = 0.85
+        if spawnAccumulator >= interval && chips.count < maxChips {
+            spawnAccumulator = 0
+            spawnDemoChip(now: now)
+        }
+    }
+
+    private func spawnDemoChip(now: Date) {
+        // Aim into the bin with a pleasing arc; vary slightly per toss.
+        let target = CGPoint(x: binRect.midX + CGFloat.random(in: -binRect.width * 0.25...binRect.width * 0.25),
+                             y: binRect.minY + binRect.height * 0.3)
+        let vx = (target.x - spawnPoint.x) * 1.7
+        let vy = -size.height * CGFloat.random(in: 1.05...1.35)
+        spawnChip(at: spawnPoint,
+                  velocity: CGVector(dx: vx, dy: vy),
+                  now: now)
+    }
+
+    private func spawnChip(at point: CGPoint, velocity: CGVector, now: Date) {
+        guard chips.count < maxChips else { return }
+        let chip = GravityBinTossView_Chip(
+            id: nextID,
+            position: point,
+            velocity: velocity,
+            radius: chipRadius * CGFloat.random(in: 0.9...1.12),
+            spin: CGFloat.random(in: 0...(.pi * 2)),
+            spinRate: CGFloat.random(in: -6...6),
+            hue: Double.random(in: 0...1),
+            bornAt: now.timeIntervalSince1970
+        )
+        nextID += 1
+        chips.append(chip)
+    }
+
+    // MARK: Demo reset (fade, never hard-clear)
+
+    private func handleDemoReset(now: Date) {
+        guard demo else { return }
+        if resetting {
+            fadeOut = max(0, fadeOut - 0.06)
+            if fadeOut <= 0 {
+                chips.removeAll()
+                fadeOut = 1.0
+                resetting = false
+                spawnAccumulator = 0
+            }
+            return
+        }
+        // When the bin is full and everything settled, start a graceful fade reset.
+        if chips.count >= maxChips && chips.allSatisfy({ $0.settled }) {
+            resetting = true
+        }
+    }
+
+    // MARK: Integration + collisions
+
+    private func stepPhysics(dt: CGFloat, now: TimeInterval) {
+        let restitution: CGFloat = 0.42
+        let airDrag: CGFloat = 0.0
+        let restSpeed: CGFloat = size.height * 0.06   // below this near support -> sleep
+        let r = binRect
+        let wt = wallThickness
+
+        // 1. Integrate non-settled chips (gravity + motion + spin).
+        for i in chips.indices {
+            if chips[i].settled { continue }
+            chips[i].velocity.dy += gravity * dt
+            if airDrag > 0 {
+                chips[i].velocity.dx *= (1 - airDrag * dt)
+                chips[i].velocity.dy *= (1 - airDrag * dt)
+            }
+            chips[i].position.x += chips[i].velocity.dx * dt
+            chips[i].position.y += chips[i].velocity.dy * dt
+            chips[i].spin += chips[i].spinRate * dt
+        }
+
+        // 2. World collisions: bin walls / floor + overall bounds.
+        for i in chips.indices {
+            if chips[i].settled { continue }
+            resolveWorld(index: i, rect: r, wallThickness: wt, restitution: restitution)
+        }
+
+        // 3. Pairwise chip-vs-chip collisions (N^2 over <=16 bodies).
+        resolveChipPairs(restitution: restitution)
+
+        // 4. Rest detection: a chip slow + supported goes to sleep.
+        for i in chips.indices {
+            if chips[i].settled { continue }
+            let rad = chips[i].radius
+            let onFloor = chips[i].position.y + rad >= floorY - 0.5
+            let supported = onFloor || restingOnChip(i)
+            let speed = hypot(chips[i].velocity.dx, chips[i].velocity.dy)
+            if supported && speed < restSpeed {
+                chips[i].velocity = .zero
+                chips[i].spinRate *= 0.5
+                chips[i].settled = true
+            }
+        }
+    }
+
+    private func resolveWorld(index i: Int, rect r: CGRect, wallThickness wt: CGFloat, restitution: CGFloat) {
+        let rad = chips[i].radius
+        // Floor of the bin.
+        let fy = r.maxY - wt * 0.5
+        if chips[i].position.y + rad > fy {
+            // Only collide with floor if horizontally inside the bin mouth.
+            if chips[i].position.x > r.minX - rad && chips[i].position.x < r.maxX + rad {
+                let pen = (chips[i].position.y + rad) - fy
+                chips[i].position.y -= pen
+                if chips[i].velocity.dy > 0 {
+                    chips[i].velocity.dy = -chips[i].velocity.dy * restitution
+                    chips[i].velocity.dx *= 0.86
+                    bumpCollision()
+                }
+            }
+        }
+        // Inner walls (only when below the rim line, so chips can drop in from above).
+        let leftInner = r.minX + wt * 0.5
+        let rightInner = r.maxX - wt * 0.5
+        let belowRim = chips[i].position.y > r.minY
+        if belowRim {
+            if chips[i].position.x - rad < leftInner {
+                let pen = leftInner - (chips[i].position.x - rad)
+                chips[i].position.x += pen
+                if chips[i].velocity.dx < 0 {
+                    chips[i].velocity.dx = -chips[i].velocity.dx * restitution
+                    bumpCollision()
+                }
+            }
+            if chips[i].position.x + rad > rightInner {
+                let pen = (chips[i].position.x + rad) - rightInner
+                chips[i].position.x -= pen
+                if chips[i].velocity.dx > 0 {
+                    chips[i].velocity.dx = -chips[i].velocity.dx * restitution
+                    bumpCollision()
+                }
+            }
+        } else {
+            // Above the rim: bounce off the rim lips so flung chips can ricochet.
+            collideRimCap(index: i, capCenter: CGPoint(x: r.minX, y: r.minY), restitution: restitution)
+            collideRimCap(index: i, capCenter: CGPoint(x: r.maxX, y: r.minY), restitution: restitution)
+        }
+
+        // Keep chips inside the overall view so nothing escapes off-screen.
+        clampToBounds(index: i)
+    }
+
+    private func collideRimCap(index i: Int, capCenter: CGPoint, restitution: CGFloat) {
+        let rad = chips[i].radius
+        let capR = chipRadius * 0.5
+        let dx = chips[i].position.x - capCenter.x
+        let dy = chips[i].position.y - capCenter.y
+        let dist = hypot(dx, dy)
+        let minDist = rad + capR
+        if dist < minDist && dist > 0.0001 {
+            let nx = dx / dist
+            let ny = dy / dist
+            let pen = minDist - dist
+            chips[i].position.x += nx * pen
+            chips[i].position.y += ny * pen
+            let vn = chips[i].velocity.dx * nx + chips[i].velocity.dy * ny
+            if vn < 0 {
+                chips[i].velocity.dx -= (1 + restitution) * vn * nx
+                chips[i].velocity.dy -= (1 + restitution) * vn * ny
+                bumpCollision()
+            }
+        }
+    }
+
+    private func clampToBounds(index i: Int) {
+        let rad = chips[i].radius
+        if chips[i].position.x < rad {
+            chips[i].position.x = rad
+            chips[i].velocity.dx = abs(chips[i].velocity.dx) * 0.4
+        }
+        if chips[i].position.x > size.width - rad {
+            chips[i].position.x = size.width - rad
+            chips[i].velocity.dx = -abs(chips[i].velocity.dx) * 0.4
+        }
+        if chips[i].position.y > size.height - rad {
+            chips[i].position.y = size.height - rad
+            if chips[i].velocity.dy > 0 {
+                chips[i].velocity.dy = -chips[i].velocity.dy * 0.3
+            }
+        }
+    }
+
+    private func resolveChipPairs(restitution: CGFloat) {
+        guard chips.count > 1 else { return }
+        for a in 0..<(chips.count - 1) {
+            for b in (a + 1)..<chips.count {
+                resolvePair(a, b, restitution: restitution)
+            }
+        }
+    }
+
+    private func resolvePair(_ a: Int, _ b: Int, restitution: CGFloat) {
+        let pa = chips[a].position
+        let pb = chips[b].position
+        let dx = pb.x - pa.x
+        let dy = pb.y - pa.y
+        let dist = hypot(dx, dy)
+        let minDist = chips[a].radius + chips[b].radius
+        guard dist < minDist else { return }
+
+        let safeDist = dist > 0.0001 ? dist : 0.0001
+        let nx = dx / safeDist
+        let ny = dy / safeDist
+        let pen = minDist - safeDist
+
+        let aSettled = chips[a].settled
+        let bSettled = chips[b].settled
+
+        // Positional correction: push out by half the penetration (or full, if
+        // one body is asleep, so the awake chip stacks on top cleanly).
+        if aSettled && !bSettled {
+            chips[b].position.x += nx * pen
+            chips[b].position.y += ny * pen
+        } else if bSettled && !aSettled {
+            chips[a].position.x -= nx * pen
+            chips[a].position.y -= ny * pen
+        } else if !aSettled && !bSettled {
+            chips[a].position.x -= nx * pen * 0.5
+            chips[a].position.y -= ny * pen * 0.5
+            chips[b].position.x += nx * pen * 0.5
+            chips[b].position.y += ny * pen * 0.5
+        } else {
+            // Both settled and overlapping (rare) — nudge apart gently, stay asleep.
+            chips[a].position.x -= nx * pen * 0.5
+            chips[b].position.x += nx * pen * 0.5
+            return
+        }
+
+        // Velocity response along the normal (equal mass).
+        let rvx = chips[b].velocity.dx - chips[a].velocity.dx
+        let rvy = chips[b].velocity.dy - chips[a].velocity.dy
+        let vn = rvx * nx + rvy * ny
+        guard vn < 0 else { return }
+
+        let impulse = -(1 + restitution) * vn / 2
+        if !aSettled {
+            chips[a].velocity.dx -= impulse * nx
+            chips[a].velocity.dy -= impulse * ny
+            // A sleeping neighbor getting struck should wake if hit hard.
+        }
+        if !bSettled {
+            chips[b].velocity.dx += impulse * nx
+            chips[b].velocity.dy += impulse * ny
+        }
+        // Wake a settled chip only on a strong hit so the pile doesn't jitter.
+        let strong = abs(vn) > size.height * 0.25
+        if strong {
+            if aSettled { chips[a].settled = false }
+            if bSettled { chips[b].settled = false }
+        }
+        bumpCollision()
+    }
+
+    // Is chip i resting on top of any settled chip (for rest detection)?
+    private func restingOnChip(_ i: Int) -> Bool {
+        let pi = chips[i].position
+        let ri = chips[i].radius
+        for j in chips.indices where j != i {
+            guard chips[j].settled else { continue }
+            let dx = chips[j].position.x - pi.x
+            let dy = chips[j].position.y - pi.y
+            let dist = hypot(dx, dy)
+            let touch = ri + chips[j].radius
+            // Supported if a settled chip is essentially below/touching it.
+            if dist <= touch + 1.0 && chips[j].position.y > pi.y {
+                return true
+            }
+        }
+        return false
+    }
+
+    private func bumpCollision() {
+        // Only fire haptics in interactive mode; demo tiles must stay silent.
+        guard !demo else { return }
+        collisionCount &+= 1
+    }
+
+    // MARK: Gesture (interactive mode)
+
+    private var flingGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if dragStart == nil { dragStart = value.startLocation }
+                dragCurrent = value.location
+            }
+            .onEnded { value in
+                let now = Date()
+                // Velocity from predicted end translation (momentum), not raw drag.
+                let predicted = value.predictedEndTranslation
+                let drag = value.translation
+                let scale: CGFloat = 6.0
+                var vx = (predicted.width - drag.width) * scale
+                var vy = (predicted.height - drag.height) * scale
+
+                // If it was basically a tap, give it a gentle lob toward the bin.
+                let predLen = hypot(predicted.width, predicted.height)
+                if predLen < 6 {
+                    vx = (binRect.midX - value.startLocation.x) * 1.6
+                    vy = -size.height * 1.1
+                }
+                // Clamp launch speed so it never blows through walls.
+                let maxSpeed = size.height * 6.0
+                let speed = hypot(vx, vy)
+                if speed > maxSpeed {
+                    vx *= maxSpeed / speed
+                    vy *= maxSpeed / speed
+                }
+                spawnChip(at: value.startLocation,
+                          velocity: CGVector(dx: vx, dy: vy),
+                          now: now)
+                if chips.count > maxChips {
+                    // FIFO drop the oldest settled chip to keep the cap.
+                    if let idx = chips.firstIndex(where: { $0.settled }) {
+                        chips.remove(at: idx)
+                    }
+                }
+                dragStart = nil
+                dragCurrent = nil
+            }
+    }
+}
+"""###,
+        "ges-hold-charge-burst": ###"""
+import SwiftUI
+
+// MARK: - Hold-to-Charge Burst
+//
+// Press and hold to charge a core that pulses, swells, and accumulates
+// orbiting energy rings; release fires a particle burst whose size scales
+// with how long you held.
+//
+// Architecture (per design review):
+//  - A single always-on TimelineView(.animation) drives BOTH the auto demo
+//    loop and the real interactive component.
+//  - Charge is TIME-driven (elapsed since pressStart), never delta-driven,
+//    so a perfectly still hold still charges.
+//  - All @State writes happen only in gesture callbacks; the timeline closure
+//    is a pure function of (now, pressStart, burstStart, chargeAtRelease).
+//  - Particle randomness is precomputed once per index (deterministic), so the
+//    burst is a coherent explosion rather than per-frame noise.
+//  - Pulse uses a fixed frequency with charge-driven amplitude (no
+//    instantaneous-frequency seam stutter).
+public struct HoldChargeBurstView: View {
+    public var demo: Bool = false
+
+    // Interactive state — written ONLY in gesture callbacks.
+    @State private var pressStart: Date? = nil
+    @State private var burstStart: Date? = nil
+    @State private var chargeAtRelease: Double = 0
+
+    public init(demo: Bool = false) {
+        self.demo = demo
+    }
+
+    public var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            let side = min(size.width, size.height)
+
+            TimelineView(.animation) { timeline in
+                let now = timeline.date
+                let frame = makeFrame(now: now)
+
+                ChargeBurstScene(state: frame, side: side)
+                    .frame(width: size.width, height: size.height)
+            }
+            .contentShape(Rectangle())
+            // iOS-17-safe gesture wiring: the `including:` mask disables this
+            // gesture in demo (no subview gestures exist, so nothing fires and
+            // no @State is written), and enables it in interactive mode.
+            .gesture(chargeGesture, including: demo ? .subviews : .all)
+            // Escalating haptic per charge band (interactive only).
+            .modifier(
+                ChargeHaptics(
+                    enabled: !demo,
+                    band: liveChargeBand,
+                    burstStart: burstStart
+                )
+            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
+
+    // MARK: Gesture
+
+    private var chargeGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                // Fire once per press: start the charge clock. onChanged may
+                // never fire again if the finger holds still — that's fine,
+                // charge is derived from elapsed time, not deltas.
+                if pressStart == nil {
+                    pressStart = Date()
+                    burstStart = nil
+                }
+            }
+            .onEnded { _ in
+                if let start = pressStart {
+                    let held = Date().timeIntervalSince(start)
+                    chargeAtRelease = charge(forHeld: held)
+                }
+                pressStart = nil
+                burstStart = Date()
+            }
+    }
+
+    // Live charge band for haptics — pure derivation, fires on band crossings.
+    private var liveChargeBand: Int {
+        guard !demo, let start = pressStart else { return 0 }
+        let held = Date().timeIntervalSince(start)
+        return Int(charge(forHeld: held) * 5.0)
+    }
+
+    // MARK: Frame model
+
+    /// Computes the full visual state for `now`, branching on demo vs interactive.
+    private func makeFrame(now: Date) -> ChargeState {
+        if demo {
+            return demoState(now: now)
+        } else {
+            return interactiveState(now: now)
+        }
+    }
+
+    /// Demo path: a pure function of the timeline date. No phase @State.
+    private func demoState(now: Date) -> ChargeState {
+        let loop: Double = 3.4
+        let t = now.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: loop)
+
+        let chargeWindow: Double = 2.2   // build-up
+        let burstWindow: Double = 1.0    // explosion + reform
+        // (small idle tail fills the remainder of the loop)
+
+        var charge: Double = 0
+        var burstProgress: Double = -1   // <0 => not bursting
+        var pulsePhase: Double = now.timeIntervalSinceReferenceDate
+
+        if t < chargeWindow {
+            // Ease-in build so the swell feels like accumulating strain.
+            let p = t / chargeWindow
+            charge = easeInOut(p)
+        } else if t < chargeWindow + burstWindow {
+            // Hold peak charge as the burst plays; core re-forms within it.
+            charge = 1.0
+            burstProgress = (t - chargeWindow) / burstWindow
+        } else {
+            charge = 0
+        }
+
+        // Keep pulse phase continuous and seam-safe (fixed frequency).
+        pulsePhase = now.timeIntervalSinceReferenceDate
+
+        return ChargeState(
+            charge: charge,
+            burstProgress: burstProgress,
+            burstCharge: 1.0,
+            pulsePhase: pulsePhase
+        )
+    }
+
+    /// Interactive path: derived purely from Date/Double @State + now.
+    private func interactiveState(now: Date) -> ChargeState {
+        let burstWindow: Double = 1.1
+        let pulsePhase = now.timeIntervalSinceReferenceDate
+
+        // Bursting takes precedence and is finite.
+        if let bStart = burstStart {
+            let bt = now.timeIntervalSince(bStart)
+            if bt < burstWindow {
+                return ChargeState(
+                    charge: 0,
+                    burstProgress: bt / burstWindow,
+                    burstCharge: chargeAtRelease,
+                    pulsePhase: pulsePhase
+                )
+            }
+            // Burst finished — fall through to idle WITHOUT writing state.
+            return ChargeState(
+                charge: 0,
+                burstProgress: -1,
+                burstCharge: chargeAtRelease,
+                pulsePhase: pulsePhase
+            )
+        }
+
+        // Charging: charge grows with elapsed hold time (still-hold safe).
+        if let pStart = pressStart {
+            let held = now.timeIntervalSince(pStart)
+            return ChargeState(
+                charge: charge(forHeld: held),
+                burstProgress: -1,
+                burstCharge: 0,
+                pulsePhase: pulsePhase
+            )
+        }
+
+        // Idle.
+        return ChargeState(
+            charge: 0,
+            burstProgress: -1,
+            burstCharge: 0,
+            pulsePhase: pulsePhase
+        )
+    }
+
+    // MARK: Helpers
+
+    /// Maps a held duration (seconds) to a clamped 0...1 charge with ease-in.
+    private func charge(forHeld held: Double) -> Double {
+        let full: Double = 1.8 // seconds to fully charge
+        let raw = min(max(held / full, 0), 1)
+        return easeInOut(raw)
+    }
+
+    private func easeInOut(_ x: Double) -> Double {
+        let c = min(max(x, 0), 1)
+        return c * c * (3.0 - 2.0 * c)
+    }
+}
+
+// MARK: - Visual state passed each frame
+
+private struct ChargeState {
+    var charge: Double          // 0...1 current charge (drives swell/rings)
+    var burstProgress: Double   // <0 = not bursting, else 0...1
+    var burstCharge: Double     // 0...1 charge captured at release (burst size)
+    var pulsePhase: Double      // continuous time for pulse oscillation
+}
+
+// MARK: - Scene renderer
+
+private struct ChargeBurstScene: View {
+    let state: ChargeState
+    let side: CGFloat
+
+    var body: some View {
+        ZStack {
+            background
+            orbitingRings
+            coreView
+            burstCanvas
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var isBursting: Bool { state.burstProgress >= 0 }
+
+    // Charge color ramps from cool teal to hot magenta as it builds.
+    private func chargeColor(_ c: Double) -> Color {
+        let t = min(max(c, 0), 1)
+        let r = 0.30 + 0.62 * t
+        let g = 0.78 - 0.40 * t
+        let b = 0.92 - 0.30 * t
+        return Color(red: r, green: g, blue: b)
+    }
+
+    // MARK: Layers
+
+    private var background: some View {
+        let glow = chargeColor(max(state.charge, isBursting ? state.burstCharge * 0.6 : 0))
+        let intensity = isBursting ? 0.18 : (0.08 + 0.20 * state.charge)
+        return RadialGradient(
+            colors: [
+                glow.opacity(intensity),
+                Color(red: 0.05, green: 0.05, blue: 0.09).opacity(0.0)
+            ],
+            center: .center,
+            startRadius: 0,
+            endRadius: side * 0.55
+        )
+        .blendMode(.plusLighter)
+    }
+
+    private var coreView: some View {
+        // The core is ALWAYS visible: it never fades through zero. During a
+        // burst it re-forms (scales up from a small idle size) instead of
+        // disappearing, guaranteeing no blank frame at the loop seam.
+        let baseRadius = side * 0.085
+        let swell = 1.0 + 0.85 * state.charge
+        // Fixed-frequency pulse, charge-driven amplitude (seam-safe).
+        let pulseAmp = 0.04 + 0.16 * state.charge
+        let pulse = 1.0 + pulseAmp * sin(state.pulsePhase * 6.0)
+
+        var scale = swell * pulse
+
+        if isBursting {
+            // Core flashes outward then re-forms small -> grows back.
+            let p = state.burstProgress
+            let reform = reformScale(p)
+            scale = reform
+        }
+
+        let radius = baseRadius * scale
+        let c = chargeColor(state.charge)
+        let hot = chargeColor(min(state.charge + 0.25, 1.0))
+
+        return ZStack {
+            // Soft halo
+            Circle()
+                .fill(c.opacity(0.35))
+                .frame(width: radius * 2.6, height: radius * 2.6)
+                .blur(radius: side * 0.03)
+
+            // Solid core
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [Color(red: 1, green: 1, blue: 1), hot, c],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: radius
+                    )
+                )
+                .frame(width: radius * 2, height: radius * 2)
+                .overlay(
+                    Circle()
+                        .strokeBorder(Color(red: 1, green: 1, blue: 1).opacity(0.55), lineWidth: side * 0.006)
+                        .frame(width: radius * 2, height: radius * 2)
+                )
+                .shadow(color: c.opacity(0.8), radius: side * 0.05 * (0.4 + state.charge))
+        }
+    }
+
+    /// Core scale during burst: a quick flash-out, then re-form from small.
+    private func reformScale(_ p: Double) -> Double {
+        if p < 0.18 {
+            // Flash outward
+            return 1.0 + 3.5 * (p / 0.18)
+        } else {
+            // Re-form: shrink to a small seed then ease back to idle size.
+            let q = (p - 0.18) / 0.82
+            let seed = 0.25
+            return seed + (1.0 - seed) * easeOut(q)
+        }
+    }
+
+    // Orbiting energy rings — count and brightness grow with charge.
+    private var orbitingRings: some View {
+        let ringCount = Int((state.charge * 4.0).rounded(.down)) // 0...4
+        let baseR = side * 0.14
+        let c = chargeColor(state.charge)
+        let spin = state.pulsePhase
+
+        return ZStack {
+            ForEach(0..<max(ringCount, 0), id: \.self) { i in
+                let idx = Double(i)
+                let ringRadius = baseR + idx * side * 0.055
+                let tilt = 18.0 + idx * 26.0
+                let speed = 1.2 + idx * 0.5
+                let opacity = isBursting ? 0.0 : (0.65 - 0.1 * idx)
+
+                Ellipse()
+                    .strokeBorder(c.opacity(opacity), lineWidth: side * 0.012)
+                    .frame(width: ringRadius * 2, height: ringRadius * 2 * 0.42)
+                    .rotation3DEffect(
+                        .degrees(tilt),
+                        axis: (x: 1, y: 0.35, z: 0)
+                    )
+                    .rotationEffect(.radians(spin * speed))
+                    .overlay(orbitDot(ringRadius: ringRadius, spin: spin * speed, color: c, opacity: opacity))
+            }
+        }
+    }
+
+    private func orbitDot(ringRadius: CGFloat, spin: Double, color: Color, opacity: Double) -> some View {
+        let dotSize = side * 0.028
+        let x = cos(spin) * ringRadius
+        let y = sin(spin) * ringRadius * 0.42
+        return Circle()
+            .fill(color.opacity(opacity + 0.2))
+            .frame(width: dotSize, height: dotSize)
+            .shadow(color: color.opacity(opacity), radius: side * 0.02)
+            .offset(x: x, y: y)
+            .rotation3DEffect(.degrees(0), axis: (x: 1, y: 0, z: 0))
+    }
+
+    // Particle burst — Canvas, sized by captured charge.
+    private var burstCanvas: some View {
+        Canvas { ctx, canvasSize in
+            guard isBursting else { return }
+            let p = state.burstProgress
+            let center = CGPoint(x: canvasSize.width / 2, y: canvasSize.height / 2)
+            let maxReach = side * (0.30 + 0.55 * state.burstCharge)
+            let particleCount = 14 + Int(state.burstCharge * 22) // 14...36
+            let baseColor = chargeColor(min(state.burstCharge + 0.2, 1.0))
+
+            let eased = easeOutCubic(p)
+            let fade = 1.0 - smoothFade(p)
+
+            for i in 0..<particleCount {
+                let seed = BurstParticles.seeds[i % BurstParticles.seeds.count]
+                let angle = seed.angle
+                let speed = seed.speed
+                let sizeJitter = seed.sizeJitter
+
+                let dist = maxReach * speed * eased
+                let x = center.x + cos(angle) * dist
+                let y = center.y + sin(angle) * dist
+
+                let pSize = side * (0.014 + 0.02 * sizeJitter) * (1.0 - 0.4 * eased)
+                let rect = CGRect(
+                    x: x - pSize / 2,
+                    y: y - pSize / 2,
+                    width: pSize,
+                    height: pSize
+                )
+
+                var sub = ctx
+                sub.opacity = fade
+                sub.addFilter(.blur(radius: side * 0.004))
+                sub.fill(Path(ellipseIn: rect), with: .color(baseColor.opacity(0.9)))
+
+                // Trailing spark line for energy streaking outward.
+                if i % 3 == 0 {
+                    var line = Path()
+                    let tailDist = dist - maxReach * speed * 0.12
+                    let tx = center.x + cos(angle) * max(tailDist, 0)
+                    let ty = center.y + sin(angle) * max(tailDist, 0)
+                    line.move(to: CGPoint(x: tx, y: ty))
+                    line.addLine(to: CGPoint(x: x, y: y))
+                    var ls = ctx
+                    ls.opacity = fade * 0.7
+                    ls.stroke(
+                        line,
+                        with: .color(baseColor.opacity(0.8)),
+                        style: StrokeStyle(lineWidth: pSize * 0.6, lineCap: .round)
+                    )
+                }
+            }
+
+            // Expanding shockwave ring.
+            let ringR = maxReach * eased * 1.05
+            let ringRect = CGRect(
+                x: center.x - ringR,
+                y: center.y - ringR,
+                width: ringR * 2,
+                height: ringR * 2
+            )
+            var ring = ctx
+            ring.opacity = (1.0 - eased) * 0.8
+            ring.stroke(
+                Path(ellipseIn: ringRect),
+                with: .color(Color(red: 1, green: 1, blue: 1).opacity(0.9)),
+                style: StrokeStyle(lineWidth: side * 0.01 * (1.0 - eased) + side * 0.002)
+            )
+        }
+        .allowsHitTesting(false)
+    }
+
+    // MARK: Easing
+
+    private func easeOut(_ x: Double) -> Double {
+        let c = min(max(x, 0), 1)
+        return 1 - (1 - c) * (1 - c)
+    }
+
+    private func easeOutCubic(_ x: Double) -> Double {
+        let c = min(max(x, 0), 1)
+        let inv = 1 - c
+        return 1 - inv * inv * inv
+    }
+
+    /// Fade-out of burst particles toward the end of the burst window.
+    private func smoothFade(_ p: Double) -> Double {
+        let start = 0.55
+        guard p > start else { return 0 }
+        let q = (p - start) / (1.0 - start)
+        return min(max(q, 0), 1)
+    }
+}
+
+// MARK: - Deterministic precomputed particle seeds
+//
+// Generated ONCE at type-load with a fixed seed so the burst is a coherent
+// explosion. Never call random() inside the per-frame Canvas closure.
+private enum BurstParticles {
+    struct Seed {
+        let angle: Double
+        let speed: Double
+        let sizeJitter: Double
+    }
+
+    static let seeds: [Seed] = {
+        var rng = SplitMix64(seed: 0x9E3779B97F4A7C15)
+        var out: [Seed] = []
+        let count = 40
+        for i in 0..<count {
+            // Spread base angle evenly, then jitter for organic look.
+            let base = (Double(i) / Double(count)) * 2.0 * .pi
+            let jitter = (rng.nextDouble() - 0.5) * (2.0 * .pi / Double(count)) * 1.6
+            let angle = base + jitter
+            let speed = 0.55 + rng.nextDouble() * 0.45      // 0.55...1.0
+            let sizeJitter = rng.nextDouble()               // 0...1
+            out.append(Seed(angle: angle, speed: speed, sizeJitter: sizeJitter))
+        }
+        return out
+    }()
+}
+
+// Tiny deterministic PRNG so seeds are stable & reproducible.
+private struct SplitMix64 {
+    private var state: UInt64
+    init(seed: UInt64) { state = seed }
+
+    mutating func next() -> UInt64 {
+        state = state &+ 0x9E3779B97F4A7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        return z ^ (z >> 31)
+    }
+
+    mutating func nextDouble() -> Double {
+        return Double(next() >> 11) * (1.0 / 9007199254740992.0)
+    }
+}
+
+// MARK: - Haptics modifier
+//
+// Two distinct triggers, both gated on the interactive path:
+//  - escalating .impact on charge-band crossings
+//  - .success once on release (burstStart changes exactly once)
+private struct ChargeHaptics: ViewModifier {
+    let enabled: Bool
+    let band: Int
+    let burstStart: Date?
+
+    func body(content: Content) -> some View {
+        content
+            .sensoryFeedback(.impact(weight: .light, intensity: 0.7), trigger: enabled ? band : 0)
+            .sensoryFeedback(.success, trigger: burstTriggerValue)
+    }
+
+    // Changes exactly once per release; stays constant otherwise.
+    private var burstTriggerValue: Int {
+        guard enabled, let s = burstStart else { return 0 }
+        return Int(s.timeIntervalSinceReferenceDate)
+    }
+}
+"""###,
+        "ges-hold-drag-slingshot-aim": ###"""
+import SwiftUI
+
+// MARK: - HoldDragSlingshotAimView
+// "Hold-Aim Trajectory Cannon"
+// Press and drag back from a cannon to set power + angle; a dotted predicted
+// arc updates live. Release fires a ball that follows that EXACT parametric
+// arc and bounces on landing.
+//
+// Core idea: a single closed-form projectile function f(t) drives BOTH the
+// dotted preview AND the live flight, so the shot lands precisely on the
+// previewed path. Everything is normalized to the GeometryReader size so it
+// reads identically in a 120pt tile and a large detail area.
+
+public struct HoldDragSlingshotAimView: View {
+    var demo: Bool = false
+
+    public init(demo: Bool = false) {
+        self.demo = demo
+    }
+
+    // Interactive aim state (normalized 0...1 of the smaller dimension).
+    @State private var pull: CGSize = .zero          // current pull-back vector
+    @State private var isAiming: Bool = false
+    @State private var isFlying: Bool = false
+    @State private var firePull: CGSize = .zero       // pull captured at release
+    @State private var fireStart: Date = .distantPast
+
+    public var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            content(in: size)
+                .frame(width: size.width, height: size.height)
+                .contentShape(Rectangle())
+                .gesture(demo ? nil : aimGesture(in: size))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Self.backdrop)
+    }
+
+    // MARK: Layout content
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        let unit = min(size.width, size.height)
+        let origin = launchOrigin(in: size)
+        let g = Physics.gravity * unit
+
+        TimelineView(.animation) { timeline in
+            let now = timeline.date
+            let state = resolvedState(now: now, size: size, unit: unit)
+
+            ZStack {
+                GroundView(y: Physics.groundY * size.height, width: size.width)
+
+                // Dotted predicted arc (first arc to landing).
+                TrajectoryDots(
+                    points: previewPoints(
+                        v0: state.v0, origin: origin, g: g, size: size, unit: unit
+                    ),
+                    unit: unit,
+                    active: state.aimStrength > 0.001
+                )
+
+                // Aim guide line from origin showing the pull-back.
+                AimGuide(
+                    origin: origin,
+                    pull: state.pull,
+                    strength: state.aimStrength,
+                    unit: unit
+                )
+
+                // The flying ball follows the SAME f(t) used for the dots.
+                if let ballPos = state.ballPosition {
+                    Ball(unit: unit)
+                        .position(ballPos)
+                        .shadow(color: Self.glow.opacity(0.55), radius: unit * 0.04)
+                }
+
+                // Cannon barrel, anchored at origin, aimed along launch vector.
+                CannonView(
+                    origin: origin,
+                    aimAngle: state.barrelAngle,
+                    charge: state.aimStrength,
+                    unit: unit
+                )
+            }
+            .sensoryFeedback(.impact(flexibility: .solid, intensity: 0.9),
+                             trigger: state.bounceTrigger)
+        }
+    }
+
+    // MARK: Resolved per-frame state
+
+    private struct FrameState {
+        var pull: CGSize          // visual pull (for guide + barrel)
+        var v0: CGVector          // launch velocity (px/sec)
+        var aimStrength: CGFloat  // 0...1 for tint / charge
+        var barrelAngle: CGFloat  // radians, barrel direction
+        var ballPosition: CGPoint?
+        var bounceTrigger: Int
+    }
+
+    private func resolvedState(now: Date, size: CGSize, unit: CGFloat) -> FrameState {
+        let origin = launchOrigin(in: size)
+        let g = Physics.gravity * unit
+
+        if demo {
+            return demoState(now: now, origin: origin, g: g, size: size, unit: unit)
+        } else {
+            return interactiveState(now: now, origin: origin, g: g, size: size, unit: unit)
+        }
+    }
+
+    // MARK: Interactive state
+
+    private func interactiveState(now: Date, origin: CGPoint, g: CGFloat,
+                                  size: CGSize, unit: CGFloat) -> FrameState {
+        let activePull = isFlying ? firePull : pull
+        let v0 = launchVelocity(fromPull: activePull, unit: unit)
+        let strength = aimStrength(fromPull: activePull, unit: unit)
+        let angle = barrelAngle(fromPull: activePull)
+
+        var ballPos: CGPoint? = nil
+        var trigger = 0
+
+        if isFlying {
+            let t = max(0, now.timeIntervalSince(fireStart))
+            let flight = flightPoint(t: t, v0: v0, origin: origin, g: g, size: size)
+            ballPos = flight.point
+            trigger = flight.bounceIndex
+        } else if isAiming {
+            // While aiming, rest the ball at the muzzle so it never disappears.
+            ballPos = muzzlePoint(origin: origin, angle: angle, unit: unit)
+        } else {
+            ballPos = loadedPoint(origin: origin, unit: unit)
+        }
+
+        return FrameState(
+            pull: activePull, v0: v0, aimStrength: strength,
+            barrelAngle: angle, ballPosition: ballPos, bounceTrigger: trigger
+        )
+    }
+
+    // MARK: Demo state (self-driving loop)
+
+    private func demoState(now: Date, origin: CGPoint, g: CGFloat,
+                           size: CGSize, unit: CGFloat) -> FrameState {
+        let period: Double = 3.4
+        let phase = now.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period)
+
+        // Timeline split: pull-back (0..0.9), hold (0.9..1.2), flight (1.2..end).
+        let drawDur: Double = 0.9
+        let holdDur: Double = 0.35
+        let flightStart = drawDur + holdDur
+
+        // Aim sweeps slowly across cycles so the arc visibly redraws.
+        let cycleSeed = floor(now.timeIntervalSinceReferenceDate / period)
+        let aimT = (sin(cycleSeed * 1.3) + 1) * 0.5            // 0...1
+        let angleDeg = 30 + aimT * 30                          // 30°...60° up-right
+        let angleRad = angleDeg * .pi / 180
+        let maxPullMag = unit * 0.30
+
+        // Pull magnitude eases in during the draw window.
+        let drawProgress = min(1, phase / drawDur)
+        let eased = easeOut(drawProgress)
+        let pullMag: CGFloat = (phase < flightStart) ? maxPullMag * eased : maxPullMag
+
+        // Pull vector points DOWN-LEFT (opposite of fire direction).
+        let pullVec = CGSize(width: -cos(angleRad) * pullMag,
+                             height: sin(angleRad) * pullMag)
+
+        let v0 = launchVelocity(fromPull: pullVec, unit: unit)
+        let strength = aimStrength(fromPull: pullVec, unit: unit)
+        let barrel = barrelAngle(fromPull: pullVec)
+
+        var ballPos: CGPoint?
+        var trigger = 0
+
+        if phase < flightStart {
+            // Aiming: ball sits at the muzzle, arc is fully drawn.
+            ballPos = muzzlePoint(origin: origin, angle: barrel, unit: unit)
+        } else {
+            let t = phase - flightStart
+            let flight = flightPoint(t: t, v0: v0, origin: origin, g: g, size: size)
+            ballPos = flight.point
+            trigger = 0   // no haptics in demo (avoid buzzing idle tiles)
+        }
+
+        return FrameState(
+            pull: pullVec, v0: v0, aimStrength: strength,
+            barrelAngle: barrel, ballPosition: ballPos, bounceTrigger: trigger
+        )
+    }
+
+    // MARK: Physics — single source of truth f(t)
+
+    private enum Physics {
+        static let gravity: CGFloat = 2.4      // * unit -> px/s^2
+        static let groundY: CGFloat = 0.86     // fraction of height
+        static let restitution: CGFloat = 0.55
+        static let maxBounces = 2
+        static let powerScale: CGFloat = 3.1   // pull -> launch speed multiplier
+    }
+
+    /// Launch velocity (px/sec) derived from the pull-back vector.
+    /// Pull back+down -> fire up+forward, so v0 = -pull * scale (per frame -> per sec).
+    private func launchVelocity(fromPull pull: CGSize, unit: CGFloat) -> CGVector {
+        let mag = hypot(pull.width, pull.height)
+        let capped = min(mag, unit * 0.34)
+        guard mag > 0.0001 else { return .zero }
+        let dirX = -pull.width / mag
+        let dirY = -pull.height / mag
+        let speed = capped * Physics.powerScale * 3.2   // tuned px/sec
+        return CGVector(dx: dirX * speed, dy: dirY * speed)
+    }
+
+    private func aimStrength(fromPull pull: CGSize, unit: CGFloat) -> CGFloat {
+        let mag = hypot(pull.width, pull.height)
+        return min(1, mag / (unit * 0.30))
+    }
+
+    private func barrelAngle(fromPull pull: CGSize) -> CGFloat {
+        let mag = hypot(pull.width, pull.height)
+        guard mag > 0.0001 else { return -.pi / 4 }    // default up-right
+        // Barrel points opposite the pull (the fire direction).
+        return atan2(-pull.height, -pull.width)
+    }
+
+    /// Closed-form projectile position with restitution bounces along the ground.
+    /// Returns the live point and how many landings have occurred by time t.
+    private func flightPoint(t: Double, v0: CGVector, origin: CGPoint,
+                             g: CGFloat, size: CGSize) -> (point: CGPoint, bounceIndex: Int) {
+        let groundLine = Physics.groundY * size.height
+        let ballR = ballRadius(unit: min(size.width, size.height))
+        let restLine = groundLine - ballR
+
+        guard hypot(v0.dx, v0.dy) > 0.001 else {
+            return (CGPoint(x: origin.x, y: restLine), 0)
+        }
+
+        // Simulate piecewise parabolas, advancing through bounces.
+        var segVx = v0.dx
+        var segVy = v0.dy
+        var segX0 = origin.x
+        var segY0 = origin.y
+        var segT0: Double = 0
+        var bounces = 0
+
+        while bounces <= Physics.maxBounces {
+            let landT = parabolaLandTime(y0: segY0, vy: segVy, g: g, groundY: restLine)
+            // No real future landing this segment (shouldn't happen with gravity > 0).
+            guard let absLand = landT, absLand.isFinite else { break }
+            let segLandTime = segT0 + absLand
+
+            if t <= segLandTime {
+                let lt = t - segT0
+                let x = segX0 + segVx * lt
+                let y = segY0 + segVy * lt + 0.5 * Double(g) * lt * lt
+                let cx = clampX(x, size: size, r: ballR)
+                return (CGPoint(x: cx, y: y), bounces)
+            }
+
+            // Advance to landing, reflect vertical velocity, damp.
+            let lt = absLand
+            segX0 = segX0 + segVx * lt
+            segY0 = restLine
+            let vyAtLand = segVy + Double(g) * lt
+            segVy = -vyAtLand * Double(Physics.restitution)
+            segVx = segVx * 0.86
+            segT0 = segLandTime
+            bounces += 1
+
+            // If the bounce is too weak, settle at rest.
+            if abs(segVy) < Double(g) * 0.05 || bounces > Physics.maxBounces {
+                let cx = clampX(segX0, size: size, r: ballR)
+                return (CGPoint(x: cx, y: restLine), bounces)
+            }
+        }
+
+        let cx = clampX(segX0, size: size, r: ballR)
+        return (CGPoint(x: cx, y: restLine), bounces)
+    }
+
+    /// Time for a parabola y(t)=y0+vy t+0.5 g t^2 to reach groundY (first future root).
+    private func parabolaLandTime(y0: Double, vy: Double, g: CGFloat, groundY: CGFloat) -> Double? {
+        let gg = Double(g)
+        let target = Double(groundY)
+        // 0.5 g t^2 + vy t + (y0 - target) = 0
+        let a = 0.5 * gg
+        let b = vy
+        let c = y0 - target
+        guard a != 0 else {
+            if b == 0 { return nil }
+            let t = -c / b
+            return t > 0 ? t : nil
+        }
+        let disc = b * b - 4 * a * c
+        guard disc >= 0 else { return nil }
+        let sq = disc.squareRoot()
+        let t1 = (-b - sq) / (2 * a)
+        let t2 = (-b + sq) / (2 * a)
+        let candidates = [t1, t2].filter { $0 > 1e-5 }.sorted()
+        return candidates.first
+    }
+
+    /// Sample the first arc (origin -> first landing) for the dotted preview.
+    private func previewPoints(v0: CGVector, origin: CGPoint, g: CGFloat,
+                               size: CGSize, unit: CGFloat) -> [CGPoint] {
+        guard hypot(v0.dx, v0.dy) > 0.001 else { return [] }
+        let restLine = Physics.groundY * size.height - ballRadius(unit: unit)
+        guard let landT = parabolaLandTime(y0: origin.y, vy: v0.dy, g: g, groundY: restLine),
+              landT.isFinite, landT > 0 else { return [] }
+
+        let count = 26
+        var pts: [CGPoint] = []
+        pts.reserveCapacity(count)
+        for i in 0...count {
+            let t = landT * Double(i) / Double(count)
+            let x = origin.x + v0.dx * t
+            let y = origin.y + v0.dy * t + 0.5 * Double(g) * t * t
+            let cx = clampX(x, size: size, r: ballRadius(unit: unit))
+            pts.append(CGPoint(x: cx, y: y))
+        }
+        return pts
+    }
+
+    // MARK: Geometry helpers
+
+    private func launchOrigin(in size: CGSize) -> CGPoint {
+        let unit = min(size.width, size.height)
+        return CGPoint(x: size.width * 0.16,
+                       y: Physics.groundY * size.height - unit * 0.12)
+    }
+
+    private func ballRadius(unit: CGFloat) -> CGFloat { unit * 0.052 }
+
+    private func muzzlePoint(origin: CGPoint, angle: CGFloat, unit: CGFloat) -> CGPoint {
+        let len = unit * 0.17
+        return CGPoint(x: origin.x + cos(angle) * len,
+                       y: origin.y + sin(angle) * len)
+    }
+
+    private func loadedPoint(origin: CGPoint, unit: CGFloat) -> CGPoint {
+        muzzlePoint(origin: origin, angle: -.pi / 4, unit: unit)
+    }
+
+    private func clampX(_ x: CGFloat, size: CGSize, r: CGFloat) -> CGFloat {
+        min(max(x, r), size.width - r)
+    }
+
+    private func easeOut(_ t: Double) -> CGFloat {
+        let c = min(max(t, 0), 1)
+        return CGFloat(1 - pow(1 - c, 3))
+    }
+
+    // MARK: Gesture (long-press, then drag to aim, release to fire)
+
+    private func aimGesture(in size: CGSize) -> some Gesture {
+        let unit = min(size.width, size.height)
+        let maxPull = unit * 0.34
+
+        let drag = DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                isFlying = false
+                isAiming = true
+                // Clamp pull magnitude so power stays bounded.
+                var p = value.translation
+                let mag = hypot(p.width, p.height)
+                if mag > maxPull, mag > 0 {
+                    p.width = p.width / mag * maxPull
+                    p.height = p.height / mag * maxPull
+                }
+                pull = p
+            }
+            .onEnded { value in
+                var p = value.translation
+                let mag = hypot(p.width, p.height)
+                if mag > maxPull, mag > 0 {
+                    p.width = p.width / mag * maxPull
+                    p.height = p.height / mag * maxPull
+                }
+                firePull = p
+                pull = .zero
+                isAiming = false
+                if mag > unit * 0.04 {
+                    fireStart = Date()
+                    isFlying = true
+                }
+            }
+
+        return LongPressGesture(minimumDuration: 0.08)
+            .sequenced(before: drag)
+            .onEnded { _ in }
+    }
+
+    // MARK: Palette
+
+    static let backdrop = LinearGradient(
+        colors: [Color(red: 0.05, green: 0.055, blue: 0.09),
+                 Color(red: 0.09, green: 0.10, blue: 0.16)],
+        startPoint: .top, endPoint: .bottom
+    )
+    static let glow = Color(red: 0.45, green: 0.85, blue: 1.0)
+    static let warm = Color(red: 1.0, green: 0.62, blue: 0.30)
+}
+
+// MARK: - Cannon
+
+private struct CannonView: View {
+    let origin: CGPoint
+    let aimAngle: CGFloat
+    let charge: CGFloat        // 0...1
+    let unit: CGFloat
+
+    var body: some View {
+        let barrelLen = unit * 0.22
+        let barrelW = unit * 0.085
+        let tint = HoldDragSlingshotAimView.glow
+
+        ZStack {
+            // Barrel
+            Capsule()
+                .fill(
+                    LinearGradient(
+                        colors: [Color(red: 0.30, green: 0.34, blue: 0.42),
+                                 Color(red: 0.16, green: 0.18, blue: 0.24)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(tint.opacity(0.25 + charge * 0.55),
+                                lineWidth: max(1, unit * 0.01))
+                )
+                .frame(width: barrelLen, height: barrelW)
+                .offset(x: barrelLen / 2)
+                .rotationEffect(.radians(Double(aimAngle)))
+                .position(origin)
+
+            // Base / wheel
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [Color(red: 0.24, green: 0.27, blue: 0.34),
+                                 Color(red: 0.12, green: 0.13, blue: 0.18)],
+                        center: .center, startRadius: 0, endRadius: unit * 0.13
+                    )
+                )
+                .overlay(
+                    Circle().stroke(tint.opacity(0.4), lineWidth: max(1, unit * 0.012))
+                )
+                .frame(width: unit * 0.20, height: unit * 0.20)
+                .position(origin)
+
+            // Charge core glows as power builds.
+            Circle()
+                .fill(tint)
+                .frame(width: unit * 0.07, height: unit * 0.07)
+                .opacity(0.35 + Double(charge) * 0.65)
+                .blur(radius: unit * 0.01 + Double(charge) * unit * 0.02)
+                .position(origin)
+        }
+    }
+}
+
+// MARK: - Trajectory dots
+
+private struct TrajectoryDots: View {
+    let points: [CGPoint]
+    let unit: CGFloat
+    let active: Bool
+
+    var body: some View {
+        Canvas { ctx, _ in
+            guard points.count > 1 else { return }
+            let baseR = unit * 0.013
+            let n = points.count
+            for (i, p) in points.enumerated() {
+                let f = Double(i) / Double(max(1, n - 1))
+                // Dots fade & shrink toward the landing for a "lead" look.
+                let r = baseR * (1.0 - 0.45 * f)
+                let alpha = active ? (0.85 - 0.5 * f) : 0.18
+                let rect = CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)
+                let color = HoldDragSlingshotAimView.glow.opacity(max(0.08, alpha))
+                ctx.fill(Path(ellipseIn: rect), with: .color(color))
+            }
+            // Landing marker.
+            if active, let last = points.last {
+                let r = unit * 0.03
+                let ring = Path(ellipseIn: CGRect(x: last.x - r, y: last.y - r,
+                                                  width: r * 2, height: r * 2))
+                ctx.stroke(ring, with: .color(HoldDragSlingshotAimView.warm.opacity(0.7)),
+                           lineWidth: unit * 0.008)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Aim guide
+
+private struct AimGuide: View {
+    let origin: CGPoint
+    let pull: CGSize
+    let strength: CGFloat
+    let unit: CGFloat
+
+    var body: some View {
+        let endX = origin.x + pull.width
+        let endY = origin.y + pull.height
+        Path { p in
+            p.move(to: origin)
+            p.addLine(to: CGPoint(x: endX, y: endY))
+        }
+        .stroke(
+            HoldDragSlingshotAimView.warm.opacity(0.25 + Double(strength) * 0.5),
+            style: StrokeStyle(lineWidth: max(1, unit * 0.012),
+                               lineCap: .round, dash: [unit * 0.03, unit * 0.025])
+        )
+        .opacity(strength > 0.01 ? 1 : 0)
+        .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Ball
+
+private struct Ball: View {
+    let unit: CGFloat
+
+    var body: some View {
+        let d = unit * 0.104
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [Color(red: 1.0, green: 0.95, blue: 0.82),
+                             HoldDragSlingshotAimView.warm,
+                             Color(red: 0.85, green: 0.40, blue: 0.16)],
+                    center: UnitPoint(x: 0.35, y: 0.3),
+                    startRadius: 0, endRadius: d * 0.7
+                )
+            )
+            .overlay(
+                Circle().stroke(Color.white.opacity(0.35), lineWidth: max(0.5, unit * 0.004))
+            )
+            .frame(width: d, height: d)
+    }
+}
+
+// MARK: - Ground
+
+private struct GroundView: View {
+    let y: CGFloat
+    let width: CGFloat
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Path { p in
+                p.move(to: CGPoint(x: 0, y: y))
+                p.addLine(to: CGPoint(x: width, y: y))
+            }
+            .stroke(
+                LinearGradient(
+                    colors: [HoldDragSlingshotAimView.glow.opacity(0.0),
+                             HoldDragSlingshotAimView.glow.opacity(0.55),
+                             HoldDragSlingshotAimView.glow.opacity(0.0)],
+                    startPoint: .leading, endPoint: .trailing
+                ),
+                lineWidth: 1.5
+            )
+
+            // Soft fade beneath the line for depth.
+            LinearGradient(
+                colors: [HoldDragSlingshotAimView.glow.opacity(0.10),
+                         Color.clear],
+                startPoint: .top, endPoint: .bottom
+            )
+            .frame(height: 24)
+            .offset(y: y)
+        }
+        .allowsHitTesting(false)
+    }
+}
+"""###,
+        "ges-inertial-marble-throw": ###"""
+import SwiftUI
+
+// MARK: - Inertial Marble Tray
+// Fling a marble across a bordered tray; it coasts with friction, banks off the
+// walls with energy loss, and rolls to a stop, casting a moving contact shadow.
+//
+// demo == true  -> self-driving loop: auto-launches with a seeded velocity,
+//                  banks off the walls, decays to rest, then re-launches.
+// demo == false -> interactive: DragGesture finger-follow, release seeds launch
+//                  velocity from predictedEndTranslation.
+
+struct InertialMarbleThrowView: View {
+    var demo: Bool = false
+
+    @State private var sim = MarbleSim()
+    @State private var lastBounce: Int = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            TimelineView(.animation) { timeline in
+                Canvas { context, size in
+                    let bounds = MarbleBounds(size: size, radius: marbleRadius(for: size))
+                    drawTray(in: &context, size: size)
+                    drawShadow(in: &context, bounds: bounds)
+                    drawMarble(in: &context, bounds: bounds)
+                }
+                .onChange(of: timeline.date) { _, now in
+                    sim.step(date: now, bounds: MarbleBounds(size: geo.size,
+                                                             radius: marbleRadius(for: geo.size)),
+                             demo: demo)
+                    lastBounce = sim.bounceCount
+                }
+            }
+            .contentShape(Rectangle())
+            .gesture(dragGesture(in: geo.size))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.7),
+                         trigger: demo ? 0 : lastBounce)
+    }
+
+    // MARK: Sizing
+
+    private func marbleRadius(for size: CGSize) -> CGFloat {
+        let minSide = min(size.width, size.height)
+        return max(7, minSide * 0.13)
+    }
+
+    // MARK: Gesture
+
+    private func dragGesture(in size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                guard !demo else { return }
+                let bounds = MarbleBounds(size: size, radius: marbleRadius(for: size))
+                sim.beginDragIfNeeded(at: value.startLocation, bounds: bounds)
+                sim.dragTo(value.location, bounds: bounds)
+            }
+            .onEnded { value in
+                guard !demo else { return }
+                let bounds = MarbleBounds(size: size, radius: marbleRadius(for: size))
+                let predicted = value.predictedEndTranslation
+                let current = value.translation
+                let vx = (predicted.width - current.width)
+                let vy = (predicted.height - current.height)
+                sim.release(velocity: CGVector(dx: vx, dy: vy), bounds: bounds)
+            }
+    }
+
+    // MARK: Drawing
+
+    private func drawTray(in context: inout GraphicsContext, size: CGSize) {
+        let inset: CGFloat = 4
+        let rect = CGRect(x: inset, y: inset,
+                          width: size.width - inset * 2,
+                          height: size.height - inset * 2)
+        let corner = min(rect.width, rect.height) * 0.16
+        let shape = Path(roundedRect: rect, cornerRadius: corner)
+
+        let floor = Gradient(colors: [
+            Color(red: 0.10, green: 0.11, blue: 0.16),
+            Color(red: 0.05, green: 0.05, blue: 0.09)
+        ])
+        context.fill(shape, with: .linearGradient(
+            floor,
+            startPoint: CGPoint(x: rect.minX, y: rect.minY),
+            endPoint: CGPoint(x: rect.maxX, y: rect.maxY)))
+
+        // Inner rim highlight for a raised-tray feel.
+        let rimColor = Color(red: 0.42, green: 0.46, blue: 0.58).opacity(0.55)
+        context.stroke(shape, with: .color(rimColor), lineWidth: 2)
+
+        let innerRect = rect.insetBy(dx: 3, dy: 3)
+        let innerShape = Path(roundedRect: innerRect,
+                              cornerRadius: max(0, corner - 3))
+        context.stroke(innerShape,
+                       with: .color(Color(red: 0.0, green: 0.0, blue: 0.0).opacity(0.35)),
+                       lineWidth: 1.5)
+    }
+
+    private func drawShadow(in context: inout GraphicsContext, bounds: MarbleBounds) {
+        let p = sim.displayPosition(in: bounds)
+        let r = bounds.radius
+        // Shadow drifts slightly below/right of the marble and softens with height-feel.
+        let shadowRect = CGRect(x: p.x - r * 1.05 + 3,
+                                y: p.y - r * 0.55 + r * 0.85,
+                                width: r * 2.1,
+                                height: r * 1.05)
+        var shadowCtx = context
+        shadowCtx.addFilter(.blur(radius: r * 0.35))
+        shadowCtx.fill(Path(ellipseIn: shadowRect),
+                       with: .color(Color(red: 0, green: 0, blue: 0).opacity(0.45)))
+    }
+
+    private func drawMarble(in context: inout GraphicsContext, bounds: MarbleBounds) {
+        let p = sim.displayPosition(in: bounds)
+        let r = bounds.radius
+        let rect = CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)
+        let sphere = Path(ellipseIn: rect)
+
+        // Body: cool glass marble with an off-center light center.
+        let body = Gradient(stops: [
+            .init(color: Color(red: 0.55, green: 0.78, blue: 0.95), location: 0.0),
+            .init(color: Color(red: 0.24, green: 0.46, blue: 0.78), location: 0.45),
+            .init(color: Color(red: 0.08, green: 0.16, blue: 0.36), location: 1.0)
+        ])
+        context.fill(sphere, with: .radialGradient(
+            body,
+            center: CGPoint(x: p.x - r * 0.32, y: p.y - r * 0.36),
+            startRadius: 0,
+            endRadius: r * 1.7))
+
+        // Rim shade for volume.
+        context.stroke(sphere,
+                       with: .color(Color(red: 0, green: 0, blue: 0).opacity(0.35)),
+                       lineWidth: max(1, r * 0.06))
+
+        // Specular highlight.
+        let hi = CGRect(x: p.x - r * 0.55, y: p.y - r * 0.62,
+                        width: r * 0.7, height: r * 0.5)
+        context.fill(Path(ellipseIn: hi),
+                     with: .color(Color(red: 1, green: 1, blue: 1).opacity(0.85)))
+
+        // Tiny secondary glint.
+        let glint = CGRect(x: p.x + r * 0.2, y: p.y + r * 0.28,
+                           width: r * 0.22, height: r * 0.18)
+        context.fill(Path(ellipseIn: glint),
+                     with: .color(Color(red: 1, green: 1, blue: 1).opacity(0.35)))
+    }
+}
+
+// MARK: - Bounds helper
+
+private struct MarbleBounds {
+    let size: CGSize
+    let radius: CGFloat
+
+    // Playable rect (tray interior) the marble center is confined to.
+    var inset: CGFloat { 7 + radius }
+    var minX: CGFloat { inset }
+    var maxX: CGFloat { max(inset, size.width - inset) }
+    var minY: CGFloat { inset }
+    var maxY: CGFloat { max(inset, size.height - inset) }
+    var center: CGPoint { CGPoint(x: size.width / 2, y: size.height / 2) }
+}
+
+// MARK: - Inertial simulation (reference type: safe to mutate from onChange)
+
+private final class MarbleSim {
+    enum Phase { case idle, dragging, free }
+
+    var position: CGPoint = .zero
+    var velocity: CGVector = .zero
+    var phase: Phase = .idle
+    var bounceCount: Int = 0
+
+    private var lastTick: Date?
+    private var seeded = false
+    private var restTimer: TimeInterval = 0      // time spent essentially at rest
+    private var demoLaunchTimer: TimeInterval = 0 // safety re-launch guard
+
+    private let friction: CGFloat = 1.6      // per-second velocity damping coefficient
+    private let restitution: CGFloat = 0.72  // wall energy retained on bounce
+    private let stopSpeed: CGFloat = 8       // px/s below which we consider "resting"
+
+    // MARK: Step
+
+    func step(date: Date, bounds: MarbleBounds, demo: Bool) {
+        guard bounds.size.width > 1, bounds.size.height > 1 else { return }
+
+        if !seeded {
+            seeded = true
+            position = bounds.center
+            if demo { seedLaunch(in: bounds) } else { phase = .idle }
+        }
+
+        let dt = clampedDelta(to: date)
+        guard dt > 0 else { return }
+
+        if phase == .dragging {
+            confine(to: bounds) // keep finger-following marble inside the tray
+            return
+        }
+
+        integrate(dt: dt, bounds: bounds)
+
+        let speed = hypot(velocity.dx, velocity.dy)
+        if speed < stopSpeed {
+            velocity = .zero
+            restTimer += dt
+            if phase == .free { phase = .idle }
+        } else {
+            restTimer = 0
+        }
+
+        if demo {
+            demoLaunchTimer += dt
+            // Re-launch once it has settled, or as a hard safety after ~3.4s.
+            if (phase == .idle && restTimer > 0.5) || demoLaunchTimer > 3.4 {
+                seedLaunch(in: bounds)
+            }
+        }
+    }
+
+    private func integrate(dt: CGFloat, bounds: MarbleBounds) {
+        // Semi-implicit: advance position, apply friction, then resolve walls.
+        position.x += velocity.dx * dt
+        position.y += velocity.dy * dt
+
+        let damp = max(0, 1 - friction * dt)
+        velocity.dx *= damp
+        velocity.dy *= damp
+
+        reflectWalls(bounds: bounds)
+    }
+
+    private func reflectWalls(bounds: MarbleBounds) {
+        var didBounce = false
+
+        if position.x < bounds.minX {
+            position.x = bounds.minX
+            if velocity.dx < 0 { velocity.dx = -velocity.dx * restitution; didBounce = true }
+        } else if position.x > bounds.maxX {
+            position.x = bounds.maxX
+            if velocity.dx > 0 { velocity.dx = -velocity.dx * restitution; didBounce = true }
+        }
+
+        if position.y < bounds.minY {
+            position.y = bounds.minY
+            if velocity.dy < 0 { velocity.dy = -velocity.dy * restitution; didBounce = true }
+        } else if position.y > bounds.maxY {
+            position.y = bounds.maxY
+            if velocity.dy > 0 { velocity.dy = -velocity.dy * restitution; didBounce = true }
+        }
+
+        if didBounce { bounceCount &+= 1 }
+    }
+
+    // MARK: Launch / drag
+
+    private func seedLaunch(in bounds: MarbleBounds) {
+        // Start near a corner-ish point and throw across the tray on a diagonal.
+        let startX = bounds.minX + (bounds.maxX - bounds.minX) * 0.22
+        let startY = bounds.maxY - (bounds.maxY - bounds.minY) * 0.18
+        position = CGPoint(x: startX, y: startY)
+
+        let minSide = max(1, min(bounds.size.width, bounds.size.height))
+        let base = minSide * 6.0 // scale launch speed to the tile so it banks a couple walls
+        // Alternate the throw direction each launch for variety.
+        let dir: CGFloat = (bounceCount % 2 == 0) ? 1 : -1
+        velocity = CGVector(dx: base * 0.95 * dir, dy: -base * 0.75)
+        phase = .free
+        restTimer = 0
+        demoLaunchTimer = 0
+    }
+
+    func beginDragIfNeeded(at start: CGPoint, bounds: MarbleBounds) {
+        guard phase != .dragging else { return }
+        phase = .dragging
+        velocity = .zero
+        restTimer = 0
+        demoLaunchTimer = 0
+    }
+
+    func dragTo(_ location: CGPoint, bounds: MarbleBounds) {
+        position = location
+        confine(to: bounds)
+    }
+
+    func release(velocity v: CGVector, bounds: MarbleBounds) {
+        // Tune raw predicted-translation delta into px/s. predictedEndTranslation
+        // already represents the projected fling; scale gives it real momentum.
+        let k: CGFloat = 5.0
+        velocity = CGVector(dx: v.dx * k, dy: v.dy * k)
+        phase = .free
+        restTimer = 0
+    }
+
+    // MARK: Helpers
+
+    private func confine(to bounds: MarbleBounds) {
+        position.x = min(max(position.x, bounds.minX), bounds.maxX)
+        position.y = min(max(position.y, bounds.minY), bounds.maxY)
+    }
+
+    private func clampedDelta(to date: Date) -> CGFloat {
+        defer { lastTick = date }
+        guard let last = lastTick else { return 0 }
+        let raw = date.timeIntervalSince(last)
+        if raw <= 0 { return 0 }
+        return CGFloat(min(raw, 1.0 / 30.0)) // clamp so a stalled frame can't teleport
+    }
+
+    func displayPosition(in bounds: MarbleBounds) -> CGPoint {
+        if position == .zero { return bounds.center }
+        return position
+    }
+}
+"""###,
+        "ges-jelly-drag-blob": ###"""
+import SwiftUI
+
+// MARK: - Jelly Drag Blob
+// Drag a soft blob: its trailing edge lags into a teardrop tip while the
+// leading edge bulges; release lets it wobble back round like gelatin.
+// The deformation lives in the Shape's animatableData so the release spring
+// actually re-evaluates the silhouette each frame (that IS the jiggle).
+
+struct JellyDragBlobView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size: CGSize = proxy.size
+            ZStack {
+                JellyBackground()
+                if demo {
+                    DemoBlob(size: size)
+                } else {
+                    InteractiveBlob(size: size)
+                }
+            }
+            .frame(width: size.width, height: size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Shared stretch clamp helper
+
+// Caps the stretch vector magnitude so fast drags can't blow up the silhouette.
+private func clampStretch(_ v: CGVector, baseRadius: CGFloat) -> CGVector {
+    let mag: CGFloat = hypot(v.dx, v.dy)
+    let cap: CGFloat = baseRadius * 1.2
+    guard mag > cap, mag > 0 else { return v }
+    let scale: CGFloat = cap / mag
+    return CGVector(dx: v.dx * scale, dy: v.dy * scale)
+}
+
+// MARK: - Background
+
+private struct JellyBackground: View {
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.05, green: 0.05, blue: 0.09),
+                Color(red: 0.10, green: 0.09, blue: 0.16)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+// MARK: - Demo (self-driving) variant
+
+private struct DemoBlob: View {
+    let size: CGSize
+
+    // ~3.2s loop. Speed eases via sin^2 so the blob stretches while moving
+    // and rounds out at the slow points of the orbit — "wobbles round when it pauses".
+    private let period: Double = 3.2
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let t: Double = context.date.timeIntervalSinceReferenceDate
+            let phase: Double = (t.truncatingRemainder(dividingBy: period)) / period
+            let state = orbitState(phase: phase)
+            BlobBody(
+                center: state.center,
+                stretch: state.stretch,
+                baseRadius: baseRadius
+            )
+        }
+    }
+
+    private var baseRadius: CGFloat {
+        min(size.width, size.height) * 0.26
+    }
+
+    private var orbitCenter: CGPoint {
+        CGPoint(x: size.width / 2, y: size.height / 2)
+    }
+
+    private func orbitState(phase: Double) -> (center: CGPoint, stretch: CGVector) {
+        // Eased angular progress: fast through the middle, slow at the ends.
+        let eased: Double = phase - (sin(2 * .pi * phase) / (2 * .pi))
+        let angle: Double = eased * 2 * .pi
+
+        let orbitR: CGFloat = baseRadius * 0.55
+        let cx: CGFloat = orbitCenter.x + orbitR * CGFloat(cos(angle))
+        let cy: CGFloat = orbitCenter.y + orbitR * CGFloat(sin(angle) * 0.7)
+        let center = CGPoint(x: cx, y: cy)
+
+        // Analytic tangential velocity of the eased orbit drives the stretch.
+        let speed: Double = pow(sin(.pi * phase), 2) // 0 at ends, 1 mid-loop
+        let vScale: CGFloat = baseRadius * 1.1
+        let dx: CGFloat = -CGFloat(sin(angle)) * vScale * CGFloat(speed)
+        let dy: CGFloat = CGFloat(cos(angle)) * 0.7 * vScale * CGFloat(speed)
+
+        return (center, clampStretch(CGVector(dx: dx, dy: dy), baseRadius: baseRadius))
+    }
+}
+
+// MARK: - Interactive variant
+
+private struct InteractiveBlob: View {
+    let size: CGSize
+
+    @State private var center: CGPoint = .zero
+    @State private var stretch: CGVector = .zero
+    @State private var didPlace: Bool = false
+
+    var body: some View {
+        BlobBody(center: resolvedCenter, stretch: stretch, baseRadius: baseRadius)
+            .contentShape(Rectangle())
+            .gesture(dragGesture)
+            .onAppear { placeIfNeeded() }
+    }
+
+    private var baseRadius: CGFloat {
+        min(size.width, size.height) * 0.26
+    }
+
+    private var home: CGPoint {
+        CGPoint(x: size.width / 2, y: size.height / 2)
+    }
+
+    private var resolvedCenter: CGPoint {
+        didPlace ? center : home
+    }
+
+    private func placeIfNeeded() {
+        guard !didPlace else { return }
+        center = home
+        didPlace = true
+    }
+
+    private var dragGesture: some Gesture {
+        // minimumDistance: 0 so the blob wins inside a ScrollView.
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                placeIfNeeded()
+                // Track the finger 1:1 (no animation) for a live, tactile feel.
+                center = CGPoint(
+                    x: home.x + value.translation.width,
+                    y: home.y + value.translation.height
+                )
+                // Derive a velocity-like vector from predictedEndTranslation
+                // (iOS 17 safe) and feed it into the live stretch.
+                let raw: CGVector = predictedVelocity(value)
+                stretch = clampStretch(scaledVelocity(raw), baseRadius: baseRadius)
+            }
+            .onEnded { _ in
+                // One spring drives BOTH the silhouette wobble (animatableData)
+                // and the glide home — overshooting through round.
+                withAnimation(.interpolatingSpring(stiffness: 170, damping: 12)) {
+                    stretch = .zero
+                    center = home
+                }
+            }
+    }
+
+    // predictedEndTranslation - translation approximates the throw direction
+    // and magnitude using only APIs guaranteed on iOS 17.
+    private func predictedVelocity(_ value: DragGesture.Value) -> CGVector {
+        let pred: CGSize = value.predictedEndTranslation
+        return CGVector(
+            dx: pred.width - value.translation.width,
+            dy: pred.height - value.translation.height
+        )
+    }
+
+    private func scaledVelocity(_ v: CGVector) -> CGVector {
+        // Compress the predicted delta into a stretch-sized vector.
+        let k: CGFloat = 2.0
+        return CGVector(dx: v.dx * k, dy: v.dy * k)
+    }
+}
+
+// MARK: - Shared blob body (fill + specular highlight)
+
+private struct BlobBody: View {
+    let center: CGPoint
+    let stretch: CGVector
+    let baseRadius: CGFloat
+
+    var body: some View {
+        ZStack {
+            shape
+                .fill(bodyGradient)
+                .overlay(rim)
+                .overlay(specular)
+                .shadow(color: Color(red: 0.30, green: 0.55, blue: 0.95).opacity(0.35),
+                        radius: 14, x: 0, y: 8)
+        }
+    }
+
+    private var shape: JellyDragBlobView_BlobShape {
+        JellyDragBlobView_BlobShape(center: center, stretch: stretch, baseRadius: baseRadius)
+    }
+
+    private var bodyGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.45, green: 0.78, blue: 1.00),
+                Color(red: 0.30, green: 0.50, blue: 0.96),
+                Color(red: 0.42, green: 0.30, blue: 0.92)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private var rim: some View {
+        shape.stroke(Color.white.opacity(0.18), lineWidth: 1.0)
+    }
+
+    // A small clipped specular highlight sells the gelatin sheen.
+    private var specular: some View {
+        let r: CGFloat = baseRadius
+        return Ellipse()
+            .fill(
+                RadialGradient(
+                    colors: [Color.white.opacity(0.55), Color.white.opacity(0.0)],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: r * 0.6
+                )
+            )
+            .frame(width: r * 0.9, height: r * 0.6)
+            .position(x: center.x - r * 0.28, y: center.y - r * 0.34)
+            .clipShape(shape)
+            .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Animatable teardrop shape
+
+private struct JellyDragBlobView_BlobShape: Shape {
+    var center: CGPoint
+    var stretch: CGVector
+    var baseRadius: CGFloat
+
+    // Expose the stretch (and center) through animatableData so the release
+    // spring re-evaluates path(in:) every frame — without this the wobble dies.
+    var animatableData: AnimatablePair<
+        AnimatablePair<CGFloat, CGFloat>,
+        AnimatablePair<CGFloat, CGFloat>
+    > {
+        get {
+            AnimatablePair(
+                AnimatablePair(stretch.dx, stretch.dy),
+                AnimatablePair(center.x, center.y)
+            )
+        }
+        set {
+            stretch = CGVector(dx: newValue.first.first, dy: newValue.first.second)
+            center = CGPoint(x: newValue.second.first, y: newValue.second.second)
+        }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let mag: CGFloat = hypot(stretch.dx, stretch.dy)
+
+        // Near-rest: clean circle (avoids divide-by-zero on direction).
+        guard mag > 0.5 else {
+            let d: CGFloat = baseRadius * 2
+            let origin = CGPoint(x: center.x - baseRadius, y: center.y - baseRadius)
+            return Path(ellipseIn: CGRect(origin: origin, size: CGSize(width: d, height: d)))
+        }
+
+        let dirX: CGFloat = stretch.dx / mag
+        let dirY: CGFloat = stretch.dy / mag
+        let motionAngle: Double = atan2(Double(dirY), Double(dirX))
+
+        // Deform amount in [0, 0.85] of baseRadius.
+        let cap: CGFloat = baseRadius * 0.85
+        let deform: CGFloat = min(mag, cap) / baseRadius
+
+        return teardropPath(motionAngle: motionAngle, deform: deform)
+    }
+
+    private func teardropPath(motionAngle: Double, deform: CGFloat) -> Path {
+        var path = Path()
+        let samples: Int = 60
+        let twoPi: Double = 2 * .pi
+
+        for i in 0...samples {
+            let theta: Double = (Double(i) / Double(samples)) * twoPi
+            let radius: CGFloat = radiusAt(theta: theta, motionAngle: motionAngle, deform: deform)
+            let px: CGFloat = center.x + radius * CGFloat(cos(theta))
+            let py: CGFloat = center.y + radius * CGFloat(sin(theta))
+            let point = CGPoint(x: px, y: py)
+            if i == 0 {
+                path.move(to: point)
+            } else {
+                path.addLine(to: point)
+            }
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    // Asymmetric radial profile: leading pole bulges, trailing pole pulls into a tip.
+    private func radiusAt(theta: Double, motionAngle: Double, deform: CGFloat) -> CGFloat {
+        // cos(theta - motionAngle): +1 at leading pole, -1 at trailing pole.
+        let lead: CGFloat = CGFloat(cos(theta - motionAngle))
+
+        // Leading side bulges outward (positive lead), trailing side flattens then
+        // spikes into a teardrop tip. Cubic term sharpens the trailing tip.
+        let bulge: CGFloat = lead * deform * 0.55
+        let trailingTip: CGFloat = max(0, -lead) // 0..1 on the trailing half
+        let tip: CGFloat = pow(trailingTip, 2.0) * deform * 0.95
+
+        // Slight lateral squash keeps volume believable on fast drags.
+        let squash: CGFloat = (1 - abs(lead)) * deform * 0.18
+
+        let factor: CGFloat = 1.0 + bulge + tip - squash
+        return baseRadius * max(0.35, factor)
+    }
+}
+"""###,
+        "ges-long-press-melt": ###"""
+import SwiftUI
+
+/// Long-Press Melt Button
+/// Hold the button and it softens, drooping and sagging while gooey teardrop
+/// drips form and lengthen along the bottom edge; release springs it back solid.
+///
+/// The goo is achieved with a Canvas metaball: a rounded-rect body plus several
+/// drip circles are drawn into a single `drawLayer` with `.alphaThreshold` + `.blur`
+/// filters so overlapping shapes fuse into one liquid mass. That mass is used as a
+/// `.mask` over a gradient so the button keeps its color and a glossy highlight.
+///
+/// Redraw engine is `TimelineView(.animation)` for BOTH demo and interactive modes
+/// (PhaseAnimator hands the closure a discrete phase, which would snap the Canvas
+/// rather than melt it smoothly). `meltLevel` is derived from time/state each tick.
+struct LongPressMeltView: View {
+    var demo: Bool = false
+
+    // Interactive press state.
+    @State private var pressStart: Date? = nil
+    @State private var releaseStart: Date? = nil
+    @State private var releaseFromLevel: CGFloat = 0
+
+    // Time to reach full melt while holding.
+    private let chargeDuration: Double = 1.6
+    // Bouncy snap-back duration on release.
+    private let releaseDuration: Double = 0.9
+
+    var body: some View {
+        GeometryReader { geo in
+            TimelineView(.animation) { timeline in
+                let now = timeline.date
+                let level = currentMeltLevel(now: now)
+                meltCanvas(level: level, size: geo.size)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            // Keep the gesture attached in both modes; in demo, route the press to
+            // subviews so the self-driving TimelineView loop owns the animation.
+            // (An `Optional` gesture via `demo ? nil : pressGesture` does NOT compile
+            // on iOS 17 because Optional does not conform to Gesture.)
+            .gesture(pressGesture, including: demo ? .subviews : .all)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Melt level
+
+    /// Returns the current melt amount 0...1 for this frame.
+    private func currentMeltLevel(now: Date) -> CGFloat {
+        if demo {
+            return demoMeltLevel(now: now)
+        }
+        return interactiveMeltLevel(now: now)
+    }
+
+    /// Self-driving loop: rest → sag+drip → bouncy snap-back → rest, on ~3.2s.
+    private func demoMeltLevel(now: Date) -> CGFloat {
+        let period: Double = 3.2
+        let t = now.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
+        // Hold a short solid beat, ramp up with ease, hold full briefly, then a
+        // bouncy spring snap-back to solid.
+        if t < 0.12 {
+            return 0
+        } else if t < 0.55 {
+            let p = (t - 0.12) / 0.43
+            return easeInOut(p)
+        } else if t < 0.62 {
+            return 1
+        } else {
+            let p = (t - 0.62) / 0.38
+            return springBack(from: 1, progress: p)
+        }
+    }
+
+    /// Interactive: while pressed, melt grows; on release it springs back to solid.
+    private func interactiveMeltLevel(now: Date) -> CGFloat {
+        if let start = pressStart {
+            let elapsed = now.timeIntervalSince(start)
+            return clamp01(CGFloat(elapsed / chargeDuration))
+        }
+        if let rel = releaseStart {
+            let elapsed = now.timeIntervalSince(rel)
+            let p = CGFloat(elapsed / releaseDuration)
+            if p >= 1 { return 0 }
+            return springBack(from: releaseFromLevel, progress: Double(p))
+        }
+        return 0
+    }
+
+    // MARK: - Gesture
+
+    private var pressGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                // DragGesture does not keep firing while stationary, so we record a
+                // start instant once and integrate elapsed time in the timeline.
+                if pressStart == nil {
+                    pressStart = Date()
+                    releaseStart = nil
+                }
+            }
+            .onEnded { _ in
+                let level = interactiveMeltLevel(now: Date())
+                releaseFromLevel = level
+                releaseStart = Date()
+                pressStart = nil
+            }
+    }
+
+    // MARK: - Canvas
+
+    @ViewBuilder
+    private func meltCanvas(level: CGFloat, size: CGSize) -> some View {
+        let metrics = layout(for: size)
+        // The fused metaball mass (alphaThreshold + blur) acts as a mask so the
+        // gradient body + highlight show through, keeping the button colorful.
+        gradientBody(metrics: metrics, level: level)
+            .mask(
+                Canvas { context, _ in
+                    drawGooMask(into: &context, metrics: metrics, level: level)
+                }
+            )
+            .overlay(glossHighlight(metrics: metrics, level: level))
+            .overlay(label(metrics: metrics, level: level))
+    }
+
+    /// Draws the rounded-rect body and the drip circles into one filtered layer so
+    /// overlapping shapes merge into a single liquid blob.
+    private func drawGooMask(into context: inout GraphicsContext,
+                             metrics: Metrics,
+                             level: CGFloat) {
+        let blur = metrics.blobRadius * (0.55 + level * 0.35)
+        context.addFilter(.alphaThreshold(min: 0.5, color: .white))
+        context.addFilter(.blur(radius: blur))
+        context.drawLayer { layer in
+            // Body sags downward as it melts.
+            let sag = metrics.maxSag * level
+            let bodyRect = CGRect(
+                x: metrics.bodyRect.minX,
+                y: metrics.bodyRect.minY,
+                width: metrics.bodyRect.width,
+                height: metrics.bodyRect.height + sag * 0.6
+            )
+            let corner = metrics.corner + sag * 0.5
+            let bodyPath = Path(roundedRect: bodyRect, cornerRadius: corner)
+            layer.fill(bodyPath, with: .color(.white))
+
+            for blob in drips(metrics: metrics, level: level) {
+                let circle = Path(ellipseIn: CGRect(
+                    x: blob.center.x - blob.radius,
+                    y: blob.center.y - blob.radius,
+                    width: blob.radius * 2,
+                    height: blob.radius * 2
+                ))
+                layer.fill(circle, with: .color(.white))
+            }
+        }
+    }
+
+    /// Computes drip blob centers + radii along the bottom edge for this melt level.
+    private func drips(metrics: Metrics, level: CGFloat) -> [(center: CGPoint, radius: CGFloat)] {
+        guard level > 0.02 else { return [] }
+        var result: [(center: CGPoint, radius: CGFloat)] = []
+        let baseY = metrics.bodyRect.maxY + metrics.maxSag * level * 0.6
+        let count = metrics.dripCount
+        for i in 0..<count {
+            // Each drip has its own phase so they grow at slightly different rates.
+            let phase = CGFloat(i) / CGFloat(max(count - 1, 1))
+            let xFraction = 0.18 + phase * 0.64
+            let x = metrics.bodyRect.minX + metrics.bodyRect.width * xFraction
+            // Stagger thresholds so drips appear progressively, center ones first.
+            let centerBias = 1 - abs(phase - 0.5) * 1.4
+            let threshold = 0.12 + (1 - clamp01(centerBias)) * 0.22
+            guard level > threshold else { continue }
+            let local = clamp01((level - threshold) / (1 - threshold))
+            let eased = easeOut(local)
+            // The drip hangs down; its length grows with melt, tip stays in-frame.
+            let length = metrics.maxDripLength * eased * (0.7 + centerBias * 0.3)
+            let radius = metrics.blobRadius * (0.5 + eased * 0.55)
+            let tipY = min(baseY + length, metrics.maxTipY)
+            result.append((center: CGPoint(x: x, y: tipY), radius: radius))
+
+            // A thin neck blob connecting the tip toward the body keeps the goo fused.
+            let neckY = (baseY + tipY) / 2
+            let neckR = radius * 0.75
+            result.append((center: CGPoint(x: x, y: neckY), radius: neckR))
+        }
+        return result
+    }
+
+    // MARK: - Decorative layers
+
+    private func gradientBody(metrics: Metrics, level: CGFloat) -> some View {
+        // Color warms slightly as it heats / melts.
+        let top = Color(red: 0.42 + Double(level) * 0.14,
+                        green: 0.36,
+                        blue: 0.95 - Double(level) * 0.12)
+        let bottom = Color(red: 0.78 + Double(level) * 0.12,
+                           green: 0.28,
+                           blue: 0.62)
+        return LinearGradient(
+            colors: [top, bottom],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(width: metrics.size.width, height: metrics.size.height)
+    }
+
+    private func glossHighlight(metrics: Metrics, level: CGFloat) -> some View {
+        // A soft top highlight that fades as the surface liquefies.
+        let r = metrics.bodyRect
+        let glossRect = CGRect(
+            x: r.minX + r.width * 0.12,
+            y: r.minY + r.height * 0.16,
+            width: r.width * 0.76,
+            height: r.height * 0.30
+        )
+        return Capsule()
+            .fill(
+                LinearGradient(
+                    colors: [Color.white.opacity(0.55), Color.white.opacity(0.0)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: glossRect.width, height: glossRect.height)
+            .position(x: glossRect.midX, y: glossRect.midY)
+            .opacity(0.9 - Double(level) * 0.6)
+            .blendMode(.screen)
+            .allowsHitTesting(false)
+            .mask(
+                Canvas { context, _ in
+                    drawGooMask(into: &context, metrics: metrics, level: level)
+                }
+            )
+    }
+
+    private func label(metrics: Metrics, level: CGFloat) -> some View {
+        let r = metrics.bodyRect
+        // Label drips with the body and fades as goo takes over.
+        return Text("HOLD")
+            .font(.system(size: metrics.fontSize, weight: .heavy, design: .rounded))
+            .kerning(metrics.fontSize * 0.08)
+            .foregroundStyle(Color.white.opacity(0.92))
+            .scaleEffect(y: 1 + level * 0.18, anchor: .top)
+            .position(x: r.midX, y: r.midY + metrics.maxSag * level * 0.35)
+            .opacity(0.95 - Double(level) * 0.7)
+            .allowsHitTesting(false)
+    }
+
+    // MARK: - Layout
+
+    private struct Metrics {
+        let size: CGSize
+        let bodyRect: CGRect
+        let corner: CGFloat
+        let blobRadius: CGFloat
+        let maxSag: CGFloat
+        let maxDripLength: CGFloat
+        let maxTipY: CGFloat
+        let dripCount: Int
+        let fontSize: CGFloat
+    }
+
+    /// All geometry scales to the GeometryReader size so the goo fuses correctly in
+    /// both a 120pt tile and a large detail area.
+    private func layout(for size: CGSize) -> Metrics {
+        let w = size.width
+        let h = size.height
+        let minDim = min(w, h)
+
+        let bodyW = w * 0.62
+        let bodyH = h * 0.30
+        // Button sits upper-middle so drips have room to hang in-frame.
+        let bodyX = (w - bodyW) / 2
+        let bodyY = h * 0.22
+        let bodyRect = CGRect(x: bodyX, y: bodyY, width: bodyW, height: bodyH)
+
+        let corner = bodyH * 0.42
+        let blobRadius = minDim * 0.052
+        let maxSag = bodyH * 0.55
+        let maxDripLength = h * 0.30
+        // Clamp tips so the longest drip never leaves the frame.
+        let maxTipY = h * 0.94
+
+        return Metrics(
+            size: size,
+            bodyRect: bodyRect,
+            corner: corner,
+            blobRadius: blobRadius,
+            maxSag: maxSag,
+            maxDripLength: maxDripLength,
+            maxTipY: maxTipY,
+            dripCount: 4,
+            fontSize: bodyH * 0.42
+        )
+    }
+
+    // MARK: - Math helpers
+
+    private func clamp01(_ x: CGFloat) -> CGFloat {
+        min(max(x, 0), 1)
+    }
+
+    private func easeInOut(_ x: Double) -> CGFloat {
+        let c = min(max(x, 0), 1)
+        return CGFloat(c * c * (3 - 2 * c))
+    }
+
+    private func easeOut(_ x: CGFloat) -> CGFloat {
+        let c = clamp01(x)
+        return 1 - (1 - c) * (1 - c)
+    }
+
+    /// Analytic damped-spring decay from `from` toward 0 over progress 0...1,
+    /// producing the bouncy snap-back. Clamped to never go below 0.
+    private func springBack(from: CGFloat, progress: Double) -> CGFloat {
+        let p = min(max(progress, 0), 1)
+        // Damped cosine: starts at `from`, overshoots slightly through 0, settles.
+        let decay = exp(-5.5 * p)
+        let osc = cos(7.5 * p)
+        let value = from * CGFloat(decay * osc)
+        return max(value, 0)
+    }
+}
+"""###,
+        "ges-magnetic-cursor-ferrofluid": ###"""
+import SwiftUI
+
+// MARK: - Ferrofluid Magnet Pull
+// Drag a magnet over a pool of dark fluid: spiky tendrils rise and lean toward it,
+// merging and splitting via a metaball (alphaThreshold + blur) Canvas, slumping flat
+// when the magnet leaves. demo == true self-drives a slow figure-eight.
+
+public struct MagneticCursorFerrofluidView: View {
+    public var demo: Bool = false
+
+    public init(demo: Bool = false) {
+        self.demo = demo
+    }
+
+    public var body: some View {
+        GeometryReader { geo in
+            FerrofluidStage(demo: demo, size: geo.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Stage
+
+private struct FerrofluidStage: View {
+    let demo: Bool
+    let size: CGSize
+
+    // Interactive state: where the magnet currently is (in points), whether it is engaged,
+    // and the reference time used for the closed-form springy slump after release.
+    @State private var dragPoint: CGPoint? = nil
+    @State private var lastPoint: CGPoint = .zero
+    @State private var releaseTime: Double? = nil
+    @State private var engagedSince: Double = 0
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let now = timeline.date.timeIntervalSinceReferenceDate
+            let resolved = resolveMagnet(now: now)
+            ZStack {
+                background
+                fluidCanvas(magnet: resolved.point,
+                            strength: resolved.strength)
+                magnetIndicator(at: resolved.point,
+                                strength: resolved.strength)
+            }
+            .contentShape(Rectangle())
+            .gesture(dragGesture(now: now))
+        }
+        .clipped()
+    }
+
+    // MARK: Layers
+
+    private var background: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.07, green: 0.08, blue: 0.13),
+                Color(red: 0.03, green: 0.03, blue: 0.06)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    private func fluidCanvas(magnet: CGPoint, strength: Double) -> some View {
+        let unit = min(size.width, size.height)
+        let blur = max(unit * 0.045, 2.0)
+        let threshold = 0.55
+        let fluid = Color(red: 0.10, green: 0.11, blue: 0.20)
+
+        return Canvas { context, _ in
+            context.addFilter(.alphaThreshold(min: threshold, color: fluid))
+            context.addFilter(.blur(radius: blur))
+            context.drawLayer { layer in
+                let blobs = buildBlobs(magnet: magnet, strength: strength, unit: unit)
+                for blob in blobs {
+                    let rect = CGRect(
+                        x: blob.center.x - blob.radius,
+                        y: blob.center.y - blob.radius,
+                        width: blob.radius * 2,
+                        height: blob.radius * 2
+                    )
+                    layer.fill(Path(ellipseIn: rect), with: .color(.white))
+                }
+            }
+        }
+        // A subtle sheen highlight overlaid via blend so the fluid reads metallic.
+        .overlay(sheenOverlay(unit: unit))
+    }
+
+    private func sheenOverlay(unit: CGFloat) -> some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.45, green: 0.50, blue: 0.75).opacity(0.0),
+                Color(red: 0.55, green: 0.62, blue: 0.90).opacity(0.18),
+                Color(red: 0.10, green: 0.12, blue: 0.22).opacity(0.0)
+            ],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+        .blendMode(.plusLighter)
+        .allowsHitTesting(false)
+        .mask(
+            Rectangle()
+                .frame(height: unit * 0.55)
+                .frame(maxHeight: .infinity, alignment: .bottom)
+        )
+    }
+
+    private func magnetIndicator(at point: CGPoint, strength: Double) -> some View {
+        let unit = min(size.width, size.height)
+        let r = unit * 0.085
+        let glow = 0.25 + 0.55 * strength
+        return ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.95, green: 0.55, blue: 0.35).opacity(glow),
+                            Color(red: 0.85, green: 0.30, blue: 0.25).opacity(0.0)
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: r * 2.4
+                    )
+                )
+                .frame(width: r * 4, height: r * 4)
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.98, green: 0.72, blue: 0.45),
+                            Color(red: 0.80, green: 0.28, blue: 0.22)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: r * 1.5, height: r * 1.5)
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.5), lineWidth: max(unit * 0.006, 0.6))
+                )
+                .shadow(color: .black.opacity(0.4), radius: r * 0.3, y: r * 0.15)
+        }
+        .position(point)
+        .allowsHitTesting(false)
+    }
+
+    // MARK: Blob field
+
+    private struct Blob {
+        var center: CGPoint
+        var radius: CGFloat
+    }
+
+    /// Builds the base pool slab plus a row of spikes leaning toward the magnet.
+    private func buildBlobs(magnet: CGPoint, strength: Double, unit: CGFloat) -> [Blob] {
+        var blobs: [Blob] = []
+        let w = size.width
+        let h = size.height
+        guard w > 1, h > 1 else { return blobs }
+
+        // Base pool: a thick row of overlapping circles along the bottom so the
+        // metaball never disappears — guarantees a legible state on every frame.
+        let baseY = h * 0.82
+        let baseRadius = unit * 0.16
+        let baseCount = max(Int((w / (baseRadius * 0.9)).rounded(.up)) + 1, 3)
+        for i in 0..<baseCount {
+            let frac = baseCount > 1 ? CGFloat(i) / CGFloat(baseCount - 1) : 0.5
+            let x = frac * w
+            blobs.append(Blob(center: CGPoint(x: x, y: baseY), radius: baseRadius))
+        }
+
+        // Spikes: evenly spaced anchors rising from the pool surface.
+        let spikeCount = 11
+        let surfaceY = baseY - baseRadius * 0.35
+        let maxSpike = h * 0.62
+        let reach = unit * 1.05
+
+        for i in 0..<spikeCount {
+            let frac = CGFloat(i) / CGFloat(spikeCount - 1)
+            let anchorX = w * (0.06 + 0.88 * frac)
+            let anchor = CGPoint(x: anchorX, y: surfaceY)
+
+            let d = distance(anchor, magnet)
+            let falloff = falloffCurve(distance: d, reach: reach)
+            let rise = maxSpike * falloff * CGFloat(strength)
+
+            guard rise > unit * 0.02 else { continue }
+
+            // Lean the tip toward the magnet, proportional to height.
+            let dirX = magnet.x - anchorX
+            let lean = clamp(dirX, -reach, reach) / reach
+            let tipLean = lean * rise * 0.55
+
+            // Stack shrinking circles from base to tip.
+            let segments = 6
+            for s in 0..<segments {
+                let t = CGFloat(s) / CGFloat(segments - 1)
+                let y = surfaceY - rise * t
+                let x = anchorX + tipLean * t * t
+                // Radius tapers from fat base to thin tip.
+                let baseR = unit * 0.085
+                let tipR = unit * 0.018
+                let radius = baseR + (tipR - baseR) * t
+                blobs.append(Blob(center: CGPoint(x: x, y: y), radius: radius))
+            }
+        }
+
+        return blobs
+    }
+
+    /// Smooth falloff in [0,1]: full strength at the magnet, fading to 0 past `reach`.
+    private func falloffCurve(distance: CGFloat, reach: CGFloat) -> CGFloat {
+        guard reach > 0 else { return 0 }
+        let x = clamp(distance / reach, 0, 1)
+        // Smoothstep-ish: emphasizes a sharp local pull.
+        let v = 1 - x
+        return v * v
+    }
+
+    // MARK: Magnet resolution (closed-form so Canvas slump is smooth)
+
+    private struct ResolvedMagnet {
+        var point: CGPoint
+        var strength: Double
+    }
+
+    private func resolveMagnet(now: Double) -> ResolvedMagnet {
+        if demo {
+            return demoMagnet(now: now)
+        }
+
+        if let p = dragPoint {
+            // Actively dragging: full strength, smoothly ramping up after engage.
+            let t = now - engagedSince
+            let s = 1 - exp(-t / 0.18)
+            return ResolvedMagnet(point: p, strength: min(1.0, 0.2 + 0.8 * s))
+        }
+
+        if let rel = releaseTime {
+            // Released: spring-decaying field strength (damped oscillation 1 -> 0).
+            let t = now - rel
+            let strength = dampedRelease(t)
+            return ResolvedMagnet(point: lastPoint, strength: max(0, strength))
+        }
+
+        // Idle, untouched: park the magnet just off-pool so a gentle base wobble shows.
+        let idle = CGPoint(x: size.width * 0.5, y: size.height * 0.32)
+        let pulse = 0.12 + 0.05 * (1 + sin(now * 1.4)) / 2
+        return ResolvedMagnet(point: idle, strength: pulse)
+    }
+
+    /// Damped spring envelope: starts near 1, overshoots toward 0, settles flat.
+    private func dampedRelease(_ t: Double) -> Double {
+        guard t >= 0 else { return 1 }
+        let decay = exp(-t * 3.2)
+        let osc = cos(t * 7.0)
+        // Keep it positive-ish but let it wobble as it slumps.
+        let env = decay * (0.5 + 0.5 * osc)
+        return env
+    }
+
+    /// demo mode: slow figure-eight (lemniscate) over the pool surface.
+    private func demoMagnet(now: Double) -> ResolvedMagnet {
+        let period: Double = 3.4
+        let phase = (now.truncatingRemainder(dividingBy: period)) / period
+        let theta = phase * 2 * .pi
+
+        // Lemniscate of Gerono: x = sin, y = sin*cos — stays inside bounds when scaled.
+        let nx = sin(theta)
+        let ny = sin(theta) * cos(theta)
+
+        let cx = size.width * 0.5
+        let cy = size.height * 0.40
+        let ampX = size.width * 0.34
+        let ampY = size.height * 0.22
+
+        let point = CGPoint(x: cx + CGFloat(nx) * ampX,
+                            y: cy + CGFloat(ny) * ampY)
+        // Pulse strength a little so the fluid breathes; never below a legible floor.
+        let strength = 0.78 + 0.22 * (1 + sin(now * 2.1)) / 2
+        return ResolvedMagnet(point: point, strength: strength)
+    }
+
+    // MARK: Gesture
+
+    private func dragGesture(now: Double) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if dragPoint == nil {
+                    engagedSince = Date().timeIntervalSinceReferenceDate
+                }
+                dragPoint = value.location
+                lastPoint = value.location
+                releaseTime = nil
+            }
+            .onEnded { value in
+                lastPoint = value.location
+                dragPoint = nil
+                releaseTime = Date().timeIntervalSinceReferenceDate
+            }
+    }
+
+    // MARK: Math helpers
+
+    private func distance(_ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let dx = a.x - b.x
+        let dy = a.y - b.y
+        return (dx * dx + dy * dy).squareRoot()
+    }
+
+    private func clamp(_ v: CGFloat, _ lo: CGFloat, _ hi: CGFloat) -> CGFloat {
+        min(max(v, lo), hi)
+    }
+}
+"""###,
+        "ges-peel-away-card": ###"""
+import SwiftUI
+import Foundation
+
+// MARK: - Peel-Away Sticker
+//
+// Drag the bottom-right corner of the card and it peels up like a sticker:
+// a curling, lit underside is revealed, a soft drop shadow trails the lifted
+// edge, and the corner snaps flat or tears free depending on release velocity.
+//
+// Implementation: a pure 2D reflection-fold rendered in a single Canvas.
+// Folding corner `c` so it lands at lifted point `c'` means the crease is the
+// perpendicular bisector of the segment c -> c'. The lifted flap is the mirror
+// of the corner triangle across that crease; the "3D curl" is sold by a
+// LinearGradient sheen, brightest at the bend. Renders identically at any size.
+
+public struct PeelAwayCardView: View {
+    public var demo: Bool = false
+
+    public init(demo: Bool = false) {
+        self.demo = demo
+    }
+
+    public var body: some View {
+        GeometryReader { geo in
+            let box = cardRect(in: geo.size)
+            if demo {
+                demoCanvas(box: box)
+            } else {
+                interactiveCanvas(box: box)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Demo (self-driving) branch
+
+    @ViewBuilder
+    private func demoCanvas(box: CGRect) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let progress = demoProgress(at: t)
+            let lifted = demoLiftedPoint(box: box, progress: progress)
+            peelCanvas(box: box, lifted: lifted, flapOpacity: 1.0)
+        }
+    }
+
+    /// Eases peel progress 0 -> 0.6 -> 0 on a ~3.2s loop. Never reaches a blank
+    /// state: progress 0 is simply the flat, fully-legible card.
+    private func demoProgress(at time: TimeInterval) -> CGFloat {
+        let period: Double = 3.2
+        let phase = (time.truncatingRemainder(dividingBy: period)) / period // 0..1
+        // Smooth up-and-down: half a sine so it dwells gently at both ends.
+        let wave = sin(phase * .pi) // 0 -> 1 -> 0
+        let eased = wave * wave * (3.0 - 2.0 * wave) // smoothstep for softer ease
+        return CGFloat(eased) * 0.6
+    }
+
+    private func demoLiftedPoint(box: CGRect, progress: CGFloat) -> CGPoint {
+        let corner = CGPoint(x: box.maxX, y: box.maxY)
+        // Lift along the diagonal toward the card's top-left.
+        let diag = CGPoint(x: box.minX - corner.x, y: box.minY - corner.y)
+        let liftFraction = progress // up to 0.6 of the way across
+        return CGPoint(x: corner.x + diag.x * liftFraction,
+                       y: corner.y + diag.y * liftFraction)
+    }
+
+    // MARK: Interactive branch
+
+    @ViewBuilder
+    private func interactiveCanvas(box: CGRect) -> some View {
+        InteractivePeel(box: box, drawFlat: { ctx, size in
+            drawFlatCard(in: &ctx, box: box)
+        }, drawPeel: { ctx, size, lifted, opacity in
+            drawPeel(in: &ctx, size: size, box: box, lifted: lifted, flapOpacity: opacity)
+        })
+    }
+
+    // MARK: Shared canvas wrapper
+
+    @ViewBuilder
+    private func peelCanvas(box: CGRect, lifted: CGPoint, flapOpacity: Double) -> some View {
+        Canvas { ctx, size in
+            drawPeel(in: &ctx, size: size, box: box, lifted: lifted, flapOpacity: flapOpacity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Interactive container
+
+private struct InteractivePeel: View {
+    let box: CGRect
+    let drawFlat: (inout GraphicsContext, CGSize) -> Void
+    let drawPeel: (inout GraphicsContext, CGSize, CGPoint, Double) -> Void
+
+    /// Current lifted-corner location (the destination of the folded corner).
+    @State private var lifted: CGPoint?
+    @State private var flapOpacity: Double = 1.0
+    @State private var torn: Bool = false
+
+    var body: some View {
+        Canvas { ctx, size in
+            if let lifted, !torn {
+                drawPeel(&ctx, size, lifted, flapOpacity)
+            } else if torn {
+                // Briefly empty while torn free; restored shortly after.
+                ctx.opacity = flapOpacity
+                drawFlat(&ctx, size)
+            } else {
+                drawFlat(&ctx, size)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .gesture(dragGesture)
+        .sensoryFeedback(.impact(flexibility: .soft), trigger: torn) { _, now in now }
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                torn = false
+                flapOpacity = 1.0
+                lifted = clampLifted(value.location, box: box)
+            }
+            .onEnded { value in
+                let predicted = value.predictedEndTranslation
+                let velocityMag = hypot(predicted.width - value.translation.width,
+                                        predicted.height - value.translation.height)
+                let pulled = pullDistance(value.location, box: box)
+                // Fast flick OR pulled most of the way across -> tear free.
+                if velocityMag > 220 || pulled > tearThreshold(box: box) {
+                    tearFree()
+                } else {
+                    snapFlat()
+                }
+            }
+    }
+
+    private func snapFlat() {
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.62)) {
+            lifted = CGPoint(x: box.maxX, y: box.maxY)
+            flapOpacity = 1.0
+        }
+        // Once settled flat, drop the flap so we render the clean flat card.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            if let l = lifted, hypot(l.x - box.maxX, l.y - box.maxY) < 2 {
+                lifted = nil
+            }
+        }
+    }
+
+    private func tearFree() {
+        torn = true
+        // Fling the corner away and fade out.
+        withAnimation(.easeOut(duration: 0.35)) {
+            flapOpacity = 0.0
+        }
+        // Reset to a fresh flat card so the component stays reusable.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+            lifted = nil
+            torn = false
+            withAnimation(.easeIn(duration: 0.4)) {
+                flapOpacity = 1.0
+            }
+        }
+    }
+
+    private func tearThreshold(box: CGRect) -> CGFloat {
+        hypot(box.width, box.height) * 0.62
+    }
+
+    private func pullDistance(_ point: CGPoint, box: CGRect) -> CGFloat {
+        hypot(point.x - box.maxX, point.y - box.maxY)
+    }
+
+    /// Keep the lifted point inside a sane region so the crease stays a clean
+    /// diagonal across the bottom-right corner.
+    private func clampLifted(_ raw: CGPoint, box: CGRect) -> CGPoint {
+        let corner = CGPoint(x: box.maxX, y: box.maxY)
+        let maxReach = hypot(box.width, box.height) * 0.9
+        var dx = raw.x - corner.x
+        var dy = raw.y - corner.y
+        let d = hypot(dx, dy)
+        if d > maxReach, d > 0 {
+            let s = maxReach / d
+            dx *= s
+            dy *= s
+        }
+        // Bias toward the top-left half-plane so it reads as a lift, not a poke.
+        if dx > 0 { dx = 0 }
+        if dy > 0 { dy = 0 }
+        return CGPoint(x: corner.x + dx, y: corner.y + dy)
+    }
+}
+
+// MARK: - Geometry & drawing (pure, shared by both modes)
+
+private extension PeelAwayCardView {
+
+    /// Centered card rect that scales with the available size.
+    fileprivate func cardRect(in size: CGSize) -> CGRect {
+        let inset = min(size.width, size.height) * 0.14
+        let side = min(size.width, size.height) - inset * 2
+        let w = side
+        let h = side
+        let x = (size.width - w) / 2
+        let y = (size.height - h) / 2
+        return CGRect(x: x, y: y, width: w, height: h)
+    }
+
+    fileprivate func drawFlatCard(in ctx: inout GraphicsContext, box: CGRect) {
+        let rounded = Path(roundedRect: box, cornerRadius: box.width * 0.06)
+        ctx.fill(rounded, with: .linearGradient(cardFaceGradient(),
+                                                startPoint: box.origin,
+                                                endPoint: CGPoint(x: box.maxX, y: box.maxY)))
+        // Subtle face emblem so the card reads as content, not a blank slab.
+        drawFaceEmblem(in: &ctx, box: box)
+        // Hairline border for crispness.
+        ctx.stroke(rounded, with: .color(Color(red: 1, green: 1, blue: 1, opacity: 0.10)),
+                   lineWidth: 1)
+    }
+
+    fileprivate func drawPeel(in ctx: inout GraphicsContext,
+                              size: CGSize,
+                              box: CGRect,
+                              lifted: CGPoint,
+                              flapOpacity: Double) {
+        let corner = CGPoint(x: box.maxX, y: box.maxY)
+        let dist = hypot(lifted.x - corner.x, lifted.y - corner.y)
+
+        // Degenerate / near-flat: just draw the flat card.
+        if dist < 1.5 {
+            drawFlatCard(in: &ctx, box: box)
+            return
+        }
+
+        // Crease = perpendicular bisector of corner -> lifted.
+        guard let (p1, p2) = creaseIntersections(corner: corner, lifted: lifted, box: box) else {
+            drawFlatCard(in: &ctx, box: box)
+            return
+        }
+
+        // 1) Card face with the triangular hole removed.
+        drawFaceWithHole(in: &ctx, box: box, hole: [p1, corner, p2])
+
+        // 2) Revealed surface under the lifted corner (the sticker backing).
+        drawRevealedHole(in: &ctx, p1: p1, p2: p2, corner: corner)
+
+        // 3) Soft drop shadow of the flap, offset toward the lift direction.
+        drawFlapShadow(in: &ctx, p1: p1, p2: p2, lifted: lifted, corner: corner, opacity: flapOpacity)
+
+        // 4) The lifted flap with its lit, curling underside.
+        drawFlap(in: &ctx, p1: p1, p2: p2, lifted: lifted, corner: corner, opacity: flapOpacity)
+    }
+
+    // MARK: helpers
+
+    /// Reflect `point` across the line that is the perpendicular bisector of
+    /// segment a..b (i.e. the crease for folding `a` onto `b` reflects across it).
+    fileprivate func reflect(_ point: CGPoint, acrossBisectorOf a: CGPoint, and b: CGPoint) -> CGPoint {
+        // The bisector passes through midpoint m with normal n = (b - a).
+        let mx = (a.x + b.x) / 2
+        let my = (a.y + b.y) / 2
+        let nx = b.x - a.x
+        let ny = b.y - a.y
+        let nLen2 = nx * nx + ny * ny
+        if nLen2 == 0 { return point }
+        // Signed distance along normal from the line.
+        let d = ((point.x - mx) * nx + (point.y - my) * ny) / nLen2
+        return CGPoint(x: point.x - 2 * d * nx, y: point.y - 2 * d * ny)
+    }
+
+    /// Where the crease (perp. bisector of corner->lifted) crosses the two card
+    /// edges meeting at the bottom-right corner: the right edge (x = maxX) and
+    /// the bottom edge (y = maxY).
+    fileprivate func creaseIntersections(corner: CGPoint, lifted: CGPoint, box: CGRect) -> (CGPoint, CGPoint)? {
+        let mx = (corner.x + lifted.x) / 2
+        let my = (corner.y + lifted.y) / 2
+        let nx = lifted.x - corner.x   // crease normal direction
+        let ny = lifted.y - corner.y
+        // Crease line: nx*(x-mx) + ny*(y-my) = 0.
+
+        // Intersect with right edge x = box.maxX  -> solve for y.
+        var pRight: CGPoint?
+        if abs(ny) > 0.0001 {
+            let y = my - (nx * (box.maxX - mx)) / ny
+            if y >= box.minY - 0.5 && y <= box.maxY + 0.5 {
+                pRight = CGPoint(x: box.maxX, y: min(max(y, box.minY), box.maxY))
+            }
+        }
+
+        // Intersect with bottom edge y = box.maxY -> solve for x.
+        var pBottom: CGPoint?
+        if abs(nx) > 0.0001 {
+            let x = mx - (ny * (box.maxY - my)) / nx
+            if x >= box.minX - 0.5 && x <= box.maxX + 0.5 {
+                pBottom = CGPoint(x: min(max(x, box.minX), box.maxX), y: box.maxY)
+            }
+        }
+
+        guard let r = pRight, let b = pBottom else { return nil }
+        return (r, b)
+    }
+
+    fileprivate func drawFaceWithHole(in ctx: inout GraphicsContext, box: CGRect, hole: [CGPoint]) {
+        let rounded = Path(roundedRect: box, cornerRadius: box.width * 0.06)
+        // Clip the face drawing to the card minus the hole triangle.
+        ctx.drawLayer { layer in
+            layer.clip(to: rounded)
+            // Subtract the hole by clipping with inverse of the triangle.
+            var holePath = Path()
+            holePath.move(to: hole[0])
+            holePath.addLine(to: hole[1])
+            holePath.addLine(to: hole[2])
+            holePath.closeSubpath()
+            layer.clip(to: holePath, options: .inverse)
+
+            layer.fill(rounded, with: .linearGradient(self.cardFaceGradient(),
+                                                      startPoint: box.origin,
+                                                      endPoint: CGPoint(x: box.maxX, y: box.maxY)))
+            self.drawFaceEmblem(in: &layer, box: box)
+        }
+        ctx.stroke(rounded, with: .color(Color(red: 1, green: 1, blue: 1, opacity: 0.10)), lineWidth: 1)
+    }
+
+    fileprivate func drawRevealedHole(in ctx: inout GraphicsContext, p1: CGPoint, p2: CGPoint, corner: CGPoint) {
+        var hole = Path()
+        hole.move(to: p1)
+        hole.addLine(to: corner)
+        hole.addLine(to: p2)
+        hole.closeSubpath()
+        // Darker backing surface revealed where the sticker lifted off.
+        let backing = Color(red: 0.07, green: 0.08, blue: 0.11)
+        ctx.fill(hole, with: .color(backing))
+        // A faint inner shading near the crease so the cavity has depth.
+        ctx.fill(hole, with: .linearGradient(
+            Gradient(colors: [
+                Color(red: 0, green: 0, blue: 0, opacity: 0.0),
+                Color(red: 0, green: 0, blue: 0, opacity: 0.35)
+            ]),
+            startPoint: midpoint(p1, p2),
+            endPoint: corner))
+    }
+
+    fileprivate func drawFlapShadow(in ctx: inout GraphicsContext,
+                                    p1: CGPoint, p2: CGPoint,
+                                    lifted: CGPoint, corner: CGPoint,
+                                    opacity: Double) {
+        let liftedCorner = lifted
+        var shadow = Path()
+        shadow.move(to: p1)
+        shadow.addLine(to: liftedCorner)
+        shadow.addLine(to: p2)
+        shadow.closeSubpath()
+
+        // Offset the shadow toward the lift direction for a floating feel.
+        let dir = normalize(CGPoint(x: lifted.x - corner.x, y: lifted.y - corner.y))
+        let lift = hypot(lifted.x - corner.x, lifted.y - corner.y)
+        let offset = min(lift * 0.10, 14)
+        ctx.drawLayer { layer in
+            layer.opacity = opacity * 0.5
+            layer.translateBy(x: dir.x * offset + 3, y: dir.y * offset + 4)
+            layer.addFilter(.blur(radius: max(4, offset)))
+            layer.fill(shadow, with: .color(Color(red: 0, green: 0, blue: 0, opacity: 0.55)))
+        }
+    }
+
+    fileprivate func drawFlap(in ctx: inout GraphicsContext,
+                              p1: CGPoint, p2: CGPoint,
+                              lifted: CGPoint, corner: CGPoint,
+                              opacity: Double) {
+        var flap = Path()
+        flap.move(to: p1)
+        flap.addLine(to: lifted)
+        flap.addLine(to: p2)
+        flap.closeSubpath()
+
+        // Underside sheen runs from the crease (bright bend) to the lifted tip.
+        let creaseMid = midpoint(p1, p2)
+        ctx.drawLayer { layer in
+            layer.opacity = opacity
+            // Backside paper color with a curl gradient — brightest at the bend.
+            layer.fill(flap, with: .linearGradient(
+                Gradient(stops: [
+                    .init(color: Color(red: 0.96, green: 0.95, blue: 0.99), location: 0.0),
+                    .init(color: Color(red: 0.82, green: 0.83, blue: 0.90), location: 0.45),
+                    .init(color: Color(red: 0.60, green: 0.62, blue: 0.72), location: 1.0)
+                ]),
+                startPoint: creaseMid,
+                endPoint: lifted))
+
+            // A glossy specular streak across the curl.
+            layer.fill(flap, with: .linearGradient(
+                Gradient(stops: [
+                    .init(color: Color(red: 1, green: 1, blue: 1, opacity: 0.0), location: 0.0),
+                    .init(color: Color(red: 1, green: 1, blue: 1, opacity: 0.55), location: 0.30),
+                    .init(color: Color(red: 1, green: 1, blue: 1, opacity: 0.0), location: 0.55)
+                ]),
+                startPoint: creaseMid,
+                endPoint: lifted))
+        }
+
+        // Bright highlight line along the crease (the catching bend).
+        var crease = Path()
+        crease.move(to: p1)
+        crease.addLine(to: p2)
+        ctx.drawLayer { layer in
+            layer.opacity = opacity
+            layer.addFilter(.blur(radius: 0.6))
+            layer.stroke(crease, with: .color(Color(red: 1, green: 1, blue: 1, opacity: 0.75)),
+                         lineWidth: 1.8)
+        }
+
+        // Crisp flap outline for definition.
+        ctx.stroke(flap, with: .color(Color(red: 0.45, green: 0.47, blue: 0.56, opacity: opacity * 0.6)),
+                   lineWidth: 0.8)
+    }
+
+    // MARK: face content & palette
+
+    fileprivate func cardFaceGradient() -> Gradient {
+        Gradient(colors: [
+            Color(red: 0.36, green: 0.42, blue: 0.95),
+            Color(red: 0.58, green: 0.30, blue: 0.92),
+            Color(red: 0.92, green: 0.40, blue: 0.66)
+        ])
+    }
+
+    /// A simple radial bloom + ring emblem so the card face is visually alive.
+    fileprivate func drawFaceEmblem(in ctx: inout GraphicsContext, box: CGRect) {
+        let c = CGPoint(x: box.midX, y: box.midY)
+        let r = box.width * 0.30
+        let bloom = Path(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2))
+        ctx.fill(bloom, with: .radialGradient(
+            Gradient(colors: [
+                Color(red: 1, green: 1, blue: 1, opacity: 0.28),
+                Color(red: 1, green: 1, blue: 1, opacity: 0.0)
+            ]),
+            center: c, startRadius: 0, endRadius: r))
+
+        let ringR = box.width * 0.20
+        let ring = Path(ellipseIn: CGRect(x: c.x - ringR, y: c.y - ringR, width: ringR * 2, height: ringR * 2))
+        ctx.stroke(ring, with: .color(Color(red: 1, green: 1, blue: 1, opacity: 0.30)),
+                   lineWidth: box.width * 0.012)
+    }
+
+    // MARK: tiny math helpers
+
+    fileprivate func midpoint(_ a: CGPoint, _ b: CGPoint) -> CGPoint {
+        CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+    }
+
+    fileprivate func normalize(_ v: CGPoint) -> CGPoint {
+        let len = hypot(v.x, v.y)
+        if len == 0 { return CGPoint(x: 0, y: 0) }
+        return CGPoint(x: v.x / len, y: v.y / len)
+    }
+}
+"""###,
+        "ges-pinch-collapse-grid": ###"""
+import SwiftUI
+
+/// Pinch-to-Collapse Stack
+///
+/// Pinching a photo grid closed makes every tile fly inward and fan-stack into a
+/// single tilted pile in the center; spreading fingers re-deals them back out
+/// across the grid with staggered timing.
+///
+/// - `demo == true`  → a self-driving TimelineView loop oscillates a virtual pinch
+///   so the tile reads as a self-shuffling deck with no touch.
+/// - `demo == false` → a real `MagnifyGesture` scrubs the collapse continuously,
+///   snapping open/closed with a bouncy spring on release.
+struct PinchCollapseGridView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            ZStack {
+                background
+                if demo {
+                    DemoDeck(size: size)
+                } else {
+                    InteractiveDeck(size: size)
+                }
+            }
+            .frame(width: size.width, height: size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var background: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.05, green: 0.05, blue: 0.09),
+                Color(red: 0.10, green: 0.10, blue: 0.17)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+// MARK: - Demo (self-driving)
+
+private struct DemoDeck: View {
+    let size: CGSize
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            DeckCanvas(size: size, progress: PinchDeckMath.demoProgress(at: t))
+        }
+    }
+}
+
+// MARK: - Interactive (real gesture)
+
+private struct InteractiveDeck: View {
+    let size: CGSize
+
+    @State private var base: Double = 0          // committed progress
+    @State private var live: Double = 0          // live progress during pinch
+    @State private var pinching: Bool = false
+
+    private var progress: Double { pinching ? live : base }
+
+    var body: some View {
+        DeckCanvas(size: size, progress: progress)
+            .contentShape(Rectangle())
+            .gesture(pinch)
+    }
+
+    private var pinch: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                pinching = true
+                // magnification < 1 (pinch in) collapses, > 1 (spread) expands.
+                let delta = 1.0 - value.magnification
+                live = PinchDeckMath.clamp01(base + delta)
+            }
+            .onEnded { _ in
+                // Snap to the nearer extreme with a bouncy settle.
+                let target: Double = live > 0.5 ? 1.0 : 0.0
+                // Commit the live value first (no jump), then keep reading `base`.
+                base = live
+                pinching = false
+                withAnimation(.spring(duration: 0.5, bounce: 0.3)) {
+                    base = target
+                }
+            }
+    }
+}
+
+// MARK: - Shared deck renderer
+
+private struct DeckCanvas: View {
+    let size: CGSize
+    let progress: Double
+
+    private let cols: Int = 4
+    private let rows: Int = 4
+    private var count: Int { cols * rows }
+
+    var body: some View {
+        let layout = PinchDeckMath.Layout(size: size, cols: cols, rows: rows)
+        ZStack {
+            ForEach(0..<count, id: \.self) { index in
+                tile(index: index, layout: layout)
+            }
+        }
+    }
+
+    private func tile(index: Int, layout: PinchDeckMath.Layout) -> some View {
+        let xf = PinchDeckMath.transform(
+            index: index,
+            count: count,
+            progress: progress,
+            layout: layout
+        )
+        return TileFace(index: index, tileSize: layout.tileSize)
+            .frame(width: layout.tileSize.width, height: layout.tileSize.height)
+            .scaleEffect(xf.scale)
+            .rotationEffect(.degrees(xf.rotation))
+            .position(xf.position)
+            .zIndex(xf.z)
+            .shadow(
+                color: Color.black.opacity(0.35 * progress),
+                radius: 6 * progress,
+                x: 0,
+                y: 4 * progress
+            )
+    }
+}
+
+// MARK: - A single photo-like tile
+
+private struct TileFace: View {
+    let index: Int
+    let tileSize: CGSize
+
+    var body: some View {
+        let corner: CGFloat = min(tileSize.width, tileSize.height) * 0.16
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .fill(PinchDeckMath.tileGradient(index: index))
+            .overlay(
+                RoundedRectangle(cornerRadius: corner, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+            )
+            .overlay(sheen(corner: corner))
+    }
+
+    private func sheen(corner: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.22),
+                        Color.white.opacity(0.0)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .center
+                )
+            )
+            .blendMode(.screen)
+    }
+}
+
+// MARK: - Math (factored out for type-checker hygiene)
+
+private enum PinchDeckMath {
+
+    struct Layout {
+        let size: CGSize
+        let cols: Int
+        let rows: Int
+        let tileSize: CGSize
+        let center: CGPoint
+
+        init(size: CGSize, cols: Int, rows: Int) {
+            self.size = size
+            self.cols = cols
+            self.rows = rows
+            let pad: CGFloat = min(size.width, size.height) * 0.06
+            let usableW = max(size.width - pad * 2, 1)
+            let usableH = max(size.height - pad * 2, 1)
+            let cellW = usableW / CGFloat(cols)
+            let cellH = usableH / CGFloat(rows)
+            // Slight inner gap so tiles read as separate photos.
+            self.tileSize = CGSize(width: cellW * 0.86, height: cellH * 0.86)
+            self.center = CGPoint(x: size.width / 2, y: size.height / 2)
+        }
+
+        func gridCenter(of index: Int) -> CGPoint {
+            let col = index % cols
+            let row = index / cols
+            let pad: CGFloat = min(size.width, size.height) * 0.06
+            let cellW = (size.width - pad * 2) / CGFloat(cols)
+            let cellH = (size.height - pad * 2) / CGFloat(rows)
+            let x = pad + cellW * (CGFloat(col) + 0.5)
+            let y = pad + cellH * (CGFloat(row) + 0.5)
+            return CGPoint(x: x, y: y)
+        }
+    }
+
+    struct TileTransform {
+        let position: CGPoint
+        let rotation: Double
+        let scale: CGFloat
+        let z: Double
+    }
+
+    static func clamp01(_ v: Double) -> Double {
+        min(max(v, 0.0), 1.0)
+    }
+
+    /// Self-driving virtual pinch: oscillates 0 → ~0.85 → 0 on a ~3s loop.
+    /// Never reaches a blank extreme; the deck is always legible.
+    static func demoProgress(at time: TimeInterval) -> Double {
+        let period: Double = 3.2
+        let phase = (time.truncatingRemainder(dividingBy: period)) / period
+        // Smooth ease in/out via cosine, scaled so it dwells a touch at each end.
+        let raw = (1.0 - cos(phase * 2.0 * .pi)) / 2.0   // 0→1→0
+        return 0.06 + raw * 0.82
+    }
+
+    /// Per-tile staggered progress so the re-deal cascades instead of snapping
+    /// all at once. Clamped to [0,1].
+    static func staggered(index: Int, count: Int, progress: Double) -> Double {
+        let n = max(count - 1, 1)
+        let totalStagger: Double = 0.45
+        let step = totalStagger / Double(n)
+        let start = step * Double(index)
+        let span = max(1.0 - totalStagger, 0.2)
+        return clamp01((progress - start) / span)
+    }
+
+    static func transform(
+        index: Int,
+        count: Int,
+        progress: Double,
+        layout: Layout
+    ) -> TileTransform {
+        let gp = staggered(index: index, count: count, progress: progress)
+        let eased = easeInOut(gp)
+
+        let grid = layout.gridCenter(of: index)
+        let stack = layout.center
+
+        // Fan-stack: each card lands at a slightly different tilt + jitter so the
+        // collapsed pile reads as a shuffled tilted deck.
+        let n = max(count - 1, 1)
+        let centered = Double(index) - Double(n) / 2.0
+        let fanAngle = centered * 4.0                       // degrees across the fan
+        let wobble = sin(Double(index) * 1.7) * 3.0         // pseudo-random extra tilt
+        let stackRotation = fanAngle + wobble
+
+        let jitterX = CGFloat(cos(Double(index) * 2.3)) * layout.tileSize.width * 0.10
+        let jitterY = CGFloat(sin(Double(index) * 1.9)) * layout.tileSize.height * 0.10
+        let stackPoint = CGPoint(x: stack.x + jitterX, y: stack.y + jitterY)
+
+        let pos = lerpPoint(grid, stackPoint, eased)
+        let rot = lerpD(0.0, stackRotation, eased)
+
+        // Pile slightly larger than a single grid cell to feel like a held deck.
+        let scale = CGFloat(lerpD(1.0, 1.12, eased))
+
+        // Stacking order: later cards sit on top of the pile.
+        let z = Double(index) * 0.01 + eased * Double(index)
+
+        return TileTransform(position: pos, rotation: rot, scale: scale, z: z)
+    }
+
+    // MARK: helpers
+
+    static func easeInOut(_ t: Double) -> Double {
+        let c = clamp01(t)
+        return c * c * (3.0 - 2.0 * c)
+    }
+
+    static func lerpD(_ a: Double, _ b: Double, _ t: Double) -> Double {
+        a + (b - a) * t
+    }
+
+    static func lerpPoint(_ a: CGPoint, _ b: CGPoint, _ t: Double) -> CGPoint {
+        CGPoint(
+            x: a.x + (b.x - a.x) * CGFloat(t),
+            y: a.y + (b.y - a.y) * CGFloat(t)
+        )
+    }
+
+    /// Distinct, photo-like gradients per index — no assets, no Color(hex:).
+    static func tileGradient(index: Int) -> LinearGradient {
+        let palette: [(Double, Double, Double)] = [
+            (0.95, 0.45, 0.42), (0.98, 0.70, 0.36), (0.55, 0.80, 0.52),
+            (0.36, 0.74, 0.86), (0.52, 0.55, 0.95), (0.86, 0.50, 0.88),
+            (0.99, 0.55, 0.66), (0.40, 0.84, 0.74)
+        ]
+        let a = palette[index % palette.count]
+        let b = palette[(index * 3 + 2) % palette.count]
+        return LinearGradient(
+            colors: [
+                Color(red: a.0, green: a.1, blue: a.2),
+                Color(red: b.0 * 0.7, green: b.1 * 0.7, blue: b.2 * 0.8)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+"""###,
+        "ges-pinch-focus-depth": ###"""
+import SwiftUI
+
+// MARK: - Pinch Depth Diorama
+// Pinch to dolly a virtual camera through stacked parallax planes.
+// Foreground scales/slides faster than background; blur tracks the focused depth.
+// demo == true  -> self-driving TimelineView dolly loop (front -> back -> front).
+// demo == false -> interactive MagnifyGesture mapped to focusDepth, snaps on release.
+
+struct PinchFocusDepthView: View {
+    var demo: Bool = false
+
+    // Committed camera depth (0 = front plane in focus, 1 = back plane in focus).
+    @State private var focusDepth: CGFloat = 0.35
+    // Live additive delta produced while a pinch is in progress.
+    @State private var liveDelta: CGFloat = 0
+
+    private let planeCount: Int = 4
+
+    var body: some View {
+        GeometryReader { geo in
+            if demo {
+                TimelineView(.animation) { context in
+                    let t = context.date.timeIntervalSinceReferenceDate
+                    diorama(size: geo.size, depth: loopDepth(t))
+                }
+            } else {
+                interactive(size: geo.size)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
+
+    // MARK: Interactive branch
+
+    private func interactive(size: CGSize) -> some View {
+        let depth = clampDepth(focusDepth + liveDelta)
+        return diorama(size: size, depth: depth)
+            .contentShape(Rectangle())
+            .gesture(
+                MagnifyGesture(minimumScaleDelta: 0)
+                    .onChanged { value in
+                        // MagnifyGesture is relative: magnification == 1 at pinch start.
+                        // Pinch OUT (mag > 1) dollies toward the front (depth -> 0).
+                        let sensitivity: CGFloat = 0.9
+                        liveDelta = -(CGFloat(value.magnification) - 1) * sensitivity
+                    }
+                    .onEnded { _ in
+                        let committed = clampDepth(focusDepth + liveDelta)
+                        liveDelta = 0
+                        // Snap to the nearest plane's depth.
+                        let snapped = nearestPlaneDepth(committed)
+                        withAnimation(.spring(response: 0.45, dampingFraction: 0.72)) {
+                            focusDepth = snapped
+                        }
+                    }
+            )
+            .animation(.spring(response: 0.5, dampingFraction: 0.8), value: focusDepth)
+    }
+
+    // MARK: Shared render path (used by BOTH demo loop and interactive view)
+
+    private func diorama(size: CGSize, depth: CGFloat) -> some View {
+        ZStack {
+            backdrop(size: size, focusDepth: depth)
+            ForEach(0..<planeCount, id: \.self) { index in
+                planeLayer(index: index, size: size, focusDepth: depth)
+            }
+            vignette(size: size)
+            focusReadout(size: size, focusDepth: depth)
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    // MARK: Backdrop sky
+
+    private func backdrop(size: CGSize, focusDepth: CGFloat) -> some View {
+        // Sky warms slightly as the camera dollies toward the front.
+        let warmth = 1 - focusDepth
+        let top = Color(red: 0.07 + 0.04 * warmth, green: 0.08, blue: 0.16)
+        let bottom = Color(red: 0.16 + 0.10 * warmth, green: 0.11, blue: 0.22)
+        return LinearGradient(
+            colors: [top, bottom],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    // MARK: A single parallax plane
+
+    @ViewBuilder
+    private func planeLayer(index: Int, size: CGSize, focusDepth: CGFloat) -> some View {
+        let layerDepth = planeDepth(index)            // 0 (front) ... 1 (back)
+        let coeff = depthCoeff(layerDepth)            // far planes move/scale less
+        let dolly = focusDepth - layerDepth           // signed distance from camera
+
+        // Foreground planes (low layerDepth) react harder than the background.
+        let scale = clampScale(1 + dolly * (0.55 * (1 - coeff) + 0.12))
+        let slide = -dolly * (1 - coeff) * size.height * 0.34
+
+        let dist = abs(layerDepth - focusDepth)
+        let blurRadius = min(dist * 9.0, 7.5)         // clamped, modest radii
+        let opacity = max(0.42, 1 - dist * 0.55)      // opacity floor: never blank
+
+        planeContent(index: index, size: size)
+            .scaleEffect(scale, anchor: .center)
+            .offset(y: slide)
+            .blur(radius: blurRadius)
+            .opacity(opacity)
+    }
+
+    // MARK: Plane artwork (back -> front)
+
+    @ViewBuilder
+    private func planeContent(index: Int, size: CGSize) -> some View {
+        switch index {
+        case 0: backHills(size: size)      // farthest
+        case 1: midOrbs(size: size)
+        case 2: foreRidge(size: size)
+        default: nearLeaves(size: size)    // closest
+        }
+    }
+
+    // Plane 0 — distant rolling hills + sun
+    private func backHills(size: CGSize) -> some View {
+        let w = size.width
+        let h = size.height
+        return ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [Color(red: 1.0, green: 0.86, blue: 0.62),
+                                 Color(red: 0.96, green: 0.62, blue: 0.42)],
+                        center: .center, startRadius: 0, endRadius: w * 0.22
+                    )
+                )
+                .frame(width: w * 0.38, height: w * 0.38)
+                .offset(x: w * 0.18, y: -h * 0.18)
+            HillShape(crest: 0.62, amp: 0.05)
+                .fill(Color(red: 0.30, green: 0.27, blue: 0.46))
+        }
+    }
+
+    // Plane 1 — drifting orbs / mid clouds
+    private func midOrbs(size: CGSize) -> some View {
+        let w = size.width
+        let h = size.height
+        let spots: [(CGFloat, CGFloat, CGFloat)] = [
+            (-0.30, -0.05, 0.30),
+            (0.05, 0.10, 0.42),
+            (0.34, -0.12, 0.26)
+        ]
+        return ZStack {
+            ForEach(0..<spots.count, id: \.self) { i in
+                let s = spots[i]
+                Circle()
+                    .fill(Color(red: 0.62, green: 0.55, blue: 0.82).opacity(0.85))
+                    .frame(width: w * s.2, height: w * s.2)
+                    .offset(x: w * s.0, y: h * s.1)
+            }
+        }
+    }
+
+    // Plane 2 — nearer ridge silhouette
+    private func foreRidge(size: CGSize) -> some View {
+        HillShape(crest: 0.74, amp: 0.10)
+            .fill(
+                LinearGradient(
+                    colors: [Color(red: 0.20, green: 0.16, blue: 0.32),
+                             Color(red: 0.12, green: 0.10, blue: 0.22)],
+                    startPoint: .top, endPoint: .bottom
+                )
+            )
+    }
+
+    // Plane 3 — foreground foliage framing the bottom corners (closest, moves most)
+    private func nearLeaves(size: CGSize) -> some View {
+        let w = size.width
+        let h = size.height
+        let leaf = LinearGradient(
+            colors: [Color(red: 0.10, green: 0.13, blue: 0.10),
+                     Color(red: 0.04, green: 0.06, blue: 0.05)],
+            startPoint: .top, endPoint: .bottom
+        )
+        return ZStack {
+            LeafShape()
+                .fill(leaf)
+                .frame(width: w * 0.7, height: h * 0.7)
+                .rotationEffect(.degrees(-24))
+                .offset(x: -w * 0.34, y: h * 0.40)
+            LeafShape()
+                .fill(leaf)
+                .frame(width: w * 0.62, height: h * 0.62)
+                .rotationEffect(.degrees(34))
+                .scaleEffect(x: -1, y: 1)
+                .offset(x: w * 0.36, y: h * 0.44)
+        }
+    }
+
+    // MARK: Overlays
+
+    private func vignette(size: CGSize) -> some View {
+        RadialGradient(
+            colors: [Color.clear, Color(red: 0.02, green: 0.02, blue: 0.05).opacity(0.55)],
+            center: .center,
+            startRadius: min(size.width, size.height) * 0.30,
+            endRadius: max(size.width, size.height) * 0.72
+        )
+        .allowsHitTesting(false)
+    }
+
+    // A small depth indicator dot strip so the focused plane is always legible.
+    private func focusReadout(size: CGSize, focusDepth: CGFloat) -> some View {
+        let dotSize = max(4.0, min(size.width, size.height) * 0.035)
+        let gap = dotSize * 1.4
+        return HStack(spacing: gap) {
+            ForEach(0..<planeCount, id: \.self) { index in
+                let d = planeDepth(index)
+                let active = abs(d - focusDepth) < (0.5 / CGFloat(planeCount))
+                Circle()
+                    .fill(Color.white.opacity(active ? 0.95 : 0.30))
+                    .frame(width: active ? dotSize * 1.25 : dotSize,
+                           height: active ? dotSize * 1.25 : dotSize)
+            }
+        }
+        .padding(.vertical, dotSize)
+        .padding(.horizontal, dotSize * 1.6)
+        .background(
+            Capsule().fill(Color(red: 0.0, green: 0.0, blue: 0.0).opacity(0.28))
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .padding(.bottom, max(6.0, size.height * 0.06))
+        .allowsHitTesting(false)
+    }
+
+    // MARK: Math helpers
+
+    private func planeDepth(_ index: Int) -> CGFloat {
+        guard planeCount > 1 else { return 0 }
+        // index 0 = back (depth 1) ... last = front (depth 0)
+        return CGFloat(planeCount - 1 - index) / CGFloat(planeCount - 1)
+    }
+
+    private func depthCoeff(_ layerDepth: CGFloat) -> CGFloat {
+        // Larger for far planes -> they scale/slide less.
+        return 0.30 + 0.55 * layerDepth
+    }
+
+    private func nearestPlaneDepth(_ value: CGFloat) -> CGFloat {
+        var best = planeDepth(0)
+        var bestDist = abs(best - value)
+        for i in 1..<planeCount {
+            let d = planeDepth(i)
+            let dist = abs(d - value)
+            if dist < bestDist {
+                best = d
+                bestDist = dist
+            }
+        }
+        return best
+    }
+
+    private func clampDepth(_ v: CGFloat) -> CGFloat {
+        min(max(v, 0), 1)
+    }
+
+    private func clampScale(_ v: CGFloat) -> CGFloat {
+        min(max(v, 0.55), 1.85)
+    }
+
+    // Eased front -> back -> front loop (~3.4s) for the demo tile.
+    private func loopDepth(_ time: TimeInterval) -> CGFloat {
+        let period: Double = 3.4
+        let phase = (time.truncatingRemainder(dividingBy: period)) / period // 0..1
+        // Triangle wave 0 -> 1 -> 0, then smootherstep for an eased dolly.
+        let tri = phase < 0.5 ? phase * 2 : (1 - phase) * 2
+        let eased = tri * tri * (3 - 2 * tri)
+        return clampDepth(CGFloat(eased))
+    }
+}
+
+// MARK: - Shapes
+
+private struct HillShape: Shape {
+    var crest: CGFloat   // baseline height (fraction of height, from top)
+    var amp: CGFloat     // hump amplitude (fraction of height)
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let baseY = rect.height * crest
+        let a = rect.height * amp
+        p.move(to: CGPoint(x: rect.minX, y: baseY))
+        let steps = 24
+        for i in 0...steps {
+            let x = rect.width * CGFloat(i) / CGFloat(steps)
+            let phase = CGFloat(i) / CGFloat(steps) * .pi * 2
+            let y = baseY - sin(phase) * a - sin(phase * 0.5) * a * 0.5
+            p.addLine(to: CGPoint(x: x, y: y))
+        }
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        p.closeSubpath()
+        return p
+    }
+}
+
+private struct LeafShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let w = rect.width
+        let h = rect.height
+        p.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+        p.addQuadCurve(
+            to: CGPoint(x: rect.midX, y: rect.minY),
+            control: CGPoint(x: rect.minX - w * 0.05, y: rect.midY)
+        )
+        p.addQuadCurve(
+            to: CGPoint(x: rect.midX, y: rect.maxY),
+            control: CGPoint(x: rect.maxX + w * 0.05, y: rect.midY)
+        )
+        // a couple of veins for texture
+        p.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.midX, y: rect.minY + h * 0.1))
+        p.closeSubpath()
+        return p
+    }
+}
+"""###,
+        "ges-pinch-origami-crane": ###"""
+import SwiftUI
+
+// MARK: - Public View
+
+/// Pinch a flat square and it folds along crease lines through intermediate
+/// origami states into a standing crane, each facet catching directional light.
+/// Pinch (magnification < 1) folds toward the crane; spread unfolds it.
+/// All APIs used are iOS 17+: MagnifyGesture, TimelineView, rotation3DEffect,
+/// and a manual keyframed vertex lerp on an Animatable Shape.
+struct PinchOrigamiCraneView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            ZStack {
+                background
+                if demo {
+                    DemoFoldStage(side: side)
+                } else {
+                    InteractiveFoldStage(side: side)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var background: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.05, green: 0.05, blue: 0.09),
+                Color(red: 0.10, green: 0.11, blue: 0.17)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+}
+
+// MARK: - Demo (self-driving loop)
+
+private struct DemoFoldStage: View {
+    let side: CGFloat
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            let progress = triangleWave(t)
+            CraneFigure(progress: progress, side: side)
+        }
+    }
+
+    /// 0 -> 1 -> 0 triangle wave on a ~3.4s loop. Never rests at a blank state:
+    /// both endpoints are legible (flat square / standing crane).
+    private func triangleWave(_ t: TimeInterval) -> CGFloat {
+        let period: Double = 3.4
+        let phase = (t.truncatingRemainder(dividingBy: period)) / period
+        let raw = phase < 0.5 ? phase * 2.0 : (1.0 - phase) * 2.0
+        // ease in/out so the dwell at flat / crane reads as a held pose
+        let eased = raw * raw * (3.0 - 2.0 * raw)
+        return CGFloat(eased)
+    }
+}
+
+// MARK: - Interactive (real pinch)
+
+private struct InteractiveFoldStage: View {
+    let side: CGFloat
+
+    @State private var committedFold: CGFloat = 0.0
+    @State private var liveFold: CGFloat = 0.0
+
+    var body: some View {
+        CraneFigure(progress: liveFold, side: side)
+            .gesture(pinch)
+            .accessibilityLabel("Origami crane. Pinch to fold, spread to unfold.")
+    }
+
+    private var pinch: some Gesture {
+        MagnifyGesture(minimumScaleDelta: 0.0)
+            .onChanged { value in
+                // pinch closed (magnification < 1) folds toward crane.
+                let delta = (1.0 - CGFloat(value.magnification)) * 1.4
+                liveFold = clamp(committedFold + delta)
+            }
+            .onEnded { _ in
+                let snapped = nearestKeyframe(liveFold)
+                committedFold = snapped
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.62)) {
+                    liveFold = snapped
+                }
+            }
+    }
+
+    private func clamp(_ v: CGFloat) -> CGFloat {
+        min(1.0, max(0.0, v))
+    }
+
+    /// Snap to one of the three keyframe poses: flat, kite base, crane.
+    private func nearestKeyframe(_ v: CGFloat) -> CGFloat {
+        let stops: [CGFloat] = [0.0, 0.5, 1.0]
+        var best: CGFloat = 0.0
+        var bestDist: CGFloat = .greatestFiniteMagnitude
+        for s in stops {
+            let d = abs(s - v)
+            if d < bestDist {
+                bestDist = d
+                best = s
+            }
+        }
+        return best
+    }
+}
+
+// MARK: - Crane figure (composes all facets)
+
+private struct CraneFigure: View {
+    let progress: CGFloat
+    let side: CGFloat
+
+    var body: some View {
+        ZStack {
+            ground
+            ForEach(CraneFacet.all) { facet in
+                FacetView(facet: facet, progress: progress, side: side)
+            }
+        }
+        .frame(width: side, height: side)
+        // gentle settle so the standing crane feels alive at full fold
+        .rotation3DEffect(
+            .degrees(Double(progress) * 8.0),
+            axis: (x: 1.0, y: 0.0, z: 0.0),
+            perspective: 0.6
+        )
+    }
+
+    /// Soft contact shadow that tightens as the crane stands up.
+    private var ground: some View {
+        let w = side * (0.62 - 0.18 * progress)
+        let h = side * 0.10
+        return Ellipse()
+            .fill(Color.black.opacity(0.32))
+            .frame(width: w, height: h)
+            .blur(radius: 9)
+            .offset(y: side * 0.34)
+            .opacity(0.55 + 0.3 * Double(progress))
+    }
+}
+
+// MARK: - Single facet rendering
+
+private struct FacetView: View {
+    let facet: CraneFacet
+    let progress: CGFloat
+    let side: CGFloat
+
+    var body: some View {
+        FacetShape(facet: facet, progress: progress, side: side)
+            .fill(gradient)
+            .overlay(creaseStroke)
+            .rotation3DEffect(
+                .degrees(tiltAngle),
+                axis: facet.axis,
+                anchor: .center,
+                perspective: 0.5
+            )
+            .compositingGroup()
+    }
+
+    // Crease lines on the paper edges sell the fold geometry.
+    private var creaseStroke: some View {
+        FacetShape(facet: facet, progress: progress, side: side)
+            .stroke(Color.black.opacity(0.18), lineWidth: 0.6)
+    }
+
+    /// Directional light: brightness keys off the facet's fold tilt so each
+    /// plane catches the light differently as it rotates.
+    private var gradient: LinearGradient {
+        let lit = facet.brightness(progress: progress)
+        let base = facet.tone
+        let top = shade(base, by: 0.55 + 0.45 * lit)
+        let bottom = shade(base, by: 0.30 + 0.35 * lit)
+        return LinearGradient(
+            colors: [top, bottom],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var tiltAngle: Double {
+        // facets lean out of plane as the fold completes
+        Double(progress) * facet.maxTilt
+    }
+
+    private func shade(_ c: PaperTone, by k: CGFloat) -> Color {
+        let f = min(1.0, max(0.0, k))
+        return Color(red: c.r * f, green: c.g * f, blue: c.b * f)
+    }
+}
+
+// MARK: - Animatable Shape (vertex lerp lives here for spring morphing)
+
+private struct FacetShape: Shape {
+    let facet: CraneFacet
+    var progress: CGFloat
+    let side: CGFloat
+
+    // Lets the onEnded .spring actually interpolate the path, not snap it.
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let pts = facet.vertices(progress: progress)
+        var path = Path()
+        guard let first = pts.first else { return path }
+        let s: CGFloat = side
+        let cx: CGFloat = rect.midX
+        let cy: CGFloat = rect.midY
+        path.move(to: project(first, s: s, cx: cx, cy: cy))
+        for i in 1..<pts.count {
+            path.addLine(to: project(pts[i], s: s, cx: cx, cy: cy))
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    /// Map a normalized point in [-0.5, 0.5] space to view coordinates.
+    private func project(_ p: CGPoint, s: CGFloat, cx: CGFloat, cy: CGFloat) -> CGPoint {
+        let x: CGFloat = cx + p.x * s
+        let y: CGFloat = cy + p.y * s
+        return CGPoint(x: x, y: y)
+    }
+}
+
+// MARK: - Paper tone
+
+private struct PaperTone {
+    let r: CGFloat
+    let g: CGFloat
+    let b: CGFloat
+}
+
+// MARK: - Facet model (keyframed vertex sets + lighting key)
+
+private struct CraneFacet: Identifiable {
+    let id: Int
+    /// Three keyframe poses in normalized [-0.5, 0.5] space:
+    /// 0 = flat square region, 1 = kite/diamond base, 2 = standing crane.
+    let flat: [CGPoint]
+    let base: [CGPoint]
+    let crane: [CGPoint]
+    let tone: PaperTone
+    let maxTilt: Double
+    let axis: (x: CGFloat, y: CGFloat, z: CGFloat)
+    /// Phase of the fold lighting sweep so facets brighten at different times.
+    let litPhase: CGFloat
+
+    /// Piecewise lerp: flat -> base over [0, 0.5], base -> crane over [0.5, 1].
+    func vertices(progress: CGFloat) -> [CGPoint] {
+        if progress <= 0.5 {
+            let t = progress / 0.5
+            return lerp(flat, base, smooth(t))
+        } else {
+            let t = (progress - 0.5) / 0.5
+            return lerp(base, crane, smooth(t))
+        }
+    }
+
+    func brightness(progress: CGFloat) -> CGFloat {
+        // a moving highlight band that travels across facets during the fold
+        let center = progress
+        let d = abs(litPhase - center)
+        let lit = max(0.0, 1.0 - d * 1.8)
+        return 0.35 + 0.65 * lit
+    }
+
+    private func smooth(_ t: CGFloat) -> CGFloat {
+        let c = min(1.0, max(0.0, t))
+        return c * c * (3.0 - 2.0 * c)
+    }
+
+    private func lerp(_ a: [CGPoint], _ b: [CGPoint], _ t: CGFloat) -> [CGPoint] {
+        let n = min(a.count, b.count)
+        var out: [CGPoint] = []
+        out.reserveCapacity(n)
+        for i in 0..<n {
+            let x: CGFloat = a[i].x + (b[i].x - a[i].x) * t
+            let y: CGFloat = a[i].y + (b[i].y - a[i].y) * t
+            out.append(CGPoint(x: x, y: y))
+        }
+        return out
+    }
+}
+
+// MARK: - Facet keyframe data
+
+private extension CraneFacet {
+    /// Bounded set of facets (8) forming a bird-like silhouette: body, two
+    /// wings, neck, head, tail. Each carries flat / kite-base / crane poses.
+    static let all: [CraneFacet] = [
+        // 0 — left body panel
+        CraneFacet(
+            id: 0,
+            flat:  [p(-0.40, -0.40), p(0.0, -0.40), p(0.0, 0.40), p(-0.40, 0.40)],
+            base:  [p(-0.30, -0.05), p(0.0, -0.22), p(0.0, 0.30), p(-0.22, 0.20)],
+            crane: [p(-0.18, -0.02), p(0.0, -0.10), p(0.0, 0.28), p(-0.20, 0.20)],
+            tone:  PaperTone(r: 0.93, g: 0.42, b: 0.38),
+            maxTilt: -14.0,
+            axis: (x: 0.0, y: 1.0, z: 0.0),
+            litPhase: 0.20
+        ),
+        // 1 — right body panel
+        CraneFacet(
+            id: 1,
+            flat:  [p(0.0, -0.40), p(0.40, -0.40), p(0.40, 0.40), p(0.0, 0.40)],
+            base:  [p(0.0, -0.22), p(0.30, -0.05), p(0.22, 0.20), p(0.0, 0.30)],
+            crane: [p(0.0, -0.10), p(0.18, -0.02), p(0.20, 0.20), p(0.0, 0.28)],
+            tone:  PaperTone(r: 0.97, g: 0.55, b: 0.46),
+            maxTilt: 14.0,
+            axis: (x: 0.0, y: 1.0, z: 0.0),
+            litPhase: 0.35
+        ),
+        // 2 — left wing
+        CraneFacet(
+            id: 2,
+            flat:  [p(-0.40, -0.18), p(-0.05, -0.06), p(-0.10, 0.18)],
+            base:  [p(-0.46, -0.30), p(-0.04, -0.10), p(-0.18, 0.10)],
+            crane: [p(-0.50, -0.40), p(-0.02, -0.06), p(-0.16, 0.08)],
+            tone:  PaperTone(r: 0.99, g: 0.78, b: 0.50),
+            maxTilt: -34.0,
+            axis: (x: 0.30, y: 1.0, z: 0.0),
+            litPhase: 0.62
+        ),
+        // 3 — right wing
+        CraneFacet(
+            id: 3,
+            flat:  [p(0.40, -0.18), p(0.05, -0.06), p(0.10, 0.18)],
+            base:  [p(0.46, -0.30), p(0.04, -0.10), p(0.18, 0.10)],
+            crane: [p(0.50, -0.40), p(0.02, -0.06), p(0.16, 0.08)],
+            tone:  PaperTone(r: 0.99, g: 0.84, b: 0.58),
+            maxTilt: 34.0,
+            axis: (x: 0.30, y: 1.0, z: 0.0),
+            litPhase: 0.74
+        ),
+        // 4 — neck
+        CraneFacet(
+            id: 4,
+            flat:  [p(-0.06, -0.30), p(0.06, -0.30), p(0.04, 0.02), p(-0.04, 0.02)],
+            base:  [p(-0.05, -0.40), p(0.03, -0.40), p(0.06, -0.04), p(-0.02, -0.02)],
+            crane: [p(-0.04, -0.50), p(0.04, -0.52), p(0.08, -0.10), p(0.0, -0.06)],
+            tone:  PaperTone(r: 0.90, g: 0.36, b: 0.34),
+            maxTilt: 18.0,
+            axis: (x: 1.0, y: 0.2, z: 0.0),
+            litPhase: 0.85
+        ),
+        // 5 — head / beak
+        CraneFacet(
+            id: 5,
+            flat:  [p(-0.05, -0.40), p(0.05, -0.40), p(0.0, -0.30)],
+            base:  [p(-0.04, -0.46), p(0.06, -0.42), p(0.02, -0.36)],
+            crane: [p(-0.02, -0.56), p(0.14, -0.50), p(0.04, -0.46)],
+            tone:  PaperTone(r: 0.86, g: 0.30, b: 0.30),
+            maxTilt: 22.0,
+            axis: (x: 1.0, y: 0.4, z: 0.0),
+            litPhase: 0.95
+        ),
+        // 6 — tail
+        CraneFacet(
+            id: 6,
+            flat:  [p(-0.04, 0.30), p(0.04, 0.30), p(0.0, 0.42)],
+            base:  [p(-0.06, 0.30), p(0.06, 0.30), p(0.16, 0.46)],
+            crane: [p(-0.06, 0.24), p(0.06, 0.24), p(0.34, 0.40)],
+            tone:  PaperTone(r: 0.95, g: 0.50, b: 0.42),
+            maxTilt: -20.0,
+            axis: (x: 1.0, y: 0.3, z: 0.0),
+            litPhase: 0.50
+        ),
+        // 7 — center crease highlight panel (keeps figure cohesive when flat)
+        CraneFacet(
+            id: 7,
+            flat:  [p(-0.40, -0.40), p(0.40, -0.40), p(0.0, 0.0)],
+            base:  [p(-0.30, -0.18), p(0.30, -0.18), p(0.0, 0.06)],
+            crane: [p(-0.16, -0.08), p(0.16, -0.08), p(0.0, 0.10)],
+            tone:  PaperTone(r: 0.99, g: 0.66, b: 0.50),
+            maxTilt: 8.0,
+            axis: (x: 1.0, y: 0.0, z: 0.0),
+            litPhase: 0.10
+        )
+    ]
+
+    private static func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+        CGPoint(x: x, y: y)
+    }
+}
+"""###,
+        "ges-pinch-zoom-clamp-frame": ###"""
+import SwiftUI
+
+/// Pinch-Clamp Crop Frame
+/// Pinch within an image and a crop frame resists past content edges with
+/// rubber-band overscroll; the dimmed outside region springs taut when you
+/// release beyond bounds. A fixed centered crop window sits over a synthesized
+/// photo that scales/pans behind it; the image must always cover the window,
+/// and any overshoot is rubber-banded then sprung back into legal range.
+struct PinchZoomClampFrameView: View {
+    var demo: Bool = false
+
+    // Committed transform (the source of truth between gestures).
+    @State private var baseScale: CGFloat = 1.0
+    @State private var baseOffset: CGSize = .zero
+
+    // Live transform while a gesture is in flight.
+    @State private var liveScale: CGFloat = 1.0
+    @State private var liveOffset: CGSize = .zero
+    @State private var isGesturing: Bool = false
+
+    // Gesture-start snapshot for focal-anchor math.
+    @State private var gestureStartScale: CGFloat = 1.0
+    @State private var gestureStartOffset: CGSize = .zero
+    @State private var panStartOffset: CGSize = .zero
+
+    // Haptic trigger: bumped on each snap-back so feedback fires on the clamp.
+    @State private var snapTick: Int = 0
+
+    // Tuning constants.
+    private let minScale: CGFloat = 1.0      // cover threshold (image must fill window)
+    private let maxScale: CGFloat = 3.2
+    private let cropInset: CGFloat = 0.16     // fraction of min dimension used as margin
+
+    var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(Color(red: 0.05, green: 0.055, blue: 0.086))
+    }
+
+    // MARK: - Routing
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        if demo {
+            demoContent(in: size)
+        } else {
+            interactiveContent(in: size)
+        }
+    }
+
+    // MARK: - Demo (self-driving)
+
+    @ViewBuilder
+    private func demoContent(in size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let driven = demoTransform(at: t, size: size)
+            cropStage(scale: driven.scale,
+                      offset: driven.offset,
+                      overshoot: driven.overshoot,
+                      size: size)
+        }
+    }
+
+    /// A ~3.6s loop that zooms in, then deliberately over-pans to an edge so the
+    /// rubber-band give and dim are demonstrated, then snaps taut to bounds.
+    private func demoTransform(at time: TimeInterval, size: CGSize)
+        -> (scale: CGFloat, offset: CGSize, overshoot: CGFloat) {
+        let period: Double = 3.6
+        let phase = (time.truncatingRemainder(dividingBy: period)) / period // 0..1
+
+        // Scale eases 1 -> 2.0 -> 1 over the loop.
+        let zoom = (1.0 - cos(phase * 2.0 * .pi)) * 0.5            // 0..1..0
+        let scale = 1.0 + CGFloat(zoom) * 1.0                      // 1.0..2.0
+
+        let window = cropRect(in: size)
+        let limits = panLimits(forScale: scale, window: window, size: size)
+
+        // Push the pan toward an edge and beyond it during the middle of the loop.
+        let pushPhase = sin(phase * 2.0 * .pi)                     // -1..1
+        let targetX = CGFloat(pushPhase) * (limits.width + 46)     // intentionally past the limit
+        let targetY = CGFloat(sin(phase * 4.0 * .pi)) * (limits.height + 26)
+
+        let resistedX = rubberClamped(targetX, limit: limits.width, dimension: window.width)
+        let resistedY = rubberClamped(targetY, limit: limits.height, dimension: window.height)
+
+        let overX = max(0, abs(targetX) - limits.width)
+        let overY = max(0, abs(targetY) - limits.height)
+        let overshoot = min(1.0, (overX + overY) / 70.0)
+
+        return (scale, CGSize(width: resistedX, height: resistedY), overshoot)
+    }
+
+    // MARK: - Interactive
+
+    @ViewBuilder
+    private func interactiveContent(in size: CGSize) -> some View {
+        let scale = isGesturing ? liveScale : baseScale
+        let offset = isGesturing ? liveOffset : baseOffset
+        let overshoot = currentOvershoot(scale: scale, offset: offset, size: size)
+
+        cropStage(scale: scale, offset: offset, overshoot: overshoot, size: size)
+            .contentShape(Rectangle())
+            .gesture(combinedGesture(size: size))
+            .sensoryFeedback(.impact(weight: .light), trigger: snapTick)
+    }
+
+    private func combinedGesture(size: CGSize) -> some Gesture {
+        let magnify = MagnifyGesture(minimumScaleDelta: 0)
+            .onChanged { value in
+                beginIfNeeded()
+                applyMagnify(value, size: size)
+            }
+            .onEnded { _ in
+                commitAndSpring(size: size)
+            }
+
+        let pan = DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                beginIfNeeded()
+                applyPan(value, size: size)
+            }
+            .onEnded { _ in
+                commitAndSpring(size: size)
+            }
+
+        return magnify.simultaneously(with: pan)
+    }
+
+    private func beginIfNeeded() {
+        guard !isGesturing else { return }
+        isGesturing = true
+        gestureStartScale = baseScale
+        gestureStartOffset = baseOffset
+        panStartOffset = baseOffset
+        liveScale = baseScale
+        liveOffset = baseOffset
+    }
+
+    /// Focal-anchor zoom: keep the pinch point fixed in window space.
+    /// offset = (focal - center) * (1 - m) + baseOffset * m,  scale = baseScale * m
+    private func applyMagnify(_ value: MagnifyGesture.Value, size: CGSize) {
+        let m = value.magnification
+        let rawScale = gestureStartScale * m
+        let clampedScale = clampScale(rawScale, allowOvershoot: true)
+
+        let window = cropRect(in: size)
+        let center = CGPoint(x: window.midX, y: window.midY)
+        let focal = CGPoint(x: window.minX + value.startAnchor.x * window.width,
+                            y: window.minY + value.startAnchor.y * window.height)
+
+        let fx = (focal.x - center.x) * (1 - m) + gestureStartOffset.width * m
+        let fy = (focal.y - center.y) * (1 - m) + gestureStartOffset.height * m
+
+        let limits = panLimits(forScale: clampedScale, window: window, size: size)
+        liveScale = clampedScale
+        liveOffset = CGSize(
+            width: rubberClamped(fx, limit: limits.width, dimension: window.width),
+            height: rubberClamped(fy, limit: limits.height, dimension: window.height)
+        )
+    }
+
+    private func applyPan(_ value: DragGesture.Value, size: CGSize) {
+        let window = cropRect(in: size)
+        let proposedX = panStartOffset.width + value.translation.width
+        let proposedY = panStartOffset.height + value.translation.height
+        let limits = panLimits(forScale: liveScale, window: window, size: size)
+        liveOffset = CGSize(
+            width: rubberClamped(proposedX, limit: limits.width, dimension: window.width),
+            height: rubberClamped(proposedY, limit: limits.height, dimension: window.height)
+        )
+    }
+
+    private func commitAndSpring(size: CGSize) {
+        let window = cropRect(in: size)
+        let targetScale = clampScale(liveScale, allowOvershoot: false)
+        let limits = panLimits(forScale: targetScale, window: window, size: size)
+        let targetOffset = CGSize(
+            width: hardClamp(liveOffset.width, limit: limits.width),
+            height: hardClamp(liveOffset.height, limit: limits.height)
+        )
+
+        let wasOut = abs(liveScale - targetScale) > 0.001
+            || abs(liveOffset.width - targetOffset.width) > 0.5
+            || abs(liveOffset.height - targetOffset.height) > 0.5
+
+        baseScale = liveScale
+        baseOffset = liveOffset
+        isGesturing = false
+
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) {
+            baseScale = targetScale
+            baseOffset = targetOffset
+        }
+        if wasOut { snapTick &+= 1 }
+    }
+
+    private func currentOvershoot(scale: CGFloat, offset: CGSize, size: CGSize) -> CGFloat {
+        let window = cropRect(in: size)
+        let limits = panLimits(forScale: scale, window: window, size: size)
+        let overX = max(0, abs(offset.width) - limits.width)
+        let overY = max(0, abs(offset.height) - limits.height)
+        let scaleOver = max(0, scale - maxScale) * 60 + max(0, minScale - scale) * 60
+        return min(1.0, (overX + overY + scaleOver) / 70.0)
+    }
+
+    // MARK: - Shared renderer
+
+    @ViewBuilder
+    private func cropStage(scale: CGFloat, offset: CGSize, overshoot: CGFloat, size: CGSize) -> some View {
+        let window = cropRect(in: size)
+        let corner = min(window.width, window.height) * 0.06
+
+        ZStack {
+            // The photo, scaled + panned behind everything.
+            photo(in: size)
+                .scaleEffect(scale)        // center anchor (default) — required by focal math
+                .offset(offset)
+                .clipped()
+
+            // Dim everything outside the crop window. Brighten the dim slightly
+            // while overscrolling so the boundary tension reads.
+            dimMask(window: window, corner: corner, size: size, overshoot: overshoot)
+
+            // The crop frame chrome: border, rule-of-thirds grid, corner handles.
+            cropChrome(window: window, corner: corner, overshoot: overshoot)
+        }
+        .compositingGroup()
+    }
+
+    private func dimMask(window: CGRect, corner: CGFloat, size: CGSize, overshoot: CGFloat) -> some View {
+        let dim = 0.46 + overshoot * 0.18
+        return Rectangle()
+            .fill(Color.black.opacity(dim))
+            .reverseMask {
+                RoundedRectangle(cornerRadius: corner, style: .continuous)
+                    .frame(width: window.width, height: window.height)
+                    .position(x: window.midX, y: window.midY)
+            }
+            .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private func cropChrome(window: CGRect, corner: CGFloat, overshoot: CGFloat) -> some View {
+        let borderTint = Color(red: 1, green: 1, blue: 1)
+            .opacity(0.85 + overshoot * 0.15)
+
+        ZStack {
+            // Rule-of-thirds grid.
+            thirdsGrid(window: window)
+                .stroke(Color.white.opacity(0.28), lineWidth: 0.75)
+
+            // Main frame border. Tints warm when rubber-banding past bounds.
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .stroke(
+                    overshoot > 0.02
+                        ? AnyShapeStyle(Color(red: 1.0, green: 0.62, blue: 0.32).opacity(0.95))
+                        : AnyShapeStyle(borderTint),
+                    lineWidth: 1.6 + overshoot * 1.2
+                )
+                .frame(width: window.width, height: window.height)
+                .position(x: window.midX, y: window.midY)
+
+            cornerHandles(window: window, overshoot: overshoot)
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func cornerHandles(window: CGRect, overshoot: CGFloat) -> some View {
+        let len = min(window.width, window.height) * 0.13
+        let tint = overshoot > 0.02
+            ? Color(red: 1.0, green: 0.62, blue: 0.32)
+            : Color(red: 1, green: 1, blue: 1)
+        return ForEach(0..<4, id: \.self) { i in
+            CornerBracket(corner: i, length: len)
+                .stroke(tint.opacity(0.95), style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
+                .frame(width: window.width, height: window.height)
+                .position(x: window.midX, y: window.midY)
+        }
+    }
+
+    // MARK: - Synthesized photo (no assets)
+
+    @ViewBuilder
+    private func photo(in size: CGSize) -> some View {
+        ZStack {
+            // Sky gradient.
+            LinearGradient(
+                colors: [
+                    Color(red: 0.20, green: 0.30, blue: 0.55),
+                    Color(red: 0.55, green: 0.52, blue: 0.70),
+                    Color(red: 0.96, green: 0.74, blue: 0.52)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            // Sun.
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 1.0, green: 0.96, blue: 0.82),
+                            Color(red: 1.0, green: 0.82, blue: 0.5).opacity(0.0)
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: size.width * 0.22
+                    )
+                )
+                .frame(width: size.width * 0.42, height: size.width * 0.42)
+                .position(x: size.width * 0.68, y: size.height * 0.34)
+
+            // Distant hill.
+            HillShape(baseY: 0.66, peakY: 0.5, skew: 0.35)
+                .fill(Color(red: 0.42, green: 0.46, blue: 0.55))
+
+            // Mid hill.
+            HillShape(baseY: 0.74, peakY: 0.58, skew: -0.4)
+                .fill(Color(red: 0.32, green: 0.40, blue: 0.40))
+
+            // Foreground hill.
+            HillShape(baseY: 0.82, peakY: 0.68, skew: 0.15)
+                .fill(Color(red: 0.16, green: 0.30, blue: 0.26))
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    // MARK: - Geometry helpers
+
+    /// The fixed, centered crop window in the view's coordinate space.
+    private func cropRect(in size: CGSize) -> CGRect {
+        let minDim = min(size.width, size.height)
+        let side = minDim * (1 - cropInset * 2)
+        // Slight landscape aspect so the photo reads as a photo.
+        let w = min(size.width * (1 - cropInset * 1.4), side * 1.28)
+        let h = side
+        return CGRect(x: (size.width - w) / 2,
+                      y: (size.height - h) / 2,
+                      width: w, height: h)
+    }
+
+    /// How far (in points) the photo may pan in each axis before the crop window
+    /// would expose an uncovered edge, for a given scale.
+    private func panLimits(forScale scale: CGFloat, window: CGRect, size: CGSize) -> CGSize {
+        // The photo fills the full view; at scale s its visible half-extent grows.
+        let photoHalfW = size.width * scale / 2
+        let photoHalfH = size.height * scale / 2
+        let windowHalfW = window.width / 2
+        let windowHalfH = window.height / 2
+        // Window is centered; available slack is photo half minus window half,
+        // minus the window's own centered offset within the view.
+        let slackW = max(0, photoHalfW - windowHalfW)
+        let slackH = max(0, photoHalfH - windowHalfH)
+        return CGSize(width: slackW, height: slackH)
+    }
+
+    private func clampScale(_ s: CGFloat, allowOvershoot: Bool) -> CGFloat {
+        if allowOvershoot {
+            // Soft resistance past hard limits but never wildly off.
+            if s < minScale {
+                return minScale - rubber(minScale - s, dimension: 0.6)
+            } else if s > maxScale {
+                return maxScale + rubber(s - maxScale, dimension: 1.2)
+            }
+            return s
+        }
+        return min(max(s, minScale), maxScale)
+    }
+
+    private func rubber(_ x: CGFloat, dimension: CGFloat) -> CGFloat {
+        // Asymptotic give for scale overshoot.
+        (1 - 1 / (x / dimension + 1)) * dimension * 0.5
+    }
+
+    /// Classic iOS rubber-band: within [-limit, limit] pass through; beyond,
+    /// apply asymptotic resistance scaled by the dimension.
+    private func rubberClamped(_ value: CGFloat, limit: CGFloat, dimension: CGFloat) -> CGFloat {
+        if value > limit {
+            return limit + rubberBand(value - limit, dimension: dimension)
+        } else if value < -limit {
+            return -limit - rubberBand(-value - limit, dimension: dimension)
+        }
+        return value
+    }
+
+    private func rubberBand(_ overshoot: CGFloat, dimension: CGFloat) -> CGFloat {
+        let d = max(dimension, 1)
+        return (1 - 1 / (overshoot * 0.55 / d + 1)) * d
+    }
+
+    private func hardClamp(_ value: CGFloat, limit: CGFloat) -> CGFloat {
+        min(max(value, -limit), limit)
+    }
+}
+
+// MARK: - Shapes
+
+private struct HillShape: Shape {
+    var baseY: CGFloat   // fraction of height where the hill base sits
+    var peakY: CGFloat   // fraction of height of the peak
+    var skew: CGFloat    // -1..1, shifts the peak horizontally
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let w = rect.width
+        let h = rect.height
+        let base = h * baseY
+        let peak = h * peakY
+        let peakX = w * (0.5 + skew * 0.3)
+        p.move(to: CGPoint(x: 0, y: base))
+        p.addQuadCurve(
+            to: CGPoint(x: w, y: base),
+            control: CGPoint(x: peakX, y: peak)
+        )
+        p.addLine(to: CGPoint(x: w, y: h))
+        p.addLine(to: CGPoint(x: 0, y: h))
+        p.closeSubpath()
+        return p
+    }
+}
+
+private struct CornerBracket: Shape {
+    var corner: Int       // 0 TL, 1 TR, 2 BR, 3 BL
+    var length: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let l = length
+        switch corner {
+        case 0:
+            p.move(to: CGPoint(x: rect.minX, y: rect.minY + l))
+            p.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.minX + l, y: rect.minY))
+        case 1:
+            p.move(to: CGPoint(x: rect.maxX - l, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + l))
+        case 2:
+            p.move(to: CGPoint(x: rect.maxX, y: rect.maxY - l))
+            p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            p.addLine(to: CGPoint(x: rect.maxX - l, y: rect.maxY))
+        default:
+            p.move(to: CGPoint(x: rect.minX + l, y: rect.maxY))
+            p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+            p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - l))
+        }
+        return p
+    }
+}
+
+private struct ThirdsGridPlaceholder { }
+
+private extension PinchZoomClampFrameView {
+    func thirdsGrid(window: CGRect) -> Path {
+        var p = Path()
+        let oneThirdW = window.width / 3
+        let oneThirdH = window.height / 3
+        // Vertical lines.
+        for i in 1...2 {
+            let x = window.minX + oneThirdW * CGFloat(i)
+            p.move(to: CGPoint(x: x, y: window.minY))
+            p.addLine(to: CGPoint(x: x, y: window.maxY))
+        }
+        // Horizontal lines.
+        for i in 1...2 {
+            let y = window.minY + oneThirdH * CGFloat(i)
+            p.move(to: CGPoint(x: window.minX, y: y))
+            p.addLine(to: CGPoint(x: window.maxX, y: y))
+        }
+        return p
+    }
+}
+
+// MARK: - Reverse mask helper
+
+private extension View {
+    @ViewBuilder
+    func reverseMask<Mask: View>(@ViewBuilder _ mask: () -> Mask) -> some View {
+        self.mask {
+            ZStack {
+                Rectangle()
+                mask()
+                    .blendMode(.destinationOut)
+            }
+            .compositingGroup()
+        }
+    }
+}
+"""###,
+        "ges-rotate-clock-rewind": ###"""
+import SwiftUI
+
+// Twist-to-Rewind Clock
+// Rotate the clock face and the hands wind backward/forward while a ghosted
+// scene (a sun arcing over a day/night sky) visually un-happens or replays.
+// demo == true  -> self-driving triangle-wave time scrub (no touch).
+// demo == false -> two-finger RotateGesture scrubs time; eases to nearest hour.
+
+struct RotateClockRewindView: View {
+    var demo: Bool = false
+
+    // Time scrubber, expressed in "hours" across a 12h dial.
+    // 0 ... maxHours. The hour hand makes one full turn over this range.
+    private let maxHours: Double = 12.0
+
+    // Interactive state.
+    @State private var committedT: Double = 7.5      // resting time
+    @State private var liveDelta: Double = 0          // hours added by the in-flight twist
+    @State private var lastTickHour: Int = 7
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            if demo {
+                demoBody(size: size)
+            } else {
+                interactiveBody(size: size)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Demo (self-driving)
+
+    private func demoBody(size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = demoTime(at: timeline.date)
+            ClockScene(t: t, maxHours: maxHours, size: size)
+        }
+    }
+
+    /// Triangle wave: sweep time forward then backward over a ~3.4s loop so the
+    /// clock visibly winds and un-winds. Stays inside [0, maxHours].
+    private func demoTime(at date: Date) -> Double {
+        let period: Double = 3.4
+        let phase = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
+        // 0->1->0 triangle.
+        let tri = phase < 0.5 ? (phase * 2.0) : (2.0 - phase * 2.0)
+        // Sweep across most of the dial, but never to the absolute edges so the
+        // scene never reads as fully "off".
+        let lo = 0.5
+        let hi = maxHours - 0.5
+        return lo + tri * (hi - lo)
+    }
+
+    // MARK: - Interactive
+
+    private var currentT: Double {
+        clampTime(committedT + liveDelta)
+    }
+
+    private func interactiveBody(size: CGSize) -> some View {
+        ClockScene(t: currentT, maxHours: maxHours, size: size)
+            .contentShape(Rectangle())
+            .gesture(rotationGesture)
+            .sensoryFeedback(.selection, trigger: tickHour)
+    }
+
+    private var tickHour: Int {
+        // Hour 0...11 derived from current time, used to fire a haptic per tick.
+        Int(currentT.rounded(.down)) % 12
+    }
+
+    private var rotationGesture: some Gesture {
+        RotateGesture()
+            .onChanged { value in
+                // One full rotation (2π) scrubs the whole 12h dial.
+                let hours = value.rotation.radians / (2.0 * .pi) * maxHours
+                liveDelta = hours
+                let h = Int(clampTime(committedT + hours).rounded(.down)) % 12
+                if h != lastTickHour { lastTickHour = h }
+            }
+            .onEnded { value in
+                let hours = value.rotation.radians / (2.0 * .pi) * maxHours
+                let target = nearestHour(clampTime(committedT + hours))
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.72)) {
+                    committedT = target
+                    liveDelta = 0
+                }
+            }
+    }
+
+    private func clampTime(_ v: Double) -> Double {
+        min(max(v, 0), maxHours)
+    }
+
+    private func nearestHour(_ v: Double) -> Double {
+        let r = v.rounded()
+        return min(max(r, 0), maxHours)
+    }
+}
+
+// MARK: - Scene (single rendering source of truth)
+
+private struct ClockScene: View {
+    let t: Double          // time in hours, 0 ... maxHours
+    let maxHours: Double
+    let size: CGSize
+
+    private var radius: CGFloat { min(size.width, size.height) * 0.5 }
+
+    /// Day progress 0...1 across the dial, used to drive the ghost scene.
+    private var dayProgress: Double {
+        guard maxHours > 0 else { return 0 }
+        return min(max(t / maxHours, 0), 1)
+    }
+
+    var body: some View {
+        ZStack {
+            GhostScene(progress: dayProgress, radius: radius)
+            ClockFace(radius: radius)
+            ClockHands(t: t, maxHours: maxHours, radius: radius)
+            CenterCap(radius: radius)
+        }
+        .frame(width: radius * 2, height: radius * 2)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Ghost scene (day/night the hands scrub through)
+
+private struct GhostScene: View {
+    let progress: Double   // 0 = start of day, 1 = end of day
+    let radius: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(skyGradient)
+            sun
+            stars
+        }
+        .frame(width: radius * 1.9, height: radius * 1.9)
+        .clipShape(Circle())
+        .opacity(0.92)
+    }
+
+    // Sun travels along an arc from left horizon, up over the top, down to right.
+    private var sunAngle: Double {
+        // Map progress 0...1 to angle 180°...360° going over the top (clockwise arc).
+        // We trace a semicircle: angle from 180° (left) to 360° (right)
+        // measured so the sun peaks at the top.
+        180.0 + progress * 180.0
+    }
+
+    private var sunPoint: CGPoint {
+        let r = radius * 0.62
+        let rad = sunAngle * .pi / 180.0
+        let x = cos(rad) * r
+        let y = sin(rad) * r   // sin negative for top half in screen coords handled below
+        return CGPoint(x: x, y: y)
+    }
+
+    // How high the sun is (1 at noon, 0 at horizons) -> drives sky color + brightness.
+    private var elevation: Double {
+        // peaks at progress 0.5
+        let e = sin(progress * .pi)
+        return max(0, e)
+    }
+
+    private var sun: some View {
+        let d = radius * 0.34
+        // Convert sunPoint (centered, y grows toward bottom of arc) into screen offset.
+        // sin(rad) for angles 180->360 is 0 -> negative -> 0, so the sun rides the TOP.
+        return Circle()
+            .fill(
+                RadialGradient(
+                    colors: [
+                        sunCore.opacity(0.95 * (0.4 + 0.6 * elevation)),
+                        sunCore.opacity(0.0)
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: d * 0.85
+                )
+            )
+            .overlay(
+                Circle()
+                    .fill(sunCore.opacity(0.35 + 0.55 * elevation))
+                    .frame(width: d * 0.46, height: d * 0.46)
+            )
+            .frame(width: d, height: d)
+            .offset(x: sunPoint.x, y: sunPoint.y)
+    }
+
+    // Stars fade in as the sun sets (low elevation), giving the "un-happens" feel
+    // when time reverses.
+    private var stars: some View {
+        let nightAmount = 1.0 - elevation
+        return Canvas { ctx, sz in
+            let pts: [(CGFloat, CGFloat, CGFloat)] = [
+                (0.22, 0.24, 1.4), (0.72, 0.20, 1.0), (0.58, 0.34, 1.6),
+                (0.34, 0.16, 1.1), (0.82, 0.40, 1.3), (0.16, 0.40, 0.9),
+                (0.66, 0.50, 1.2), (0.46, 0.22, 1.0)
+            ]
+            for (fx, fy, r) in pts {
+                let rect = CGRect(
+                    x: fx * sz.width - r,
+                    y: fy * sz.height - r,
+                    width: r * 2,
+                    height: r * 2
+                )
+                ctx.opacity = nightAmount * 0.9
+                ctx.fill(Path(ellipseIn: rect), with: .color(starColor))
+            }
+        }
+        .frame(width: radius * 1.9, height: radius * 1.9)
+        .allowsHitTesting(false)
+    }
+
+    private var skyGradient: LinearGradient {
+        // Interpolate between night (low elevation) and day (high elevation).
+        let e = elevation
+        let top = mix(nightTop, dayTop, e)
+        let bottom = mix(nightBottom, dayBottom, e)
+        return LinearGradient(
+            colors: [top, bottom],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    // Palette helpers (Color(red:green:blue:) literals only).
+    private var dayTop: (Double, Double, Double) { (0.30, 0.58, 0.92) }
+    private var dayBottom: (Double, Double, Double) { (0.72, 0.86, 0.98) }
+    private var nightTop: (Double, Double, Double) { (0.05, 0.06, 0.15) }
+    private var nightBottom: (Double, Double, Double) { (0.13, 0.10, 0.26) }
+    private var sunCore: Color { Color(red: 1.0, green: 0.86, blue: 0.42) }
+    private var starColor: Color { Color(red: 0.92, green: 0.94, blue: 1.0) }
+
+    private func mix(_ a: (Double, Double, Double), _ b: (Double, Double, Double), _ f: Double) -> Color {
+        let cf = min(max(f, 0), 1)
+        return Color(
+            red: a.0 + (b.0 - a.0) * cf,
+            green: a.1 + (b.1 - a.1) * cf,
+            blue: a.2 + (b.2 - a.2) * cf
+        )
+    }
+}
+
+// MARK: - Clock face (rim + ticks)
+
+private struct ClockFace: View {
+    let radius: CGFloat
+
+    var body: some View {
+        ZStack {
+            // Translucent bezel so the ghost scene reads through.
+            Circle()
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.95, green: 0.95, blue: 0.97).opacity(0.9),
+                            Color(red: 0.55, green: 0.57, blue: 0.66).opacity(0.7)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: max(2, radius * 0.05)
+                )
+                .frame(width: radius * 1.96, height: radius * 1.96)
+
+            ticks
+        }
+    }
+
+    private var ticks: some View {
+        ForEach(0..<12, id: \.self) { i in
+            let isMajor = i % 3 == 0
+            let len: CGFloat = isMajor ? radius * 0.16 : radius * 0.09
+            let w: CGFloat = isMajor ? max(2, radius * 0.035) : max(1, radius * 0.02)
+            Capsule()
+                .fill(Color(red: 0.96, green: 0.97, blue: 1.0).opacity(isMajor ? 0.95 : 0.65))
+                .frame(width: w, height: len)
+                .offset(y: -(radius * 0.86 - len / 2))
+                .rotationEffect(.degrees(Double(i) * 30.0))
+        }
+    }
+}
+
+// MARK: - Hands
+
+private struct ClockHands: View {
+    let t: Double          // hours, 0 ... maxHours
+    let maxHours: Double
+    let radius: CGFloat
+
+    // Hour hand: one full turn across the whole dial scrub.
+    private var hourAngle: Angle {
+        .degrees((t / maxHours) * 360.0)
+    }
+
+    // Minute hand: 12x faster, so it whirls as you scrub — the "winding" cue.
+    private var minuteAngle: Angle {
+        .degrees((t / maxHours) * 360.0 * 12.0)
+    }
+
+    var body: some View {
+        ZStack {
+            hand(length: radius * 0.5, width: max(3, radius * 0.065),
+                 color: Color(red: 0.97, green: 0.97, blue: 1.0), angle: hourAngle)
+            hand(length: radius * 0.74, width: max(2, radius * 0.04),
+                 color: Color(red: 0.85, green: 0.88, blue: 0.98), angle: minuteAngle)
+            secondHand
+        }
+    }
+
+    private func hand(length: CGFloat, width: CGFloat, color: Color, angle: Angle) -> some View {
+        Capsule()
+            .fill(color)
+            .frame(width: width, height: length)
+            .offset(y: -length / 2)
+            .rotationEffect(angle)
+            .shadow(color: Color.black.opacity(0.35), radius: 2, x: 0, y: 1)
+    }
+
+    private var secondAngle: Angle {
+        .degrees((t / maxHours) * 360.0 * 60.0)
+    }
+
+    private var secondHand: some View {
+        let length = radius * 0.82
+        return Capsule()
+            .fill(Color(red: 1.0, green: 0.42, blue: 0.38))
+            .frame(width: max(1, radius * 0.018), height: length)
+            .offset(y: -length / 2 + radius * 0.12)
+            .rotationEffect(secondAngle)
+    }
+}
+
+private struct CenterCap: View {
+    let radius: CGFloat
+    var body: some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.98, green: 0.98, blue: 1.0),
+                        Color(red: 0.62, green: 0.64, blue: 0.74)
+                    ],
+                    center: .topLeading,
+                    startRadius: 0,
+                    endRadius: radius * 0.14
+                )
+            )
+            .frame(width: radius * 0.14, height: radius * 0.14)
+            .shadow(color: Color.black.opacity(0.4), radius: 2, x: 0, y: 1)
+    }
+}
+"""###,
+        "ges-rotate-combination-lock": ###"""
+import SwiftUI
+
+// MARK: - Public View
+
+/// Combination Safe Dial — rotate a numbered dial; correct numbers in sequence
+/// light up, then the bolt retracts and the door eases open.
+///
+/// - `demo == true`: a self-driving PhaseAnimator scripts the full solve loop
+///   (dial turns to each number, pips light, bolt retracts, door swings open,
+///   then re-closes) so the tile stays alive with no touch.
+/// - `demo == false`: a real one-finger circular drag (atan2) turns the dial,
+///   snapping to integers; reversing direction commits a number; matching the
+///   secret combo unlocks the safe.
+struct RotateCombinationLockView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            ZStack {
+                backdrop(side: side)
+                if demo {
+                    DemoSafe(side: side)
+                } else {
+                    InteractiveSafe(side: side)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func backdrop(side: CGFloat) -> some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.05, green: 0.06, blue: 0.10),
+                Color(red: 0.02, green: 0.02, blue: 0.05)
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+    }
+}
+
+// MARK: - Shared lock state model
+
+/// Snapshot of everything the renderer needs to draw a frame.
+private struct LockState {
+    var dialAngle: Double = 0      // radians, dial rotation
+    var litCount: Int = 0          // how many combo stages are satisfied (0...3)
+    var boltRetract: CGFloat = 0   // 0 = locked/extended, 1 = fully retracted
+    var doorOpen: CGFloat = 0      // 0 = shut, 1 = fully swung open
+    var solved: Bool = false       // glow accent when fully solved
+}
+
+private let comboCount = 3
+private let dialNumbers = 40            // classic safe dial 0...39
+private let unlockDoorAngle: Double = 78 // cap < 90 so we never see the back face
+
+// MARK: - Demo (self-driving)
+
+private struct DemoSafe: View {
+    let side: CGFloat
+
+    private enum Phase: CaseIterable {
+        case closed, dialOne, dialTwo, dialThree, retract, open, hold, reclose
+    }
+
+    var body: some View {
+        // No trigger → PhaseAnimator loops the phase sequence forever, so the
+        // tile self-plays the full solve cycle with no touch.
+        PhaseAnimator(Phase.allCases) { phase in
+            SafeBody(state: state(for: phase), side: side, accent: accent(for: phase))
+        } animation: { phase in
+            animation(for: phase)
+        }
+    }
+
+    private func state(for phase: Phase) -> LockState {
+        var s = LockState()
+        switch phase {
+        case .closed:
+            s.dialAngle = 0
+        case .dialOne:
+            s.dialAngle = turns(1.6)         // spin clockwise to first number
+            s.litCount = 1
+        case .dialTwo:
+            s.dialAngle = turns(0.7)         // reverse to second
+            s.litCount = 2
+        case .dialThree:
+            s.dialAngle = turns(1.25)        // reverse again to third
+            s.litCount = 3
+        case .retract:
+            s.dialAngle = turns(1.25)
+            s.litCount = 3
+            s.solved = true
+            s.boltRetract = 1
+        case .open:
+            s.dialAngle = turns(1.25)
+            s.litCount = 3
+            s.solved = true
+            s.boltRetract = 1
+            s.doorOpen = 1
+        case .hold:
+            s.dialAngle = turns(1.25)
+            s.litCount = 3
+            s.solved = true
+            s.boltRetract = 1
+            s.doorOpen = 1
+        case .reclose:
+            s.dialAngle = turns(1.25)
+            s.litCount = 0
+            s.boltRetract = 0
+            s.doorOpen = 0
+        }
+        return s
+    }
+
+    private func accent(for phase: Phase) -> Bool {
+        switch phase {
+        case .retract, .open, .hold: return true
+        default: return false
+        }
+    }
+
+    private func animation(for phase: Phase) -> Animation? {
+        switch phase {
+        case .closed:    return .easeInOut(duration: 0.25)
+        case .dialOne:   return .easeInOut(duration: 0.75)
+        case .dialTwo:   return .easeInOut(duration: 0.65)
+        case .dialThree: return .easeInOut(duration: 0.6)
+        case .retract:   return .spring(response: 0.35, dampingFraction: 0.55)
+        case .open:      return .spring(response: 0.7, dampingFraction: 0.78)
+        case .hold:      return .easeInOut(duration: 0.6)
+        case .reclose:   return .easeInOut(duration: 0.55)
+        }
+    }
+
+    private func turns(_ t: Double) -> Double { t * 2 * .pi }
+}
+
+// MARK: - Interactive
+
+private struct InteractiveSafe: View {
+    let side: CGFloat
+
+    // Secret combination (indices into 0...39).
+    private let combo = [12, 30, 4]
+
+    @State private var angle: Double = 0          // committed dial rotation (radians)
+    @State private var lastFinger: Double = 0      // last finger angle (radians)
+    @State private var dragActive: Bool = false    // true once a drag is in flight
+    @State private var lastSign: Int = 0           // sign of last applied delta
+    @State private var stage: Int = 0              // matched count
+    @State private var solved: Bool = false
+    @State private var boltRetract: CGFloat = 0
+    @State private var doorOpen: CGFloat = 0
+    @State private var snappedNumber: Int = 0      // number under the indicator
+
+    var body: some View {
+        let state = LockState(
+            dialAngle: angle,
+            litCount: stage,
+            boltRetract: boltRetract,
+            doorOpen: doorOpen,
+            solved: solved
+        )
+        SafeBody(state: state, side: side, accent: solved)
+            .contentShape(Rectangle())
+            .gesture(dialDrag(side: side))
+            .sensoryFeedback(.selection, trigger: snappedNumber)
+            .sensoryFeedback(.impact(weight: .medium), trigger: stage)
+            .sensoryFeedback(.success, trigger: solved) { _, now in now }
+    }
+
+    private func dialDrag(side: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let center = CGPoint(x: side / 2, y: side / 2)
+                let f = atan2(value.location.y - center.y,
+                              value.location.x - center.x)
+                // First sample of a fresh drag has zero translation: seed the
+                // reference finger angle and wait for the next sample.
+                if isGestureStart(value) || !dragActive {
+                    dragActive = true
+                    lastFinger = f
+                    return
+                }
+                var delta = f - lastFinger
+                if delta > .pi { delta -= 2 * .pi }
+                if delta < -.pi { delta += 2 * .pi }
+                lastFinger = f
+                applyDelta(delta)
+            }
+            .onEnded { _ in
+                snapAndCommit()
+                lastFinger = 0
+                lastSign = 0
+                dragActive = false
+            }
+    }
+
+    private func isGestureStart(_ value: DragGesture.Value) -> Bool {
+        value.translation == .zero
+    }
+
+    private func applyDelta(_ delta: Double) {
+        guard !solved else { return }
+        angle += delta
+
+        // Track direction; a reversal commits the current number as a candidate.
+        let sign = delta > 0 ? 1 : (delta < 0 ? -1 : 0)
+        if sign != 0 {
+            if lastSign != 0 && sign != lastSign {
+                commitCandidate()
+            }
+            lastSign = sign
+        }
+
+        // Haptic + visual snap as we cross each integer number.
+        let n = currentNumber()
+        if n != snappedNumber {
+            snappedNumber = n
+        }
+    }
+
+    /// The dial number currently under the indicator (0...39).
+    private func currentNumber() -> Int {
+        let perNum = 2 * .pi / Double(dialNumbers)
+        // Negative rotation moves higher numbers up (clockwise dial convention).
+        let raw = (-angle / perNum)
+        var n = Int(raw.rounded()) % dialNumbers
+        if n < 0 { n += dialNumbers }
+        return n
+    }
+
+    private func commitCandidate() {
+        guard stage < comboCount else { return }
+        let candidate = currentNumber()
+        if candidate == combo[stage] {
+            stage += 1
+            if stage == comboCount {
+                unlock()
+            }
+        } else if candidate == combo[0] {
+            stage = 1
+        } else {
+            stage = 0
+        }
+    }
+
+    private func snapAndCommit() {
+        guard !solved else { return }
+        // Snap committed angle to the nearest integer number with a small spring.
+        let perNum = 2 * .pi / Double(dialNumbers)
+        let snapped = (angle / perNum).rounded() * perNum
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            angle = snapped
+        }
+        // A pause-and-release also reads as a reversal for the final number.
+        commitCandidate()
+        lastSign = 0
+    }
+
+    private func unlock() {
+        solved = true
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.55)) {
+            boltRetract = 1
+        }
+        withAnimation(.spring(response: 0.7, dampingFraction: 0.78).delay(0.2)) {
+            doorOpen = 1
+        }
+        // Auto re-lock after a beat so the demo-able interactive state recovers.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.2) {
+            withAnimation(.easeInOut(duration: 0.55)) {
+                doorOpen = 0
+                boltRetract = 0
+            }
+            stage = 0
+            solved = false
+            lastSign = 0
+        }
+    }
+}
+
+// MARK: - Safe body (shared renderer)
+
+private struct SafeBody: View {
+    let state: LockState
+    let side: CGFloat
+    let accent: Bool
+
+    var body: some View {
+        let s = side
+        ZStack {
+            // Interior cavity revealed when the door swings — keeps an open
+            // frame legible (never blank).
+            InteriorCavity(side: s)
+
+            // The swinging door carries the dial, hinged on the left edge.
+            DoorFace(state: state, side: s, accent: accent)
+                .rotation3DEffect(
+                    .degrees(Double(state.doorOpen) * unlockDoorAngle),
+                    axis: (x: 0, y: 1, z: 0),
+                    anchor: .leading,
+                    perspective: 0.55
+                )
+        }
+        .frame(width: s, height: s)
+    }
+}
+
+private struct InteriorCavity: View {
+    let side: CGFloat
+
+    var body: some View {
+        let inset = side * 0.10
+        RoundedRectangle(cornerRadius: side * 0.06, style: .continuous)
+            .fill(
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.10, green: 0.10, blue: 0.13),
+                        Color(red: 0.02, green: 0.02, blue: 0.03)
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: side * 0.5
+                )
+            )
+            .overlay(
+                // Suggestion of a shelf so the open interior reads as a safe.
+                RoundedRectangle(cornerRadius: side * 0.01)
+                    .fill(Color(red: 0.16, green: 0.16, blue: 0.19))
+                    .frame(width: side * 0.55, height: side * 0.03)
+                    .offset(y: side * 0.05)
+            )
+            .padding(inset)
+    }
+}
+
+// MARK: - Door face (bolt + dial)
+
+private struct DoorFace: View {
+    let state: LockState
+    let side: CGFloat
+    let accent: Bool
+
+    var body: some View {
+        let s = side
+        ZStack {
+            doorPlate(s: s)
+            Bolt(retract: state.boltRetract, side: s)
+            VStack(spacing: s * 0.04) {
+                ProgressPips(litCount: state.litCount, side: s)
+                Dial(angle: state.dialAngle, accent: accent, side: s)
+            }
+        }
+        .frame(width: s, height: s)
+        // Subtle parallax shadow as the door lifts off the body.
+        .shadow(color: .black.opacity(0.35 * Double(state.doorOpen)),
+                radius: s * 0.04 * state.doorOpen,
+                x: s * 0.05 * state.doorOpen, y: 0)
+    }
+
+    private func doorPlate(s: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: s * 0.06, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.28, green: 0.30, blue: 0.36),
+                        Color(red: 0.16, green: 0.17, blue: 0.22)
+                    ],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: s * 0.06, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.18), Color.black.opacity(0.25)],
+                            startPoint: .top, endPoint: .bottom
+                        ),
+                        lineWidth: max(1, s * 0.008)
+                    )
+            )
+            .padding(s * 0.10)
+    }
+}
+
+// MARK: - Bolt
+
+private struct Bolt: View {
+    let retract: CGFloat
+    let side: CGFloat
+
+    var body: some View {
+        let s = side
+        let travel = s * 0.16
+        // Bolt sits on the right edge of the door, slides left to retract.
+        Capsule()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.78, green: 0.80, blue: 0.86),
+                        Color(red: 0.50, green: 0.52, blue: 0.58)
+                    ],
+                    startPoint: .top, endPoint: .bottom
+                )
+            )
+            .frame(width: s * 0.20, height: s * 0.055)
+            .overlay(
+                Capsule().stroke(Color.black.opacity(0.25), lineWidth: max(0.5, s * 0.004))
+            )
+            .offset(x: s * 0.33 - travel * retract, y: -s * 0.30)
+    }
+}
+
+// MARK: - Progress pips
+
+private struct ProgressPips: View {
+    let litCount: Int
+    let side: CGFloat
+
+    var body: some View {
+        let s = side
+        HStack(spacing: s * 0.025) {
+            ForEach(0..<comboCount, id: \.self) { i in
+                Circle()
+                    .fill(i < litCount ? litColor : Color(red: 0.20, green: 0.21, blue: 0.26))
+                    .frame(width: s * 0.035, height: s * 0.035)
+                    .overlay(
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: s * 0.012, height: s * 0.012)
+                            .opacity(i < litCount ? 0.9 : 0)
+                    )
+                    .shadow(color: i < litCount ? litColor.opacity(0.8) : .clear,
+                            radius: s * 0.02)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: litCount)
+            }
+        }
+        .padding(.top, s * 0.02)
+    }
+
+    private var litColor: Color {
+        litCount >= comboCount
+            ? Color(red: 0.45, green: 0.95, blue: 0.55)
+            : Color(red: 1.0, green: 0.78, blue: 0.30)
+    }
+}
+
+// MARK: - Dial
+
+private struct Dial: View {
+    let angle: Double
+    let accent: Bool
+    let side: CGFloat
+
+    var body: some View {
+        let s = side
+        let d = s * 0.50
+        ZStack {
+            indicator(s: s, d: d)
+            ringFace(d: d)
+            ticksAndNumerals(d: d)
+                .rotationEffect(.radians(angle))
+            knob(d: d)
+                .rotationEffect(.radians(angle))
+        }
+        .frame(width: d, height: d)
+    }
+
+    // Fixed pointer above the dial showing the reading position.
+    private func indicator(s: CGFloat, d: CGFloat) -> some View {
+        Triangle()
+            .fill(accent
+                  ? Color(red: 0.45, green: 0.95, blue: 0.55)
+                  : Color(red: 0.95, green: 0.85, blue: 0.55))
+            .frame(width: d * 0.10, height: d * 0.09)
+            .offset(y: -d * 0.56)
+            .shadow(color: .black.opacity(0.4), radius: d * 0.01, y: d * 0.01)
+    }
+
+    private func ringFace(d: CGFloat) -> some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.20, green: 0.21, blue: 0.26),
+                        Color(red: 0.10, green: 0.10, blue: 0.13)
+                    ],
+                    center: .center, startRadius: 0, endRadius: d * 0.55
+                )
+            )
+            .overlay(
+                Circle().strokeBorder(
+                    accent
+                        ? Color(red: 0.45, green: 0.95, blue: 0.55).opacity(0.85)
+                        : Color.white.opacity(0.10),
+                    lineWidth: max(1, d * 0.02)
+                )
+            )
+            .shadow(color: accent
+                    ? Color(red: 0.45, green: 0.95, blue: 0.55).opacity(0.6)
+                    : .clear,
+                    radius: d * 0.06)
+    }
+
+    private func ticksAndNumerals(d: CGFloat) -> some View {
+        // Show every tick; numerals only on the majors (every 5) and only when
+        // the dial is large enough to read them — keeps a 120pt tile uncluttered.
+        let showNumerals = side > 220
+        return ZStack {
+            ForEach(0..<dialNumbers, id: \.self) { i in
+                tick(i: i, d: d)
+            }
+            if showNumerals {
+                ForEach(0..<8, id: \.self) { j in
+                    numeral(major: j * 5, d: d)
+                }
+            }
+        }
+    }
+
+    private func tick(i: Int, d: CGFloat) -> some View {
+        let isMajor = i % 5 == 0
+        let len = isMajor ? d * 0.10 : d * 0.05
+        return Rectangle()
+            .fill(Color.white.opacity(isMajor ? 0.75 : 0.35))
+            .frame(width: max(0.6, d * (isMajor ? 0.014 : 0.008)), height: len)
+            .offset(y: -d * 0.43)
+            .rotationEffect(.degrees(Double(i) / Double(dialNumbers) * 360))
+    }
+
+    private func numeral(major: Int, d: CGFloat) -> some View {
+        Text("\(major)")
+            .font(.system(size: d * 0.085, weight: .semibold, design: .rounded))
+            .foregroundStyle(Color.white.opacity(0.85))
+            .offset(y: -d * 0.30)
+            .rotationEffect(.degrees(Double(major) / Double(dialNumbers) * 360))
+    }
+
+    // Center knurled grip that turns with the dial.
+    private func knob(d: CGFloat) -> some View {
+        ZStack {
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.62, green: 0.64, blue: 0.70),
+                            Color(red: 0.34, green: 0.36, blue: 0.42)
+                        ],
+                        center: .topLeading, startRadius: 0, endRadius: d * 0.30
+                    )
+                )
+                .frame(width: d * 0.46, height: d * 0.46)
+            // Knurl ridges.
+            ForEach(0..<24, id: \.self) { k in
+                Capsule()
+                    .fill(Color.black.opacity(0.18))
+                    .frame(width: max(0.5, d * 0.006), height: d * 0.07)
+                    .offset(y: -d * 0.19)
+                    .rotationEffect(.degrees(Double(k) / 24 * 360))
+            }
+            // Grip groove marking the dial's zero so rotation is visible.
+            Capsule()
+                .fill(Color(red: 0.95, green: 0.85, blue: 0.55))
+                .frame(width: d * 0.03, height: d * 0.20)
+                .offset(y: -d * 0.10)
+        }
+    }
+}
+
+// MARK: - Triangle helper
+
+private struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.midX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        p.closeSubpath()
+        return p
+    }
+}
+"""###,
+        "ges-rotate-dial-knob": ###"""
+import SwiftUI
+
+// MARK: - Tactile Detent Dial
+// Twist a knurled dial; it clicks through evenly spaced detents with a
+// micro-overshoot at each notch and a tick flash as it passes.
+// demo == true  -> self-driving PhaseAnimator that auto-clicks notch to notch.
+// demo == false -> single-finger DragGesture + atan2 delta accumulation,
+//                  spring(bounce:) snap-to-detent and haptic per notch crossing.
+
+public struct RotateDialKnobView: View {
+    public var demo: Bool = false
+
+    // Number of evenly spaced detents around the dial.
+    private let detentCount: Int = 8
+
+    // Live interactive state.
+    @State private var angle: Double = 0          // current dial angle (radians)
+    @State private var lastTouchAngle: Double = 0 // previous sample for delta accumulation
+    @State private var isDragging: Bool = false
+    @State private var currentDetent: Int = 0     // nearest detent index, updates live
+    @State private var flashDetent: Int = -1      // which tick is flashing
+
+    public init(demo: Bool = false) {
+        self.demo = demo
+    }
+
+    public var body: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+            let dim = side * 0.86
+            ZStack {
+                background
+                // DragGesture reports location in the dialStack's local space,
+                // so the rotation center is the local mid-point (dim/2, dim/2),
+                // NOT the GeometryReader's full-size center.
+                content(dim: dim, center: CGPoint(x: dim / 2, y: dim / 2))
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Background
+
+    private var background: some View {
+        RadialGradient(
+            colors: [
+                Color(red: 0.10, green: 0.11, blue: 0.16),
+                Color(red: 0.05, green: 0.05, blue: 0.09)
+            ],
+            center: .center,
+            startRadius: 0,
+            endRadius: 220
+        )
+        .ignoresSafeArea()
+    }
+
+    // MARK: Content router
+
+    @ViewBuilder
+    private func content(dim: CGFloat, center: CGPoint) -> some View {
+        if demo {
+            demoContent(dim: dim)
+        } else {
+            interactiveContent(dim: dim, center: center)
+        }
+    }
+
+    // MARK: Demo (self-driving)
+
+    @ViewBuilder
+    private func demoContent(dim: CGFloat) -> some View {
+        // PhaseAnimator steps over detent indices; each transition uses a
+        // spring(bounce:) so the needle micro-overshoots into every notch.
+        PhaseAnimator(demoSequence, content: { idx in
+            dialStack(dim: dim,
+                      liveAngle: detentAngle(for: idx),
+                      flashedDetent: ((idx % detentCount) + detentCount) % detentCount)
+        }, animation: { _ in
+            .spring(duration: 0.34, bounce: 0.42)
+        })
+    }
+
+    // Sweep up through a handful of detents and back so the dial auto-clicks
+    // on a lively ~3s loop (kept short of a full revolution on purpose).
+    private var demoSequence: [Int] {
+        var seq: [Int] = []
+        for i in 0...4 { seq.append(i) }
+        for i in stride(from: 3, through: 0, by: -1) { seq.append(i) }
+        return seq
+    }
+
+    // MARK: Interactive (single-finger twist)
+
+    @ViewBuilder
+    private func interactiveContent(dim: CGFloat, center: CGPoint) -> some View {
+        dialStack(dim: dim, liveAngle: angle, flashedDetent: flashDetent)
+            .contentShape(Circle())
+            .gesture(twistGesture(center: center))
+            .modifier(DetentHaptic(trigger: currentDetent, enabled: !demo))
+    }
+
+    private func twistGesture(center: CGPoint) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let touchAngle = atan2(value.location.y - center.y,
+                                       value.location.x - center.x)
+                if !isDragging {
+                    isDragging = true
+                    lastTouchAngle = touchAngle
+                    return
+                }
+                // Shortest-arc delta avoids the atan2 ±pi wrap discontinuity.
+                var delta = touchAngle - lastTouchAngle
+                delta = normalizedAngle(delta)
+                lastTouchAngle = touchAngle
+                angle += delta
+                updateLiveDetent()
+            }
+            .onEnded { _ in
+                isDragging = false
+                let target = nearestDetentIndex(for: angle)
+                withAnimation(.spring(duration: 0.45, bounce: 0.4)) {
+                    angle = detentAngle(for: target)
+                }
+                fireDetent(index: target)
+            }
+    }
+
+    // Update nearest-detent index live so haptic + tick flash fire as we pass.
+    private func updateLiveDetent() {
+        let idx = nearestDetentIndex(for: angle)
+        let wrapped = ((idx % detentCount) + detentCount) % detentCount
+        if wrapped != currentDetent {
+            fireDetent(index: idx)
+        }
+    }
+
+    private func fireDetent(index: Int) {
+        let wrapped = ((index % detentCount) + detentCount) % detentCount
+        currentDetent = wrapped
+        withAnimation(.easeOut(duration: 0.08)) {
+            flashDetent = wrapped
+        }
+        withAnimation(.easeIn(duration: 0.45).delay(0.10)) {
+            flashDetent = -1
+        }
+    }
+
+    // MARK: Detent math
+
+    private var detentStep: Double { (2 * Double.pi) / Double(detentCount) }
+
+    private func detentAngle(for index: Int) -> Double {
+        Double(index) * detentStep
+    }
+
+    private func nearestDetentIndex(for a: Double) -> Int {
+        Int((a / detentStep).rounded())
+    }
+
+    private func normalizedAngle(_ a: Double) -> Double {
+        var v = a
+        while v > Double.pi { v -= 2 * Double.pi }
+        while v < -Double.pi { v += 2 * Double.pi }
+        return v
+    }
+
+    // MARK: Dial assembly
+
+    private func dialStack(dim: CGFloat, liveAngle: Double, flashedDetent: Int) -> some View {
+        ZStack {
+            DetentTicks(count: detentCount,
+                        diameter: dim,
+                        flashedDetent: flashedDetent)
+            KnobBody(diameter: dim, angle: liveAngle)
+            Needle(diameter: dim, angle: liveAngle)
+            CenterCap(diameter: dim)
+        }
+        .frame(width: dim, height: dim)
+    }
+}
+
+// MARK: - Detent tick ring (the notches)
+
+private struct DetentTicks: View {
+    let count: Int
+    let diameter: CGFloat
+    let flashedDetent: Int
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<count, id: \.self) { i in
+                tick(at: i)
+            }
+        }
+        .frame(width: diameter, height: diameter)
+    }
+
+    private func tick(at i: Int) -> some View {
+        let isFlash = (i == flashedDetent)
+        let lit = Color(red: 1.0, green: 0.82, blue: 0.36)
+        let dim = Color(red: 0.34, green: 0.36, blue: 0.45)
+        let h: CGFloat = diameter * (isFlash ? 0.10 : 0.066)
+        let w: CGFloat = diameter * (isFlash ? 0.022 : 0.016)
+        return Capsule(style: .continuous)
+            .fill(isFlash ? lit : dim)
+            .frame(width: w, height: h)
+            .shadow(color: isFlash ? lit.opacity(0.9) : .clear,
+                    radius: isFlash ? 7 : 0)
+            .offset(y: -diameter * 0.5 + h * 0.5 + diameter * 0.012)
+            .rotationEffect(.radians(Double(i) * tickStep))
+    }
+
+    private var tickStep: Double { (2 * Double.pi) / Double(count) }
+}
+
+// MARK: - Knurled knob body
+
+private struct KnobBody: View {
+    let diameter: CGFloat
+    let angle: Double
+
+    private let ridgeCount: Int = 36
+
+    var body: some View {
+        ZStack {
+            // Recessed bezel.
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.07, green: 0.08, blue: 0.12),
+                            Color(red: 0.03, green: 0.03, blue: 0.06)
+                        ],
+                        center: .center,
+                        startRadius: diameter * 0.30,
+                        endRadius: diameter * 0.50
+                    )
+                )
+                .frame(width: diameter * 0.92, height: diameter * 0.92)
+
+            // Knob plate with directional sheen.
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.26, green: 0.28, blue: 0.36),
+                            Color(red: 0.13, green: 0.14, blue: 0.20),
+                            Color(red: 0.08, green: 0.09, blue: 0.13)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: diameter * 0.78, height: diameter * 0.78)
+                .overlay(knurling)
+                .overlay(
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                        .frame(width: diameter * 0.78, height: diameter * 0.78)
+                )
+                .rotationEffect(.radians(angle))
+                .shadow(color: .black.opacity(0.55), radius: 10, x: 0, y: 6)
+        }
+    }
+
+    // Ridged grip texture around the plate rim.
+    private var knurling: some View {
+        ZStack {
+            ForEach(0..<ridgeCount, id: \.self) { i in
+                ridge(at: i)
+            }
+        }
+        .frame(width: diameter * 0.78, height: diameter * 0.78)
+        .mask(
+            Circle()
+                .strokeBorder(Color.black, lineWidth: diameter * 0.11)
+                .frame(width: diameter * 0.78, height: diameter * 0.78)
+        )
+    }
+
+    private func ridge(at i: Int) -> some View {
+        let shade = (i % 2 == 0)
+            ? Color.white.opacity(0.16)
+            : Color.black.opacity(0.30)
+        return Rectangle()
+            .fill(shade)
+            .frame(width: ridgeWidth, height: diameter * 0.78)
+            .rotationEffect(.radians(Double(i) * ridgeStep))
+    }
+
+    private var ridgeWidth: CGFloat { diameter * 0.013 }
+    private var ridgeStep: Double { Double.pi / Double(ridgeCount) }
+}
+
+// MARK: - Pointer needle
+
+private struct Needle: View {
+    let diameter: CGFloat
+    let angle: Double
+
+    var body: some View {
+        Capsule(style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 1.0, green: 0.88, blue: 0.52),
+                        Color(red: 0.96, green: 0.55, blue: 0.20)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: diameter * 0.030, height: diameter * 0.30)
+            .offset(y: -diameter * 0.16)
+            .shadow(color: Color(red: 0.96, green: 0.55, blue: 0.20).opacity(0.55),
+                    radius: 5)
+            .rotationEffect(.radians(angle))
+    }
+}
+
+// MARK: - Center cap
+
+private struct CenterCap: View {
+    let diameter: CGFloat
+
+    var body: some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.30, green: 0.32, blue: 0.40),
+                        Color(red: 0.10, green: 0.11, blue: 0.16)
+                    ],
+                    center: .init(x: 0.4, y: 0.35),
+                    startRadius: 0,
+                    endRadius: diameter * 0.12
+                )
+            )
+            .frame(width: diameter * 0.20, height: diameter * 0.20)
+            .overlay(
+                Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            )
+    }
+}
+
+// MARK: - Haptic helper (gated to interactive mode)
+
+private struct DetentHaptic: ViewModifier {
+    let trigger: Int
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.sensoryFeedback(.impact(weight: .light, intensity: 0.8),
+                                    trigger: trigger)
+        } else {
+            content
+        }
+    }
+}
+"""###,
+        "ges-rotate-gear-train": ###"""
+import SwiftUI
+
+// MARK: - Public View
+
+/// Meshed Gear Train — rotate the drive gear and a train of meshed gears turns
+/// in alternating directions at tooth-ratio-scaled speeds, with a brief backlash
+/// jiggle on direction reversal.
+///
+/// - `demo == true`  : self-driving auto-crank loop (forward → pause → reverse).
+/// - `demo == false` : one-finger interactive crank (atan2 DragGesture on the drive gear).
+struct RotateGearTrainView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            GearTrainStage(size: proxy.size, demo: demo)
+                .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Gear specification (tooth counts chosen so the middle gear is ODD,
+// which is the parity condition for both meshes to align by construction).
+
+private enum GearTrainConfig {
+    /// Tooth counts. Index 0 is the drive gear. Middle (index 1) MUST be odd.
+    static let teeth: [Int] = [12, 15, 9]
+    /// Sum of tooth counts — drives pitch-radius packing along the train axis.
+    static var teethSum: CGFloat { CGFloat(teeth.reduce(0, +)) }
+    static var maxTeeth: CGFloat { CGFloat(teeth.max() ?? 12) }
+    /// Addendum in module units (tooth tip extends 1 module beyond pitch radius).
+    static let addendum: CGFloat = 1.0
+}
+
+// MARK: - Stage: lays out the train, owns the crank state, hosts both drivers.
+
+private struct GearTrainStage: View {
+    let size: CGSize
+    let demo: Bool
+
+    // Interactive crank state.
+    @State private var driveAngle: Double = 0          // accumulated drive rotation (radians)
+    @State private var lastTouchAngle: Double? = nil    // atan2 of previous drag sample
+    @State private var reverseTrigger: Int = 0          // backlash impulse source
+    @State private var backlashSign: Double = 1         // direction of the last jiggle
+    @State private var meshTick: Int = 0                // haptic per tooth-mesh crossing
+
+    // Backlash transient: a decaying spring offset added to downstream gears.
+    @State private var backlash: Double = 0
+
+    var body: some View {
+        let layout = GearLayout(size: size)
+
+        ZStack {
+            backdrop
+            if demo {
+                demoContent(layout: layout)
+            } else {
+                interactiveContent(layout: layout)
+            }
+        }
+        .compositingGroup()
+        // Subtle haptics where supported; harmless no-op elsewhere.
+        .sensoryFeedback(.selection, trigger: meshTick)
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.5), trigger: reverseTrigger)
+    }
+
+    // MARK: Backdrop
+
+    private var backdrop: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.07, green: 0.08, blue: 0.11),
+                        Color(red: 0.10, green: 0.11, blue: 0.15)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color(red: 1, green: 1, blue: 1).opacity(0.05), lineWidth: 1)
+            )
+    }
+
+    // MARK: Interactive (demo == false)
+
+    private func interactiveContent(layout: GearLayout) -> some View {
+        trainBody(layout: layout, drive: driveAngle, backlash: backlash)
+            .contentShape(Rectangle())
+            .gesture(crankGesture(layout: layout))
+    }
+
+    private func crankGesture(layout: GearLayout) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                let c = layout.center(of: 0)
+                let current = atan2(value.location.y - c.y, value.location.x - c.x)
+                guard let previous = lastTouchAngle else {
+                    lastTouchAngle = current
+                    return
+                }
+                var delta = current - previous
+                // Unwrap across the ±π seam so a continuous crank stays continuous.
+                if delta > .pi { delta -= 2 * .pi }
+                if delta < -.pi { delta += 2 * .pi }
+                lastTouchAngle = current
+
+                let newAngle = driveAngle + delta
+                detectReversalAndMesh(old: driveAngle, new: newAngle)
+                driveAngle = newAngle
+            }
+            .onEnded { _ in
+                lastTouchAngle = nil
+            }
+    }
+
+    /// Fires a backlash impulse on drive-direction reversal and a mesh tick per
+    /// tooth crossing of the drive gear. Kept additive + clamped so teeth never
+    /// appear to unmesh.
+    private func detectReversalAndMesh(old: Double, new: Double) {
+        let movement = new - old
+        if movement != 0 {
+            let dir = movement > 0 ? 1.0 : -1.0
+            if dir != backlashSign {
+                backlashSign = dir
+                fireBacklash(direction: dir)
+            }
+        }
+        // One tick per tooth of the drive gear passing the mesh point.
+        let pitch = 2 * Double.pi / Double(GearTrainConfig.teeth[0])
+        let oldTooth = Int((old / pitch).rounded(.down))
+        let newTooth = Int((new / pitch).rounded(.down))
+        if oldTooth != newTooth { meshTick &+= 1 }
+    }
+
+    private func fireBacklash(direction: Double) {
+        reverseTrigger &+= 1
+        // Peak amplitude is a small fraction of one tooth pitch on the SMALLEST
+        // downstream gear, so the jiggle never reads as the mesh letting go.
+        let smallestDownstream = GearTrainConfig.teeth.dropFirst().min() ?? 9
+        let cap = (Double.pi / Double(smallestDownstream)) * 0.28
+        backlash = direction * cap
+        withAnimation(.interpolatingSpring(stiffness: 220, damping: 7)) {
+            backlash = 0
+        }
+    }
+
+    // MARK: Demo (demo == true) — self-driving crank loop.
+
+    private func demoContent(layout: GearLayout) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let phase = DemoCrank.drive(at: t)
+            trainBody(layout: layout, drive: phase.angle, backlash: phase.backlash)
+        }
+    }
+
+    // MARK: Shared train rendering
+
+    private func trainBody(layout: GearLayout, drive: Double, backlash: Double) -> some View {
+        ZStack {
+            // Connecting baseplate "shaft rail" for mechanical grounding.
+            shaftRail(layout: layout)
+            ForEach(GearTrainConfig.teeth.indices, id: \.self) { index in
+                gearView(index: index, layout: layout, drive: drive, backlash: backlash)
+            }
+            crankHint(layout: layout, drive: drive)
+        }
+    }
+
+    private func shaftRail(layout: GearLayout) -> some View {
+        let c0 = layout.center(of: 0)
+        let cN = layout.center(of: GearTrainConfig.teeth.count - 1)
+        return Path { p in
+            p.move(to: c0)
+            p.addLine(to: cN)
+        }
+        .stroke(Color(red: 0.18, green: 0.20, blue: 0.27).opacity(0.7),
+                style: StrokeStyle(lineWidth: max(2, layout.module * 0.5), lineCap: .round))
+    }
+
+    @ViewBuilder
+    private func gearView(index: Int, layout: GearLayout, drive: Double, backlash: Double) -> some View {
+        let teeth = GearTrainConfig.teeth[index]
+        let center = layout.center(of: index)
+        let pitchR = layout.pitchRadius(of: index)
+        let angle = gearAngle(index: index, drive: drive, backlash: backlash)
+
+        Gear(teeth: teeth, pitchRadius: pitchR, module: layout.module)
+            .fill(gearFill(index: index))
+            .overlay(
+                Gear(teeth: teeth, pitchRadius: pitchR, module: layout.module)
+                    .stroke(Color(red: 0.02, green: 0.03, blue: 0.05).opacity(0.55),
+                            lineWidth: max(0.6, layout.module * 0.12))
+            )
+            .overlay(hubDecoration(index: index, pitchR: pitchR, layout: layout))
+            .rotationEffect(.radians(angle))
+            .position(center)
+            .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(0.35),
+                    radius: layout.module * 0.6, x: 0, y: layout.module * 0.35)
+    }
+
+    /// Closed-form rotation. Telescopes — no per-frame chaining, so no drift.
+    /// rot_i = (-1)^i * (N0 / Ni) * drive + restPhase_i  (+ backlash for i >= 1)
+    private func gearAngle(index: Int, drive: Double, backlash: Double) -> Double {
+        let n0 = Double(GearTrainConfig.teeth[0])
+        let ni = Double(GearTrainConfig.teeth[index])
+        let sign: Double = (index % 2 == 0) ? 1 : -1
+        let ratioRotation = sign * (n0 / ni) * drive
+        let rest = restPhase(index: index)
+        // Backlash only on downstream gears, scaled with ratio so the visual
+        // jiggle magnitude stays roughly uniform across the train.
+        let jiggle = (index == 0) ? 0 : backlash * (n0 / ni)
+        return ratioRotation + rest + jiggle
+    }
+
+    /// Rest (mesh) phase, written against the Path convention that a TOOTH TIP
+    /// sits at local angle 0. Drive gear has zero offset; each downstream gear is
+    /// offset so a VALLEY faces its left neighbor (angle π). Middle-gear odd-parity
+    /// guarantees a tooth TIP simultaneously faces the right neighbor.
+    private func restPhase(index: Int) -> Double {
+        guard index > 0 else { return 0 }
+        let ni = Double(GearTrainConfig.teeth[index])
+        return Double.pi - Double.pi / ni
+    }
+
+    // MARK: Decoration
+
+    private func gearFill(index: Int) -> RadialGradient {
+        let palettes: [(Color, Color)] = [
+            (Color(red: 0.55, green: 0.78, blue: 0.95), Color(red: 0.16, green: 0.34, blue: 0.55)),
+            (Color(red: 0.96, green: 0.74, blue: 0.45), Color(red: 0.55, green: 0.30, blue: 0.12)),
+            (Color(red: 0.62, green: 0.86, blue: 0.66), Color(red: 0.18, green: 0.44, blue: 0.30))
+        ]
+        let pair = palettes[index % palettes.count]
+        return RadialGradient(
+            colors: [pair.0, pair.1],
+            center: .init(x: 0.38, y: 0.34),
+            startRadius: 1,
+            endRadius: 120
+        )
+    }
+
+    @ViewBuilder
+    private func hubDecoration(index: Int, pitchR: CGFloat, layout: GearLayout) -> some View {
+        let hubR = pitchR * 0.42
+        ZStack {
+            Circle()
+                .fill(Color(red: 0.10, green: 0.11, blue: 0.15))
+                .frame(width: hubR * 2, height: hubR * 2)
+            Circle()
+                .strokeBorder(Color(red: 1, green: 1, blue: 1).opacity(0.10),
+                              lineWidth: max(0.8, layout.module * 0.18))
+                .frame(width: hubR * 2, height: hubR * 2)
+            // A spoke marker so rotation is visually unambiguous.
+            Capsule()
+                .fill(Color(red: 1, green: 1, blue: 1).opacity(0.75))
+                .frame(width: max(1.5, layout.module * 0.32), height: pitchR * 0.72)
+                .offset(y: -pitchR * 0.34)
+            Circle()
+                .fill(Color(red: 0.45, green: 0.47, blue: 0.55))
+                .frame(width: hubR * 0.7, height: hubR * 0.7)
+        }
+    }
+
+    /// A faint rotating arc on the drive gear to read as "this is the one you turn".
+    @ViewBuilder
+    private func crankHint(layout: GearLayout, drive: Double) -> some View {
+        let c0 = layout.center(of: 0)
+        let r = layout.outerRadius(of: 0) + layout.module * 0.7
+        Circle()
+            .trim(from: 0, to: 0.16)
+            .stroke(Color(red: 1, green: 1, blue: 1).opacity(0.22),
+                    style: StrokeStyle(lineWidth: max(1, layout.module * 0.25), lineCap: .round))
+            .frame(width: r * 2, height: r * 2)
+            .rotationEffect(.radians(drive))
+            .position(c0)
+    }
+}
+
+// MARK: - Layout: derives module + centers from the available size.
+
+private struct GearLayout {
+    let size: CGSize
+    let module: CGFloat
+    private let centers: [CGPoint]
+
+    init(size: CGSize) {
+        self.size = size
+
+        // Train extent along X = first gear outer radius + Σ center distances +
+        // last gear outer radius. Center distance between meshed gears i,i+1 =
+        // (Ni + N(i+1))/2 * module. Bound module by BOTH width and height.
+        let teeth = GearTrainConfig.teeth
+        var widthUnits: CGFloat = 0
+        widthUnits += CGFloat(teeth.first ?? 12) / 2 + GearTrainConfig.addendum    // first outer
+        widthUnits += CGFloat(teeth.last ?? 9) / 2 + GearTrainConfig.addendum      // last outer
+        for i in 0..<(teeth.count - 1) {
+            widthUnits += CGFloat(teeth[i] + teeth[i + 1]) / 2                      // center gaps
+        }
+        let widthSlack: CGFloat = 2.4
+        let moduleByWidth = size.width / (widthUnits + widthSlack)
+
+        // Height bound: tallest gear diameter = (maxN/2 + addendum) * 2 * module.
+        let heightUnits = (GearTrainConfig.maxTeeth / 2 + GearTrainConfig.addendum) * 2
+        let heightSlack: CGFloat = 1.6
+        let moduleByHeight = size.height / (heightUnits + heightSlack)
+
+        self.module = max(0.5, min(moduleByWidth, moduleByHeight))
+
+        // Build centers, colinear along the mid-height line, centered horizontally.
+        let m = self.module
+        let radii: [CGFloat] = teeth.map { CGFloat($0) / 2 * m }    // pitch radii
+        let add = GearTrainConfig.addendum * m
+        var xs: [CGFloat] = []
+        var cursor: CGFloat = 0
+        for i in radii.indices {
+            if i == 0 {
+                cursor = add + radii[0]
+            } else {
+                cursor += radii[i - 1] + radii[i]                   // center distance
+            }
+            xs.append(cursor)
+        }
+        let trainWidth = (xs.last ?? 0) + (radii.last ?? 0) + add
+        let leftPad = (size.width - trainWidth) / 2
+        let midY = size.height / 2
+        self.centers = xs.map { CGPoint(x: leftPad + $0, y: midY) }
+    }
+
+    func center(of index: Int) -> CGPoint {
+        guard centers.indices.contains(index) else {
+            return CGPoint(x: size.width / 2, y: size.height / 2)
+        }
+        return centers[index]
+    }
+
+    func pitchRadius(of index: Int) -> CGFloat {
+        CGFloat(GearTrainConfig.teeth[index]) / 2 * module
+    }
+
+    func outerRadius(of index: Int) -> CGFloat {
+        pitchRadius(of: index) + GearTrainConfig.addendum * module
+    }
+}
+
+// MARK: - Gear shape (Path convention: a TOOTH TIP is centered at local angle 0).
+
+private struct Gear: Shape {
+    let teeth: Int
+    let pitchRadius: CGFloat
+    let module: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let n = max(4, teeth)
+        let rPitch = pitchRadius
+        let rOuter = rPitch + module * GearTrainConfig.addendum                       // tip radius
+        let rRoot = max(module, rPitch - module * GearTrainConfig.addendum * 1.05)     // dedendum
+
+        // Each tooth spans one pitch = 2π/n. Per pitch we draw, in order:
+        // [tip-flat | down-flank | root-flat | up-flank], with the TIP centered at
+        // the tooth's nominal angle so tooth k=0's tip sits exactly at local angle 0.
+        let pitch = (2 * Double.pi) / Double(n)
+        let tipHalf = pitch * 0.20      // half-width of the flat tooth tip
+        let rootHalf = pitch * 0.20     // half-width of the flat valley
+
+        var path = Path()
+        for k in 0..<n {
+            let toothCenter = pitch * Double(k)     // tip centered here (k=0 → angle 0)
+
+            let aTipStart = toothCenter - tipHalf
+            let aTipEnd = toothCenter + tipHalf
+            let aRootStart = toothCenter + tipHalf + (pitch / 2 - tipHalf - rootHalf)
+            let aRootEnd = aRootStart + 2 * rootHalf
+
+            let pTipStart = point(center, rOuter, aTipStart)
+            if k == 0 {
+                path.move(to: pTipStart)
+            } else {
+                path.addLine(to: pTipStart)         // up-flank from previous valley
+            }
+            path.addLine(to: point(center, rOuter, aTipEnd))    // tip flat
+            path.addLine(to: point(center, rRoot, aRootStart))  // down flank
+            path.addLine(to: point(center, rRoot, aRootEnd))    // root flat
+            // Up-flank to the next tip start is drawn by the next iteration
+            // (or by closeSubpath for the final tooth back to k == 0).
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    private func point(_ c: CGPoint, _ r: CGFloat, _ angle: Double) -> CGPoint {
+        CGPoint(x: c.x + r * CGFloat(cos(angle)),
+                y: c.y + r * CGFloat(sin(angle)))
+    }
+}
+
+// MARK: - Demo crank script (forward → dwell → reverse → dwell), firing a backlash
+// impulse at each reversal. Period ~3.4s. Never blank: gears are always visible.
+
+private enum DemoCrank {
+    static let period: Double = 3.4
+
+    struct Phase { let angle: Double; let backlash: Double }
+
+    static func drive(at time: Double) -> Phase {
+        let t = time.truncatingRemainder(dividingBy: period)
+        let u = t / period                      // 0..1
+
+        let span: Double = 2.6 * .pi            // total forward sweep in radians
+
+        let angle: Double
+        let pulse: Double
+        if u < 0.40 {
+            let p = u / 0.40
+            angle = span * easeInOut(p)
+            pulse = 0
+        } else if u < 0.50 {
+            angle = span
+            pulse = reversalPulse((u - 0.40) / 0.10)   // top dwell → jiggle in
+        } else if u < 0.90 {
+            let p = (u - 0.50) / 0.40
+            angle = span * (1 - easeInOut(p))
+            pulse = 0
+        } else {
+            angle = 0
+            pulse = reversalPulse((u - 0.90) / 0.10)   // bottom dwell → jiggle in
+        }
+
+        // Backlash transient expressed in DRIVE units (gearAngle re-scales by ratio).
+        let n0 = Double(GearTrainConfig.teeth[0])
+        let smallest = Double(GearTrainConfig.teeth.dropFirst().min() ?? 9)
+        let cap = (Double.pi / smallest) * 0.26 / (n0 / smallest)
+        let dir: Double = (u >= 0.40 && u < 0.50) ? -1 : 1
+        let backlash = dir * cap * pulse
+
+        return Phase(angle: angle, backlash: backlash)
+    }
+
+    /// A decaying oscillation over a 0..1 window (1 at start, ringing down to 0).
+    private static func reversalPulse(_ x: Double) -> Double {
+        let clamped = min(max(x, 0), 1)
+        let decay = exp(-4.0 * clamped)
+        let ring = cos(clamped * 2 * Double.pi * 1.5)
+        return decay * ring
+    }
+
+    private static func easeInOut(_ x: Double) -> Double {
+        let c = min(max(x, 0), 1)
+        return c * c * (3 - 2 * c)
+    }
+}
+"""###,
         "ges-rubberband-sheet-morph": ###"""
 //
 //  RubberBandSheetMorphView.swift

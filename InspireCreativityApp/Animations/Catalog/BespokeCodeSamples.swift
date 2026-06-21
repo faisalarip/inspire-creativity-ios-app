@@ -38724,6 +38724,454 @@ private struct DepthStackPushView_Background: View {
     }
 }
 """###,
+        "tr-drawer-cascade": ###"""
+import SwiftUI
+
+/// Drawer Cascade — stacked horizontal drawer panels slide open sequentially from a
+/// closed cabinet, each sliding out further than the last with deepening drop-shadows,
+/// the open drawers revealing the destination content behind them.
+///
+/// - demo == true:  self-driving loop. A TimelineView(.animation) walks a continuous
+///   0→1→0 triangle wave; each drawer reads a staggered sub-range of that progress so
+///   the cascade pulls out one after another, then retracts, forever. Never blank.
+/// - demo == false: real interactive component. An onTapGesture toggles `isOpen`, and
+///   each panel carries its own `.delay(index * stagger)` spring so the open animation
+///   genuinely cascades down the stack.
+struct DrawerCascadeView: View {
+    var demo: Bool = false
+
+    private let drawerCount: Int = 5
+
+    var body: some View {
+        GeometryReader { geo in
+            content(size: geo.size)
+                .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(size: CGSize) -> some View {
+        if demo {
+            DrawerCascadeView_DemoCabinet(size: size, drawerCount: drawerCount)
+        } else {
+            DrawerCascadeView_InteractiveCabinet(size: size, drawerCount: drawerCount)
+        }
+    }
+}
+
+// MARK: - Demo (self-driving)
+
+private struct DrawerCascadeView_DemoCabinet: View {
+    let size: CGSize
+    let drawerCount: Int
+
+    private let loop: Double = 3.2
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let phase = (t.truncatingRemainder(dividingBy: loop)) / loop
+            // Smooth 0→1→0 triangle, eased so the ends linger (drawers fully out / fully in).
+            let raw = triangle(phase)
+            let p = ease(raw)
+            DrawerCascadeView_Cabinet(size: size, drawerCount: drawerCount) { index in
+                staggeredProgress(globalProgress: p, index: index)
+            }
+        }
+    }
+
+    /// Triangle wave 0→1→0 over a unit phase.
+    private func triangle(_ x: Double) -> Double {
+        x < 0.5 ? x * 2.0 : (1.0 - x) * 2.0
+    }
+
+    /// Smoothstep easing so motion settles at both ends.
+    private func ease(_ x: Double) -> Double {
+        let c = min(max(x, 0.0), 1.0)
+        return c * c * (3.0 - 2.0 * c)
+    }
+
+    /// Map the single global progress to a per-drawer sub-range so each drawer leads
+    /// the one above it — the cascade.
+    private func staggeredProgress(globalProgress p: Double, index: Int) -> Double {
+        let stagger: Double = 0.10
+        let window: Double = 1.0 - stagger * Double(max(drawerCount - 1, 1))
+        let start = Double(index) * stagger
+        let local = (p - start) / max(window, 0.0001)
+        return min(max(local, 0.0), 1.0)
+    }
+}
+
+// MARK: - Interactive (tap to toggle)
+
+private struct DrawerCascadeView_InteractiveCabinet: View {
+    let size: CGSize
+    let drawerCount: Int
+
+    @State private var isOpen: Bool = false
+
+    var body: some View {
+        DrawerCascadeView_Cabinet(size: size, drawerCount: drawerCount, perDrawerDelay: { index in
+            // Top drawer leads; lower drawers follow. This is what gives the cascade
+            // under a single isOpen toggle (the spring delay differs per panel).
+            Double(index) * 0.075
+        }, targetProgress: { _ in
+            isOpen ? 1.0 : 0.0
+        })
+        .contentShape(Rectangle())
+        .onTapGesture {
+            isOpen.toggle()
+        }
+    }
+}
+
+// MARK: - Shared cabinet + drawer stack
+
+private struct DrawerCascadeView_Cabinet: View {
+    let size: CGSize
+    let drawerCount: Int
+
+    /// Demo path: continuous progress already computed per index.
+    var demoProgress: ((Int) -> Double)? = nil
+
+    /// Interactive path: a per-index spring delay + a target (0/1) the panel animates toward.
+    var perDrawerDelay: ((Int) -> Double)? = nil
+    var targetProgress: ((Int) -> Double)? = nil
+
+    init(size: CGSize,
+         drawerCount: Int,
+         demoProgress: @escaping (Int) -> Double) {
+        self.size = size
+        self.drawerCount = drawerCount
+        self.demoProgress = demoProgress
+    }
+
+    init(size: CGSize,
+         drawerCount: Int,
+         perDrawerDelay: @escaping (Int) -> Double,
+         targetProgress: @escaping (Int) -> Double) {
+        self.size = size
+        self.drawerCount = drawerCount
+        self.perDrawerDelay = perDrawerDelay
+        self.targetProgress = targetProgress
+    }
+
+    private var inset: CGFloat { size.width * 0.10 }
+    private var cabinetWidth: CGFloat { size.width - inset * 2 }
+    private var cabinetHeight: CGFloat { size.height - inset * 2 }
+    private var corner: CGFloat { max(size.width * 0.06, 6) }
+
+    private var slotGap: CGFloat { cabinetHeight * 0.04 }
+    private var drawerHeight: CGFloat {
+        let gaps = slotGap * CGFloat(drawerCount + 1)
+        return (cabinetHeight - gaps) / CGFloat(drawerCount)
+    }
+    private var drawerWidth: CGFloat { cabinetWidth * 0.82 }
+
+    /// Maximum horizontal pull for a given index — lower drawers pull further.
+    private func maxPull(for index: Int) -> CGFloat {
+        let base = cabinetWidth * 0.16
+        let step = cabinetWidth * 0.052
+        return base + step * CGFloat(index)
+    }
+
+    var body: some View {
+        ZStack {
+            DrawerCascadeView_CabinetShell(corner: corner)
+                .frame(width: cabinetWidth, height: cabinetHeight)
+
+            DrawerCascadeView_DrawerColumn(
+                size: size,
+                drawerCount: drawerCount,
+                drawerWidth: drawerWidth,
+                drawerHeight: drawerHeight,
+                slotGap: slotGap,
+                cabinetHeight: cabinetHeight,
+                corner: corner * 0.7,
+                maxPull: maxPull,
+                demoProgress: demoProgress,
+                perDrawerDelay: perDrawerDelay,
+                targetProgress: targetProgress
+            )
+            .frame(width: cabinetWidth, height: cabinetHeight)
+        }
+        .frame(width: size.width, height: size.height)
+    }
+}
+
+private struct DrawerCascadeView_CabinetShell: View {
+    let corner: CGFloat
+
+    private var bodyColor: Color { Color(red: 0.10, green: 0.12, blue: 0.17) }
+    private var frameTop: Color { Color(red: 0.18, green: 0.21, blue: 0.28) }
+    private var frameBottom: Color { Color(red: 0.07, green: 0.08, blue: 0.12) }
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [frameTop, frameBottom],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .strokeBorder(Color(red: 0.30, green: 0.34, blue: 0.44).opacity(0.7),
+                              lineWidth: 1)
+            // Interior cavity — the dark space the drawers reveal.
+            RoundedRectangle(cornerRadius: corner * 0.8, style: .continuous)
+                .fill(bodyColor)
+                .padding(corner * 0.55)
+        }
+    }
+}
+
+private struct DrawerCascadeView_DrawerColumn: View {
+    let size: CGSize
+    let drawerCount: Int
+    let drawerWidth: CGFloat
+    let drawerHeight: CGFloat
+    let slotGap: CGFloat
+    let cabinetHeight: CGFloat
+    let corner: CGFloat
+    let maxPull: (Int) -> CGFloat
+
+    var demoProgress: ((Int) -> Double)?
+    var perDrawerDelay: ((Int) -> Double)?
+    var targetProgress: ((Int) -> Double)?
+
+    var body: some View {
+        // Top drawer (index 0) is highest in the stack; deeper drawers (higher index)
+        // are drawn later so they layer above when pulled — biggest shadow on top.
+        ZStack {
+            ForEach(0..<drawerCount, id: \.self) { index in
+                panel(index: index)
+            }
+        }
+        .frame(width: drawerWidth, height: cabinetHeight, alignment: .center)
+    }
+
+    private func yOffset(for index: Int) -> CGFloat {
+        let totalDrawerSpan = drawerHeight * CGFloat(drawerCount)
+            + slotGap * CGFloat(drawerCount - 1)
+        let top = -totalDrawerSpan / 2 + drawerHeight / 2
+        return top + CGFloat(index) * (drawerHeight + slotGap)
+    }
+
+    @ViewBuilder
+    private func panel(index: Int) -> some View {
+        let reveal = DrawerCascadeView_RevealSlot(
+            width: drawerWidth,
+            height: drawerHeight,
+            corner: corner
+        )
+        .offset(y: yOffset(for: index))
+
+        let drawer = drawerView(index: index)
+
+        ZStack {
+            reveal
+            drawer
+        }
+    }
+
+    @ViewBuilder
+    private func drawerView(index: Int) -> some View {
+        if let demoProgress {
+            let p = CGFloat(demoProgress(index))
+            DrawerCascadeView_DrawerPanel(
+                index: index,
+                width: drawerWidth,
+                height: drawerHeight,
+                corner: corner,
+                pull: maxPull(index) * p,
+                openness: p
+            )
+            .offset(y: yOffset(for: index))
+        } else if let target = targetProgress, let delay = perDrawerDelay {
+            DrawerCascadeView_AnimatedDrawer(
+                index: index,
+                width: drawerWidth,
+                height: drawerHeight,
+                corner: corner,
+                maxPull: maxPull(index),
+                yOffset: yOffset(for: index),
+                target: CGFloat(target(index)),
+                delay: delay(index)
+            )
+        }
+    }
+}
+
+/// Interactive wrapper: animates its own progress toward `target` with a per-index
+/// spring delay so a single isOpen toggle still cascades.
+private struct DrawerCascadeView_AnimatedDrawer: View {
+    let index: Int
+    let width: CGFloat
+    let height: CGFloat
+    let corner: CGFloat
+    let maxPull: CGFloat
+    let yOffset: CGFloat
+    let target: CGFloat
+    let delay: Double
+
+    var body: some View {
+        DrawerCascadeView_DrawerPanel(
+            index: index,
+            width: width,
+            height: height,
+            corner: corner,
+            pull: maxPull * target,
+            openness: target
+        )
+        .offset(y: yOffset)
+        .animation(
+            .spring(response: 0.55, dampingFraction: 0.76).delay(delay),
+            value: target
+        )
+    }
+}
+
+/// The dark recessed slot a drawer sits in; visible (revealed) once the drawer slides out.
+private struct DrawerCascadeView_RevealSlot: View {
+    let width: CGFloat
+    let height: CGFloat
+    let corner: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.05, green: 0.06, blue: 0.09),
+                        Color(red: 0.02, green: 0.02, blue: 0.04)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay(
+                // A hint of "contents" inside the cabinet behind the drawer.
+                RoundedRectangle(cornerRadius: corner * 0.7, style: .continuous)
+                    .fill(Color(red: 0.16, green: 0.45, blue: 0.62).opacity(0.28))
+                    .padding(.horizontal, width * 0.06)
+                    .padding(.vertical, height * 0.22)
+            )
+            .frame(width: width, height: height)
+    }
+}
+
+/// One drawer face. `pull` is the horizontal slide-out distance (always >= 0),
+/// `openness` (0…1) drives shadow depth, handle highlight, and edge shading.
+private struct DrawerCascadeView_DrawerPanel: View {
+    let index: Int
+    let width: CGFloat
+    let height: CGFloat
+    let corner: CGFloat
+    let pull: CGFloat
+    let openness: CGFloat
+
+    private var faceTop: Color { Color(red: 0.34, green: 0.40, blue: 0.52) }
+    private var faceBottom: Color { Color(red: 0.20, green: 0.24, blue: 0.33) }
+    private var edgeColor: Color { Color(red: 0.46, green: 0.53, blue: 0.66) }
+
+    // Deeper drawers cast heavier shadows; the pull amount deepens it further.
+    private var shadowRadius: CGFloat {
+        let base: CGFloat = 1.5
+        let perIndex: CGFloat = 1.4
+        let perOpen: CGFloat = 9.0
+        return base + perIndex * CGFloat(index) + perOpen * openness
+    }
+
+    private var shadowYOffset: CGFloat {
+        2.0 + 4.0 * openness + CGFloat(index)
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [faceTop, faceBottom],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay(topSheen)
+            .overlay(handle)
+            .overlay(leadingEdge)
+            .overlay(
+                RoundedRectangle(cornerRadius: corner, style: .continuous)
+                    .strokeBorder(edgeColor.opacity(0.55), lineWidth: 0.8)
+            )
+            .frame(width: width, height: height)
+            .shadow(
+                color: Color.black.opacity(0.35 + 0.30 * Double(openness)),
+                radius: shadowRadius,
+                x: -shadowRadius * 0.35,
+                y: shadowYOffset
+            )
+            .offset(x: pull)
+    }
+
+    // Soft highlight across the top of the drawer face.
+    private var topSheen: some View {
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.white.opacity(0.18),
+                        Color.white.opacity(0.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .center
+                )
+            )
+    }
+
+    // Pill handle, centered; brightens slightly as the drawer opens.
+    private var handle: some View {
+        Capsule(style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.62, green: 0.70, blue: 0.84)
+                            .opacity(0.75 + 0.25 * Double(openness)),
+                        Color(red: 0.30, green: 0.36, blue: 0.47)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: width * 0.30, height: max(height * 0.16, 3))
+            .overlay(
+                Capsule(style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.30), lineWidth: 0.6)
+            )
+    }
+
+    // The leading (right) edge picks up a brighter rim as it emerges from the cabinet.
+    private var leadingEdge: some View {
+        HStack {
+            Spacer()
+            RoundedRectangle(cornerRadius: corner * 0.5, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            edgeColor.opacity(0.0),
+                            edgeColor.opacity(0.55 * Double(openness) + 0.10)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: width * 0.10)
+        }
+        .padding(2)
+    }
+}
+"""###,
         "tr-fan-deck": ###"""
 import SwiftUI
 
@@ -39347,6 +39795,5637 @@ private struct FlipBookView_PageFace: View {
     }
 }
 """###,
+        "tr-fold-accordion": ###"""
+import SwiftUI
+
+/// Fold-Down Accordion
+///
+/// Stacked list rows concertina-collapse along shared horizontal hinges. Each row
+/// folds flat (rotation3DEffect about its top edge on the .x axis with a perspective
+/// anchor) while its layout slot shrinks, so the whole stack compresses up into a
+/// single always-visible header. A per-row darkening LinearGradient hinge overlay
+/// fades in at each crease so the collapse reads as one continuous folding ribbon.
+///
+/// - demo == true:  a PhaseAnimator auto-cycles the collapse progress 0->1->0 so the
+///                  rows concertina shut into the header then unfold continuously.
+/// - demo == false: tapping the header toggles `collapsed`, driving the collapse via
+///                  withAnimation(.spring); per-row hinge angles interpolate from the
+///                  single progress with staggered offsets.
+struct FoldAccordionView: View {
+    var demo: Bool = false
+
+    @State private var collapsed: Bool = false
+
+    private let rowCount: Int = 5
+
+    var body: some View {
+        GeometryReader { geo in
+            content(size: geo.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(size: CGSize) -> some View {
+        if demo {
+            PhaseAnimator([0.0, 1.0]) { phase in
+                accordion(progress: CGFloat(phase), size: size)
+            } animation: { _ in
+                .easeInOut(duration: 1.6)
+            }
+        } else {
+            accordion(progress: collapsed ? 1 : 0, size: size)
+        }
+    }
+
+    // MARK: - Layout
+
+    private func accordion(progress: CGFloat, size: CGSize) -> some View {
+        let metrics = layoutMetrics(for: size)
+        return VStack(spacing: metrics.gap) {
+            ForEach(0..<rowCount, id: \.self) { index in
+                row(index: index, progress: progress, metrics: metrics)
+            }
+            header(progress: progress, metrics: metrics)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(.horizontal, metrics.sidePadding)
+        .padding(.vertical, metrics.sidePadding)
+        .contentShape(Rectangle())
+    }
+
+    struct Metrics {
+        var rowHeight: CGFloat
+        var headerHeight: CGFloat
+        var gap: CGFloat
+        var corner: CGFloat
+        var sidePadding: CGFloat
+        var fontSize: CGFloat
+    }
+
+    private func layoutMetrics(for size: CGSize) -> Metrics {
+        let minSide = min(size.width, size.height)
+        let scale = minSide / 120.0
+        let pad = max(4.0, 6.0 * scale)
+        let usableHeight = max(40.0, size.height - pad * 2)
+        // Reserve a share for the header; rows split the remainder.
+        let headerH = usableHeight * 0.20
+        let gap = max(1.0, 1.5 * scale)
+        let totalGap = gap * CGFloat(rowCount)
+        let rowsH = distributedRowHeight(count: rowCount, available: usableHeight - headerH - totalGap)
+        return Metrics(
+            rowHeight: rowsH,
+            headerHeight: headerH,
+            gap: gap,
+            corner: max(3.0, 6.0 * scale),
+            sidePadding: pad,
+            fontSize: max(7.0, 9.0 * scale)
+        )
+    }
+
+    private func distributedRowHeight(count: Int, available: CGFloat) -> CGFloat {
+        Swift.max(8.0, available / CGFloat(count))
+    }
+
+    // MARK: - Staggered fold
+
+    /// Bottom row folds first so the stack zips up into the header.
+    /// Returns 0 (open / face-on) ... 1 (fully folded / edge-on) for a given row.
+    private func localFold(index: Int, progress: CGFloat) -> CGFloat {
+        let n = CGFloat(rowCount)
+        // Fold order: last row (n-1) starts first, first row last.
+        let order = n - 1 - CGFloat(index)
+        // Each row gets a window; windows overlap for a continuous ribbon feel.
+        let window: CGFloat = 0.55
+        let span = Swift.max(0.0001, 1.0 - window)
+        let start = (order / Swift.max(1, n - 1)) * span
+        let raw = (progress - start) / window
+        return clamp(raw)
+    }
+
+    private func clamp(_ v: CGFloat) -> CGFloat {
+        Swift.min(1.0, Swift.max(0.0, v))
+    }
+
+    // MARK: - Row
+
+    private func row(index: Int, progress: CGFloat, metrics: Metrics) -> some View {
+        let fold = localFold(index: index, progress: progress)
+        let angle = Double(fold) * 88.0          // fold flat against the next row
+        let collapsedHeight = metrics.rowHeight * (1.0 - fold)
+        let tint = rowTint(index: index)
+
+        return rowFace(index: index, tint: tint, metrics: metrics, fold: fold)
+            // Hinge crease shadow: darkens toward the top edge as the row folds.
+            .overlay(hingeShadow(corner: metrics.corner).opacity(Double(fold) * 0.9))
+            // Edge-on dimming so the folded face reads as in-shadow.
+            .brightness(-0.18 * Double(fold))
+            .rotation3DEffect(
+                .degrees(angle),
+                axis: (x: 1, y: 0, z: 0),
+                anchor: .top,
+                anchorZ: 0,
+                perspective: 0.55
+            )
+            // Collapse the layout slot so the VStack shrinks upward into the header.
+            .frame(height: Swift.max(0.5, collapsedHeight), alignment: .top)
+            .zIndex(Double(rowCount - index))    // upper rows sit above lower ones
+    }
+
+    private func rowFace(index: Int, tint: Color, metrics: Metrics, fold: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: metrics.corner, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [tint.opacity(0.96), tint.opacity(0.74)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay(alignment: .leading) {
+                rowContent(index: index, metrics: metrics)
+                    .opacity(1.0 - Double(fold) * 0.85)
+            }
+            .frame(height: metrics.rowHeight, alignment: .top)
+    }
+
+    private func rowContent(index: Int, metrics: Metrics) -> some View {
+        HStack(spacing: metrics.fontSize * 0.6) {
+            Circle()
+                .fill(Color(red: 0.55, green: 0.78, blue: 1.0).opacity(0.85))
+                .frame(width: metrics.fontSize * 0.9, height: metrics.fontSize * 0.9)
+            VStack(alignment: .leading, spacing: metrics.fontSize * 0.28) {
+                Capsule()
+                    .fill(Color.white.opacity(0.82))
+                    .frame(width: metrics.fontSize * 5.5, height: metrics.fontSize * 0.42)
+                Capsule()
+                    .fill(Color.white.opacity(0.42))
+                    .frame(width: metrics.fontSize * 3.2, height: metrics.fontSize * 0.36)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, metrics.fontSize * 0.8)
+    }
+
+    private func hingeShadow(corner: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(0.85),
+                        Color.black.opacity(0.30),
+                        Color.clear
+                    ],
+                    startPoint: .top,
+                    endPoint: .center
+                )
+            )
+            .allowsHitTesting(false)
+    }
+
+    // MARK: - Header (always opaque, drawn last / on top)
+
+    private func header(progress: CGFloat, metrics: Metrics) -> some View {
+        let chevronAngle = Double(progress) * 180.0
+        return RoundedRectangle(cornerRadius: metrics.corner, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.16, green: 0.20, blue: 0.30),
+                        Color(red: 0.09, green: 0.11, blue: 0.17)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .overlay(alignment: .top) {
+                // Subtle top highlight so the header reads as the lid the rows fold under.
+                RoundedRectangle(cornerRadius: metrics.corner, style: .continuous)
+                    .stroke(Color.white.opacity(0.12), lineWidth: 0.6)
+            }
+            .overlay {
+                headerContent(angle: chevronAngle, metrics: metrics)
+            }
+            .frame(height: metrics.headerHeight)
+            .shadow(color: Color.black.opacity(0.35), radius: metrics.corner, x: 0, y: -1)
+            .zIndex(Double(rowCount + 1))
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard !demo else { return }
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.74)) {
+                    collapsed.toggle()
+                }
+            }
+    }
+
+    private func headerContent(angle: Double, metrics: Metrics) -> some View {
+        HStack(spacing: metrics.fontSize * 0.5) {
+            Capsule()
+                .fill(Color(red: 0.55, green: 0.78, blue: 1.0))
+                .frame(width: metrics.fontSize * 4.0, height: metrics.fontSize * 0.5)
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.down")
+                .font(.system(size: metrics.fontSize, weight: .bold))
+                .foregroundStyle(Color.white.opacity(0.85))
+                .rotationEffect(.degrees(angle))
+        }
+        .padding(.horizontal, metrics.fontSize * 0.9)
+    }
+
+    // MARK: - Colors
+
+    private func rowTint(index: Int) -> Color {
+        let palette: [Color] = [
+            Color(red: 0.31, green: 0.46, blue: 0.92),
+            Color(red: 0.42, green: 0.40, blue: 0.90),
+            Color(red: 0.55, green: 0.36, blue: 0.86),
+            Color(red: 0.66, green: 0.34, blue: 0.74),
+            Color(red: 0.78, green: 0.36, blue: 0.62)
+        ]
+        return palette[index % palette.count]
+    }
+}
+"""###,
+        "tr-genie-warp": ###"""
+import SwiftUI
+
+/// Genie Warp — the outgoing card squeezes and stretches into a narrowing
+/// tapered neck that sucks down toward a dock point, like the macOS
+/// minimize-to-Dock genie effect. Built with pure SwiftUI by slicing the
+/// content into horizontal strips and giving each strip its own horizontal
+/// scale (anchored at the dock column) plus a downward descent, so the
+/// content genuinely bends along the warp curve instead of merely being
+/// clipped by a genie-shaped hole.
+///
+/// - `demo == true`  → a self-driving loop that sucks the card down to a
+///   tapering neck and springs it back out forever, never going blank.
+/// - `demo == false` → tap the card to minimize it toward the dock, tap
+///   again (or tap the dock) to restore it.
+struct GenieWarpView: View {
+    var demo: Bool = false
+
+    // Interactive state.
+    @State private var minimized: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        if demo {
+            demoBody(size: size)
+        } else {
+            interactiveBody(size: size)
+        }
+    }
+
+    // MARK: - Demo (self-driving)
+
+    @ViewBuilder
+    private func demoBody(size: CGSize) -> some View {
+        // PhaseAnimator (no trigger) auto-loops through the phases forever; the
+        // spring between phases gives the suck-down and spring-back its tactile
+        // feel. We clamp the peak below 1 so the neck never fully vanishes
+        // (always legible) and dwell at each end so the loop breathes.
+        PhaseAnimator(GenieWarpView_GeniePhase.allCases) { phase in
+            GenieWarpView_GenieStage(progress: phase.progress, dockPoint: dockPoint(in: size), size: size)
+        } animation: { phase in
+            switch phase {
+            case .rest:        return .spring(response: 0.6, dampingFraction: 0.82)
+            case .restHold:    return .easeInOut(duration: 0.7)
+            case .minimized:   return .spring(response: 0.7, dampingFraction: 0.85)
+            case .minimizedHold: return .easeInOut(duration: 0.7)
+            }
+        }
+    }
+
+    // MARK: - Interactive
+
+    @ViewBuilder
+    private func interactiveBody(size: CGSize) -> some View {
+        GenieWarpView_GenieStage(progress: minimized ? 0.92 : 0.0,
+                   dockPoint: dockPoint(in: size),
+                   size: size)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                    minimized.toggle()
+                }
+            }
+    }
+
+    // MARK: - Geometry
+
+    /// The dock point lives at bottom-centre, derived from the live size so it
+    /// works in a 120pt tile and a large detail area alike.
+    private func dockPoint(in size: CGSize) -> CGPoint {
+        CGPoint(x: size.width * 0.5, y: size.height * 0.93)
+    }
+}
+
+// MARK: - Phases
+
+private enum GenieWarpView_GeniePhase: CaseIterable {
+    case rest          // full card at rest
+    case minimized     // sucked down into the dock neck
+    case minimizedHold // dwell at the dock
+    case restHold      // dwell back at rest before repeating
+
+    var progress: Double {
+        switch self {
+        case .rest, .restHold:           return 0.0
+        case .minimized, .minimizedHold: return 0.92  // clamped < 1 so the neck never vanishes
+        }
+    }
+}
+
+// MARK: - Stage (animatable container)
+
+/// Renders the warped card for a given `progress`. `progress` is the single
+/// animatable value (0 = full card at rest, 1 = fully sucked into the dock).
+/// Animating it produces smooth, continuous interpolation of every strip.
+private struct GenieWarpView_GenieStage: View, Animatable {
+    var progress: Double
+    var dockPoint: CGPoint
+    var size: CGSize
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    var body: some View {
+        ZStack {
+            backdrop
+            dockGlow
+            GenieWarpView_GenieWarpedCard(progress: clampedProgress,
+                            dockPoint: dockPoint,
+                            size: size)
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    private var clampedProgress: Double {
+        min(max(progress, 0.0), 1.0)
+    }
+
+    // Soft dark stage so the warped card and dock read clearly.
+    private var backdrop: some View {
+        RoundedRectangle(cornerRadius: 0, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.05, green: 0.06, blue: 0.10),
+                        Color(red: 0.02, green: 0.02, blue: 0.05)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+    }
+
+    // Persistent glowing dock dot — always visible so the tile never reads as
+    // blank, and it brightens as the card arrives.
+    private var dockGlow: some View {
+        let dim: CGFloat = max(6, min(size.width, size.height) * 0.06)
+        let intensity: Double = 0.35 + 0.65 * clampedProgress
+        return ZStack {
+            Circle()
+                .fill(Color(red: 0.45, green: 0.75, blue: 1.0))
+                .frame(width: dim * 2.4, height: dim * 2.4)
+                .blur(radius: dim)
+                .opacity(0.28 * intensity)
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.78, green: 0.90, blue: 1.0),
+                            Color(red: 0.30, green: 0.62, blue: 0.98)
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: dim * 0.6
+                    )
+                )
+                .frame(width: dim, height: dim)
+                .opacity(0.55 + 0.45 * clampedProgress)
+        }
+        .position(dockPoint)
+    }
+}
+
+// MARK: - Warped card
+
+/// Slices a card into horizontal strips and warps each one. The taper is a
+/// smoothstep over the strip's normalized y, and the descent is a second
+/// smoothstep — both continuous functions of `progress`, so there is no
+/// velocity discontinuity (no mid-warp kink).
+private struct GenieWarpView_GenieWarpedCard: View {
+    var progress: Double
+    var dockPoint: CGPoint
+    var size: CGSize
+
+    var body: some View {
+        let metrics = GenieWarpView_CardMetrics(size: size)
+        let stripCount = stripCount(for: size)
+
+        ZStack {
+            ForEach(0..<stripCount, id: \.self) { index in
+                stripView(index: index, count: stripCount, metrics: metrics)
+            }
+        }
+        // Fade the whole warped body slightly as it bottoms out so the dock
+        // dot becomes the focal point, but never to zero (stays legible).
+        .opacity(0.55 + 0.45 * (1.0 - smoothstep(0.78, 1.0, progress)))
+    }
+
+    // MARK: Strip
+
+    @ViewBuilder
+    private func stripView(index: Int, count: Int, metrics: GenieWarpView_CardMetrics) -> some View {
+        // Normalized vertical centre of this strip within the card (0 = top).
+        let yNorm: CGFloat = (CGFloat(index) + 0.5) / CGFloat(count)
+
+        // A tiny overlap removes hairline seams between adjacent strips.
+        let bandHeight: CGFloat = metrics.height / CGFloat(count)
+        let overlap: CGFloat = min(1.0, bandHeight * 0.18)
+        let drawHeight: CGFloat = bandHeight + overlap
+
+        // Where this strip's centre sits before warping (card-local space).
+        let restCenterY: CGFloat = metrics.minY + bandHeight * (CGFloat(index) + 0.5)
+
+        // --- Warp factors (all smooth functions of progress) ---
+
+        // Horizontal narrowing: lower strips (closer to the dock) narrow more,
+        // and the whole thing narrows as progress rises. smoothstep avoids the
+        // piecewise-linear kink.
+        let neckLead: Double = smoothstep(0.0, 0.85, progress)
+        let depthBias: Double = Double(smoothstep(0.0, 1.0, yNorm)) // bottom narrows first
+        let widthFactor: CGFloat = widthFactor(neckLead: neckLead, depthBias: depthBias)
+
+        // Vertical descent: strips slide toward the dock; the bottom leads so
+        // the card bunches as it pours in. Second smoothstep, phase-shifted but
+        // still continuous, so neck-leads-descent reads without a kink.
+        let descentP: Double = smoothstep(0.06, 1.0, progress)
+        let targetY: CGFloat = dockPoint.y
+        let pull: CGFloat = CGFloat(descentP) * (0.55 + 0.45 * CGFloat(depthBias))
+        let centerY: CGFloat = restCenterY + (targetY - restCenterY) * pull
+
+        // Horizontal slide of the strip's centre toward the dock column.
+        let restCenterX: CGFloat = size.width * 0.5
+        let centerX: CGFloat = restCenterX + (dockPoint.x - restCenterX) * CGFloat(descentP)
+
+        // Slight vertical squash on lower strips as they bunch into the dock.
+        let vSquash: CGFloat = 1.0 - CGFloat(descentP) * 0.35 * CGFloat(depthBias)
+
+        cardBand(metrics: metrics, drawHeight: drawHeight, bandTop: restCenterY - drawHeight / 2)
+            .frame(width: metrics.width, height: drawHeight)
+            // Narrow horizontally toward the dock x-column, anchored so the
+            // silhouette converges into a neck at the dock point.
+            .scaleEffect(x: widthFactor, y: vSquash, anchor: .center)
+            .position(x: centerX, y: centerY)
+    }
+
+    /// One horizontal band of the card content, clipped to its band so the
+    /// strip shows the correct slice of the same artwork.
+    @ViewBuilder
+    private func cardBand(metrics: GenieWarpView_CardMetrics, drawHeight: CGFloat, bandTop: CGFloat) -> some View {
+        GenieWarpView_CardArtwork(metrics: metrics)
+            .frame(width: metrics.width, height: metrics.height)
+            // Shift the full artwork up so this band's slice sits in view, then
+            // clip to the band height. This keeps every strip a faithful slice
+            // of one continuous image.
+            .offset(y: -(bandTop - metrics.minY))
+            .frame(width: metrics.width, height: drawHeight, alignment: .top)
+            .clipped()
+    }
+
+    // MARK: Factors
+
+    private func widthFactor(neckLead: Double, depthBias: Double) -> CGFloat {
+        // Minimum width is clamped so the neck stays a thin ribbon rather than
+        // collapsing to literally zero (never fully blank).
+        let minWidth: CGFloat = 0.10
+        let narrowing: CGFloat = CGFloat(neckLead) * (0.55 + 0.45 * CGFloat(depthBias))
+        return max(minWidth, 1.0 - narrowing)
+    }
+
+    private func stripCount(for size: CGSize) -> Int {
+        // Adapt density to size: fewer strips keep a tiny tile clean, more
+        // strips keep a large detail view smooth.
+        let h = size.height
+        if h < 160 { return 14 }
+        if h < 320 { return 20 }
+        return 28
+    }
+}
+
+// MARK: - Card metrics
+
+private struct GenieWarpView_CardMetrics {
+    let size: CGSize
+    let width: CGFloat
+    let height: CGFloat
+    let minX: CGFloat
+    let minY: CGFloat
+
+    init(size: CGSize) {
+        self.size = size
+        // Card occupies the upper portion of the stage, leaving room for the
+        // dock at the bottom. Padded so it never touches the edges.
+        let pad: CGFloat = min(size.width, size.height) * 0.12
+        self.width = max(1, size.width - pad * 2)
+        self.height = max(1, size.height * 0.62)
+        self.minX = pad
+        self.minY = pad * 0.7
+    }
+}
+
+// MARK: - Card artwork
+
+/// A self-contained, attractive card face. Pure SwiftUI, no assets.
+private struct GenieWarpView_CardArtwork: View {
+    var metrics: GenieWarpView_CardMetrics
+
+    var body: some View {
+        let corner: CGFloat = min(metrics.width, metrics.height) * 0.10
+
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.35, green: 0.42, blue: 0.95),
+                        Color(red: 0.62, green: 0.30, blue: 0.92),
+                        Color(red: 0.95, green: 0.42, blue: 0.62)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(face(corner: corner))
+            .overlay(
+                RoundedRectangle(cornerRadius: corner, style: .continuous)
+                    .strokeBorder(Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.25), lineWidth: 1)
+            )
+            .shadow(color: Color(red: 0.0, green: 0.0, blue: 0.0).opacity(0.35),
+                    radius: corner * 0.4, x: 0, y: corner * 0.18)
+    }
+
+    @ViewBuilder
+    private func face(corner: CGFloat) -> some View {
+        GeometryReader { proxy in
+            let w = proxy.size.width
+            let h = proxy.size.height
+            let unit = min(w, h)
+
+            ZStack {
+                // Soft sheen sweep.
+                LinearGradient(
+                    colors: [
+                        Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.22),
+                        Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .center
+                )
+
+                // Decorative orbiting rings.
+                Circle()
+                    .strokeBorder(Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.35),
+                                  lineWidth: unit * 0.012)
+                    .frame(width: unit * 0.62, height: unit * 0.62)
+                    .position(x: w * 0.30, y: h * 0.34)
+
+                Circle()
+                    .fill(Color(red: 1.0, green: 0.86, blue: 0.45).opacity(0.9))
+                    .frame(width: unit * 0.20, height: unit * 0.20)
+                    .position(x: w * 0.70, y: h * 0.30)
+
+                // Header / body bars to read as "content".
+                VStack(alignment: .leading, spacing: unit * 0.07) {
+                    RoundedRectangle(cornerRadius: unit * 0.03)
+                        .fill(Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.85))
+                        .frame(width: w * 0.5, height: unit * 0.07)
+                    RoundedRectangle(cornerRadius: unit * 0.025)
+                        .fill(Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.45))
+                        .frame(width: w * 0.66, height: unit * 0.05)
+                    RoundedRectangle(cornerRadius: unit * 0.025)
+                        .fill(Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.30))
+                        .frame(width: w * 0.4, height: unit * 0.05)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .padding(unit * 0.10)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+    }
+}
+
+// MARK: - Math helpers
+
+/// Classic Hermite smoothstep — C1-continuous, so chaining it through the
+/// warp factors never introduces a velocity discontinuity (no kink).
+private func smoothstep(_ edge0: Double, _ edge1: Double, _ x: Double) -> Double {
+    guard edge1 > edge0 else { return x < edge0 ? 0 : 1 }
+    let t = min(max((x - edge0) / (edge1 - edge0), 0.0), 1.0)
+    return t * t * (3.0 - 2.0 * t)
+}
+
+private func smoothstep(_ edge0: CGFloat, _ edge1: CGFloat, _ x: CGFloat) -> CGFloat {
+    guard edge1 > edge0 else { return x < edge0 ? 0 : 1 }
+    let t = min(max((x - edge0) / (edge1 - edge0), 0.0), 1.0)
+    return t * t * (3.0 - 2.0 * t)
+}
+"""###,
+        "tr-glass-shatter": ###"""
+import SwiftUI
+
+// MARK: - Glass Shatter
+//
+// The outgoing glass pane fractures into precomputed triangular/polygonal shards
+// that tumble, spin, and fall away under gravity, uncovering the view behind.
+// Each shard catches a raking specular highlight that sweeps as it rotates,
+// so the break sparkles like real broken glass.
+//
+// demo == true  -> a self-driving TimelineView loop shatters and reassembles
+//                  on a smoothed triangle wave so the tile is always alive.
+// demo == false -> tap to shatter; tap again to reassemble.
+
+struct GlassShatterView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            content(size: proxy.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(size: CGSize) -> some View {
+        if demo {
+            GlassShatterView_DemoStage(size: size)
+        } else {
+            GlassShatterView_InteractiveStage(size: size)
+        }
+    }
+}
+
+// MARK: - Demo (self-driving loop)
+
+private struct GlassShatterView_DemoStage: View {
+    let size: CGSize
+    private let period: Double = 3.4
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let phase = (t.truncatingRemainder(dividingBy: period)) / period
+            GlassShatterView_ShatterStage(size: size, progress: GlassShatterView_ShatterMath.loopProgress(phase))
+        }
+    }
+}
+
+// MARK: - Interactive (tap to shatter / reassemble)
+
+private struct GlassShatterView_InteractiveStage: View {
+    let size: CGSize
+
+    @State private var anchor: Date? = nil    // moment the current transition began
+    @State private var fromValue: Double = 0  // progress at the start of the transition
+    @State private var toValue: Double = 0     // progress target of the transition
+    @State private var resting: Double = 0     // value to hold when no transition runs
+
+    private let duration: Double = 1.15
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let p = currentProgress(now: timeline.date)
+            GlassShatterView_ShatterStage(size: size, progress: p)
+                .contentShape(Rectangle())
+                .onTapGesture { handleTap(now: timeline.date, current: p) }
+        }
+    }
+
+    private func currentProgress(now: Date) -> Double {
+        guard let anchor else { return resting }
+        let elapsed = now.timeIntervalSince(anchor)
+        let f = min(max(elapsed / duration, 0), 1)
+        let eased = GlassShatterView_ShatterMath.smoothstep(f)
+        return fromValue + (toValue - fromValue) * eased
+    }
+
+    private func handleTap(now: Date, current: Double) {
+        // Resume from wherever we are so mid-flight taps don't jump.
+        fromValue = current
+        toValue = current < 0.5 ? 1 : 0
+        resting = toValue
+        anchor = now
+    }
+}
+
+// MARK: - Stage: revealed background + glass overlay
+
+private struct GlassShatterView_ShatterStage: View {
+    let size: CGSize
+    let progress: Double   // 0 = intact glass, 1 = fully dispersed (revealed)
+
+    var body: some View {
+        ZStack {
+            GlassShatterView_RevealedBackground()           // opaque floor -- never blank
+            GlassShatterView_GlassOverlay(progress: progress)
+        }
+        .frame(width: size.width, height: size.height)
+        .clipped()
+    }
+}
+
+// The always-legible destination view behind the glass.
+private struct GlassShatterView_RevealedBackground: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let s = min(proxy.size.width, proxy.size.height)
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.07, green: 0.10, blue: 0.20),
+                        Color(red: 0.16, green: 0.09, blue: 0.26)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                RadialGradient(
+                    colors: [
+                        Color(red: 0.42, green: 0.55, blue: 0.95).opacity(0.55),
+                        Color.clear
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: s * 0.65
+                )
+                Image(systemName: "sparkles")
+                    .font(.system(size: s * 0.30, weight: .regular))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.98, green: 0.99, blue: 1.0),
+                                Color(red: 0.74, green: 0.82, blue: 1.0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .shadow(color: Color(red: 0.30, green: 0.45, blue: 0.95).opacity(0.6),
+                            radius: s * 0.05)
+            }
+        }
+    }
+}
+
+// MARK: - Glass overlay (Canvas-rendered shards)
+
+private struct GlassShatterView_GlassOverlay: View {
+    let progress: Double
+
+    var body: some View {
+        Canvas { context, size in
+            let p = max(0, min(1, progress))
+            for shard in GlassShatterView_ShatterMath.shards {
+                draw(shard, into: context, size: size, p: p)
+            }
+            // Hairline impact-point spark while still mostly intact.
+            if p < 0.18 {
+                drawImpactSpark(in: context, size: size, p: p)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func draw(_ shard: GlassShatterView_Shard, into context: GraphicsContext, size: CGSize, p: Double) {
+        let st = GlassShatterView_ShatterMath.state(for: shard, p: p, size: size)
+        guard st.opacity > 0.001 else { return }
+
+        var layer = context
+        layer.opacity = st.opacity
+        layer.translateBy(x: st.position.x, y: st.position.y)
+        layer.rotate(by: .radians(st.angle))
+
+        // GlassShatterView_Shard path is built around its own centroid -> rotation pivots on center.
+        let path = shard.localPath(size: size)
+
+        // Base glass body.
+        layer.fill(path, with: .color(glassTint(shard)))
+
+        // Raking specular band, defined in shard-LOCAL coordinates so the
+        // highlight sweeps across the shard as the layer rotates.
+        let bounds = shard.localBounds(size: size)
+        layer.drawLayer { inner in
+            inner.clip(to: path)
+            inner.fill(
+                Path(bounds),
+                with: .linearGradient(
+                    Gradient(stops: [
+                        .init(color: Color.white.opacity(0.0), location: 0.30),
+                        .init(color: Color.white.opacity(0.85), location: 0.50),
+                        .init(color: Color.white.opacity(0.0), location: 0.70)
+                    ]),
+                    startPoint: CGPoint(x: bounds.minX, y: bounds.minY),
+                    endPoint: CGPoint(x: bounds.maxX, y: bounds.maxY)
+                )
+            )
+        }
+
+        // Crisp edge so the crack gaps read.
+        layer.stroke(
+            path,
+            with: .color(Color(red: 0.80, green: 0.90, blue: 1.0).opacity(0.55)),
+            lineWidth: max(0.5, size.width * 0.0035)
+        )
+    }
+
+    private func glassTint(_ shard: GlassShatterView_Shard) -> Color {
+        // Subtle per-shard tint variation, derived deterministically.
+        let v = shard.tintBias
+        return Color(
+            red: 0.62 + 0.10 * v,
+            green: 0.74 + 0.08 * v,
+            blue: 0.92 + 0.06 * v
+        ).opacity(0.34)
+    }
+
+    private func drawImpactSpark(in context: GraphicsContext, size: CGSize, p: Double) {
+        let center = CGPoint(x: GlassShatterView_ShatterMath.impact.x * size.width,
+                             y: GlassShatterView_ShatterMath.impact.y * size.height)
+        let r = size.width * 0.05 * (1 - p / 0.18)
+        guard r > 0 else { return }
+        let rect = CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
+        context.fill(
+            Path(ellipseIn: rect),
+            with: .radialGradient(
+                Gradient(colors: [Color.white.opacity(0.9), Color.white.opacity(0.0)]),
+                center: center, startRadius: 0, endRadius: r
+            )
+        )
+    }
+}
+
+// MARK: - GlassShatterView_Shard model
+
+private struct GlassShatterView_Shard {
+    /// Centroid in normalized [0,1] space.
+    let centroid: CGPoint
+    /// Polygon vertices in normalized [0,1] space.
+    let vertices: [CGPoint]
+    /// Outward + jittered launch velocity, normalized units per unit progress-time.
+    let velocity: CGVector
+    /// Angular velocity (radians per unit progress-time).
+    let spin: Double
+    /// Per-shard tint bias in [-1, 1].
+    let tintBias: Double
+
+    /// Path built around the shard's own centroid (local space), scaled to `size`.
+    func localPath(size: CGSize) -> Path {
+        var path = Path()
+        guard let first = vertices.first else { return path }
+        let cx = centroid.x
+        let cy = centroid.y
+        func map(_ pt: CGPoint) -> CGPoint {
+            CGPoint(x: (pt.x - cx) * size.width, y: (pt.y - cy) * size.height)
+        }
+        path.move(to: map(first))
+        for v in vertices.dropFirst() {
+            path.addLine(to: map(v))
+        }
+        path.closeSubpath()
+        return path
+    }
+
+    func localBounds(size: CGSize) -> CGRect {
+        localPath(size: size).boundingRect
+    }
+}
+
+private struct GlassShatterView_ShardState {
+    let position: CGPoint  // centroid position in screen space
+    let angle: Double      // radians
+    let opacity: Double
+}
+
+// MARK: - Math / mesh (deterministic, computed once)
+
+private enum GlassShatterView_ShatterMath {
+
+    /// Impact point in normalized space.
+    static let impact = CGPoint(x: 0.5, y: 0.46)
+
+    /// Precomputed spider-web fracture -- radial spokes x concentric rings.
+    /// Built once with a seeded generator so the mesh NEVER re-randomizes.
+    static let shards: [GlassShatterView_Shard] = buildShards()
+
+    /// Smoothstep easing.
+    static func smoothstep(_ x: Double) -> Double {
+        let t = max(0, min(1, x))
+        return t * t * (3 - 2 * t)
+    }
+
+    /// Maps a 0->1 loop phase to a smoothed 0->1->0 triangle (shatter then reassemble).
+    static func loopProgress(_ phase: Double) -> Double {
+        let tri: Double
+        if phase < 0.5 {
+            tri = phase / 0.5             // 0 -> 1
+        } else {
+            tri = (1 - phase) / 0.5       // 1 -> 0
+        }
+        return smoothstep(tri)
+    }
+
+    /// Physics for one shard at normalized progress p in [0,1].
+    /// Identical mapping is used by both demo and interactive modes.
+    static func state(for shard: GlassShatterView_Shard, p: Double, size: CGSize) -> GlassShatterView_ShardState {
+        // Base (intact) centroid in screen space.
+        let baseX = shard.centroid.x * size.width
+        let baseY = shard.centroid.y * size.height
+
+        // Ease-in launch so shards stay put at p~0 then accelerate.
+        let launch = p * p   // quadratic ramp
+
+        let dx = shard.velocity.dx * launch * size.width
+        // Gravity grows with progress^2; positive y is downward.
+        let gravity = 0.9 * (p * p) * size.height
+        let dy = shard.velocity.dy * launch * size.height + gravity
+
+        let position = CGPoint(x: baseX + dx, y: baseY + dy)
+        let angle = shard.spin * p
+
+        // Stay fully opaque until late, then fade so they don't pop at the edge.
+        let opacity: Double
+        if p < 0.72 {
+            opacity = 1.0
+        } else {
+            opacity = max(0, 1 - (p - 0.72) / 0.28)
+        }
+        return GlassShatterView_ShardState(position: position, angle: angle, opacity: opacity)
+    }
+
+    // MARK: Mesh construction
+
+    private static func buildShards() -> [GlassShatterView_Shard] {
+        var rng = GlassShatterView_SeededRNG(seed: 0x9E3779B97F4A7C15)
+        var result: [GlassShatterView_Shard] = []
+
+        let cx = impact.x
+        let cy = impact.y
+        let spokes = 9
+        // Last ring overflows the frame so the intact pane fully covers the
+        // rectangle (the overflow is caught by .clipped() on GlassShatterView_ShatterStage),
+        // leaving no bare corners or floating boundary seam.
+        let rings: [Double] = [0.0, 0.16, 0.34, 0.58, 1.25]
+
+        // Per-spoke angle with slight jitter, sorted around the circle.
+        var angles: [Double] = []
+        for i in 0..<spokes {
+            let base = (Double(i) / Double(spokes)) * 2 * .pi
+            let jitter = (rng.nextUnit() - 0.5) * (2 * .pi / Double(spokes)) * 0.5
+            angles.append(base + jitter)
+        }
+        angles.sort()
+
+        func ringPoint(angle: Double, radius: Double) -> CGPoint {
+            // Per-vertex radial jitter for an irregular, glass-like break.
+            let jr = radius * (1 + (rng.nextUnit() - 0.5) * 0.18)
+            let x = cx + cos(angle) * jr
+            let y = cy + sin(angle) * jr
+            return CGPoint(x: x, y: y)
+        }
+
+        // Precompute the lattice of ring points per spoke.
+        var lattice: [[CGPoint]] = []
+        for a in angles {
+            var col: [CGPoint] = []
+            for r in rings {
+                col.append(r == 0 ? CGPoint(x: cx, y: cy) : ringPoint(angle: a, radius: r))
+            }
+            lattice.append(col)
+        }
+
+        // Build triangle/quad cells between adjacent spokes and rings.
+        for s in 0..<spokes {
+            let s2 = (s + 1) % spokes
+            for ri in 0..<(rings.count - 1) {
+                let inner = rings[ri]
+                let verts: [CGPoint]
+                if inner == 0 {
+                    // Innermost cells are triangles fanning from the impact point.
+                    verts = [
+                        CGPoint(x: cx, y: cy),
+                        lattice[s][ri + 1],
+                        lattice[s2][ri + 1]
+                    ]
+                } else {
+                    // Outer cells are quads (two spokes x two rings).
+                    verts = [
+                        lattice[s][ri],
+                        lattice[s][ri + 1],
+                        lattice[s2][ri + 1],
+                        lattice[s2][ri]
+                    ]
+                }
+                result.append(makeShard(vertices: verts, rng: &rng))
+            }
+        }
+        return result
+    }
+
+    private static func makeShard(vertices: [CGPoint], rng: inout GlassShatterView_SeededRNG) -> GlassShatterView_Shard {
+        // Centroid = average of vertices.
+        var sx: Double = 0
+        var sy: Double = 0
+        for v in vertices {
+            sx += v.x
+            sy += v.y
+        }
+        let n = Double(vertices.count)
+        let centroid = CGPoint(x: sx / n, y: sy / n)
+
+        // Outward direction from the impact point.
+        var ux = centroid.x - impact.x
+        var uy = centroid.y - impact.y
+        let len = max(0.0001, (ux * ux + uy * uy).squareRoot())
+        ux /= len
+        uy /= len
+
+        // Speed scales with distance (outer shards fly farther) + jitter.
+        let speed = 0.55 + len * 1.4 + (rng.nextUnit() - 0.5) * 0.25
+        let tangentialJitter = (rng.nextUnit() - 0.5) * 0.30
+        // A little tangential spread for a natural scatter.
+        let vx = ux * speed - uy * tangentialJitter
+        let vy = uy * speed + ux * tangentialJitter
+
+        let spin = (rng.nextUnit() - 0.5) * 7.0       // radians over full progress
+        let tintBias = (rng.nextUnit() - 0.5) * 2.0   // [-1, 1]
+
+        return GlassShatterView_Shard(
+            centroid: centroid,
+            vertices: vertices,
+            velocity: CGVector(dx: vx, dy: vy),
+            spin: spin,
+            tintBias: tintBias
+        )
+    }
+}
+
+// MARK: - Seeded RNG (SplitMix64) -- deterministic, so the mesh is stable
+
+private struct GlassShatterView_SeededRNG {
+    private var state: UInt64
+
+    init(seed: UInt64) {
+        state = seed
+    }
+
+    mutating func next() -> UInt64 {
+        state = state &+ 0x9E3779B97F4A7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        return z ^ (z >> 31)
+    }
+
+    /// Uniform Double in [0, 1).
+    mutating func nextUnit() -> Double {
+        Double(next() >> 11) * (1.0 / 9007199254740992.0)
+    }
+}
+"""###,
+        "tr-hero-zoom-scatter": ###"""
+import SwiftUI
+
+/// Hero Zoom Scatter
+///
+/// A tapped grid thumbnail expands to a full detail view while every surrounding
+/// grid cell scatters outward and fades, then settles back on dismiss.
+///
+/// The whole effect is driven by a single shared `progress` value (0 = grid,
+/// 1 = hero zoomed). This deliberately avoids `matchedGeometryEffect` + a phase
+/// animator (which do not compose, and risk a blank frame inside a small tile):
+/// - `demo == true`  -> a TimelineView smoothstep loop with a dwell at each end.
+/// - `demo == false` -> a real `onTapGesture` toggling the progress via a spring.
+///
+/// Both paths feed the same render core, so the demo tile is pixel-faithful to
+/// the interactive component.
+struct HeroZoomScatterView: View {
+    var demo: Bool = false
+
+    // Interactive state.
+    @State private var zoomed: Bool = false
+
+    // 3x3 grid; index 4 (the center cell) is the hero.
+    private let columns: Int = 3
+    private let rows: Int = 3
+    private var heroIndex: Int { (rows * columns) / 2 }
+
+    var body: some View {
+        GeometryReader { geo in
+            if demo {
+                demoContent(in: geo.size)
+            } else {
+                interactiveContent(in: geo.size)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Demo (self-driving)
+
+    private func demoContent(in size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let progress = loopProgress(at: t)
+            scene(in: size, progress: progress, staggered: false)
+        }
+    }
+
+    /// A ~3.4s loop: ease up to fully zoomed, dwell so the detail reads,
+    /// ease back down, dwell in the grid state. Never reaches a blank frame.
+    private func loopProgress(at time: TimeInterval) -> CGFloat {
+        let period: Double = 3.4
+        let phase = time.truncatingRemainder(dividingBy: period) / period // 0..<1
+
+        let openEnd: Double = 0.32   // ramp up
+        let holdEnd: Double = 0.55   // dwell zoomed
+        let closeEnd: Double = 0.85  // ramp down
+        // remainder: dwell in grid state
+
+        let raw: Double
+        if phase < openEnd {
+            raw = smoothstep(phase / openEnd)
+        } else if phase < holdEnd {
+            raw = 1.0
+        } else if phase < closeEnd {
+            raw = 1.0 - smoothstep((phase - holdEnd) / (closeEnd - holdEnd))
+        } else {
+            raw = 0.0
+        }
+        return CGFloat(raw)
+    }
+
+    private func smoothstep(_ x: Double) -> Double {
+        let c = min(max(x, 0.0), 1.0)
+        return c * c * (3.0 - 2.0 * c)
+    }
+
+    // MARK: - Interactive
+
+    private func interactiveContent(in size: CGSize) -> some View {
+        let progress: CGFloat = zoomed ? 1.0 : 0.0
+        return scene(in: size, progress: progress, staggered: true)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.spring(response: 0.55, dampingFraction: 0.78)) {
+                    zoomed.toggle()
+                }
+            }
+    }
+
+    // MARK: - Shared scene
+
+    private func scene(in size: CGSize, progress: CGFloat, staggered: Bool) -> some View {
+        let metrics = HeroZoomScatterView_GridMetrics(size: size, columns: columns, rows: rows)
+        return ZStack {
+            // Backdrop dims as the hero takes focus.
+            Color(red: 0.05, green: 0.06, blue: 0.09)
+                .opacity(0.0)
+                .background(
+                    Color(red: 0.04, green: 0.045, blue: 0.07)
+                        .opacity(Double(0.85 * progress))
+                )
+                .allowsHitTesting(false)
+
+            // Siblings scatter outward & fade.
+            ForEach(siblingIndices, id: \.self) { index in
+                siblingCell(index: index,
+                            metrics: metrics,
+                            progress: progress,
+                            staggered: staggered)
+            }
+
+            // Hero grows from its slot to fill the bounds.
+            heroCell(metrics: metrics, progress: progress, staggered: staggered)
+        }
+        .frame(width: size.width, height: size.height)
+        .clipped()
+    }
+
+    private var siblingIndices: [Int] {
+        Array(0 ..< (rows * columns)).filter { $0 != heroIndex }
+    }
+
+    // MARK: - Hero cell
+
+    @ViewBuilder
+    private func heroCell(metrics: HeroZoomScatterView_GridMetrics, progress: CGFloat, staggered: Bool) -> some View {
+        let slot = metrics.frame(forIndex: heroIndex)
+        let full = metrics.fullFrame
+        let rect = lerp(rect: slot, to: full, t: progress)
+        let cornerSlot: CGFloat = min(slot.width, slot.height) * 0.22
+        let cornerFull: CGFloat = min(full.width, full.height) * 0.10
+        let corner = mix(cornerSlot, cornerFull, progress)
+
+        HeroZoomScatterView_HeroTile(progress: progress, corner: corner)
+            .frame(width: rect.width, height: rect.height)
+            .position(x: rect.midX, y: rect.midY)
+            .shadow(color: Color.black.opacity(Double(0.35 * progress)),
+                    radius: 18 * progress, x: 0, y: 10 * progress)
+            .modifier(HeroZoomScatterView_StaggeredSpring(enabled: staggered, delay: 0, value: progress))
+    }
+
+    // MARK: - Sibling cell
+
+    @ViewBuilder
+    private func siblingCell(index: Int,
+                             metrics: HeroZoomScatterView_GridMetrics,
+                             progress: CGFloat,
+                             staggered: Bool) -> some View {
+        let slot = metrics.frame(forIndex: index)
+        let dir = metrics.outwardDirection(forIndex: index)
+        let scatter: CGFloat = metrics.scatterDistance
+        let dx = dir.dx * scatter * progress
+        let dy = dir.dy * scatter * progress
+        let scale = 1.0 - 0.12 * progress
+        let opacity = Double(max(0.0, 1.0 - 1.15 * progress))
+        let ring = metrics.ringDistance(forIndex: index) // 1 for edges, etc.
+        let delay = 0.03 * Double(ring)
+
+        HeroZoomScatterView_SiblingTile(hue: metrics.hue(forIndex: index))
+            .frame(width: slot.width, height: slot.height)
+            .scaleEffect(scale)
+            .position(x: slot.midX + dx, y: slot.midY + dy)
+            .opacity(opacity)
+            .modifier(HeroZoomScatterView_StaggeredSpring(enabled: staggered, delay: delay, value: progress))
+    }
+
+    // MARK: - Interpolation helpers
+
+    private func lerp(rect a: CGRect, to b: CGRect, t: CGFloat) -> CGRect {
+        CGRect(x: mix(a.minX, b.minX, t),
+               y: mix(a.minY, b.minY, t),
+               width: mix(a.width, b.width, t),
+               height: mix(a.height, b.height, t))
+    }
+
+    private func mix(_ a: CGFloat, _ b: CGFloat, _ t: CGFloat) -> CGFloat {
+        a + (b - a) * t
+    }
+}
+
+// MARK: - Staggered spring modifier
+
+/// Applies a per-cell staggered spring only in the interactive path. In the
+/// demo path the progress is already a smooth continuous value, so no implicit
+/// animation is attached (it would fight the TimelineView clock).
+private struct HeroZoomScatterView_StaggeredSpring: ViewModifier, Animatable {
+    let enabled: Bool
+    let delay: Double
+    let value: CGFloat
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.animation(.spring(response: 0.5, dampingFraction: 0.74)
+                .delay(delay), value: value)
+        } else {
+            content
+        }
+    }
+}
+
+// MARK: - Grid metrics
+
+private struct HeroZoomScatterView_GridMetrics {
+    let size: CGSize
+    let columns: Int
+    let rows: Int
+
+    private let inset: CGFloat
+    private let gap: CGFloat
+
+    init(size: CGSize, columns: Int, rows: Int) {
+        self.size = size
+        self.columns = columns
+        self.rows = rows
+        let minDim = min(size.width, size.height)
+        self.inset = minDim * 0.10
+        self.gap = minDim * 0.055
+    }
+
+    var contentRect: CGRect {
+        CGRect(x: inset, y: inset,
+               width: max(size.width - inset * 2, 1),
+               height: max(size.height - inset * 2, 1))
+    }
+
+    var fullFrame: CGRect {
+        let pad = min(size.width, size.height) * 0.06
+        return CGRect(x: pad, y: pad,
+                      width: max(size.width - pad * 2, 1),
+                      height: max(size.height - pad * 2, 1))
+    }
+
+    private var cellWidth: CGFloat {
+        (contentRect.width - gap * CGFloat(columns - 1)) / CGFloat(columns)
+    }
+
+    private var cellHeight: CGFloat {
+        (contentRect.height - gap * CGFloat(rows - 1)) / CGFloat(rows)
+    }
+
+    var scatterDistance: CGFloat {
+        min(size.width, size.height) * 0.55
+    }
+
+    func column(of index: Int) -> Int { index % columns }
+    func row(of index: Int) -> Int { index / columns }
+
+    func frame(forIndex index: Int) -> CGRect {
+        let c = column(of: index)
+        let r = row(of: index)
+        let x = contentRect.minX + CGFloat(c) * (cellWidth + gap)
+        let y = contentRect.minY + CGFloat(r) * (cellHeight + gap)
+        return CGRect(x: x, y: y, width: max(cellWidth, 1), height: max(cellHeight, 1))
+    }
+
+    private var heroCenter: CGPoint {
+        let f = frame(forIndex: (rows * columns) / 2)
+        return CGPoint(x: f.midX, y: f.midY)
+    }
+
+    /// Normalised outward direction from the hero center to this cell's center.
+    func outwardDirection(forIndex index: Int) -> CGVector {
+        let f = frame(forIndex: index)
+        let dx = f.midX - heroCenter.x
+        let dy = f.midY - heroCenter.y
+        let len = max(sqrt(dx * dx + dy * dy), 0.0001)
+        return CGVector(dx: dx / len, dy: dy / len)
+    }
+
+    /// Chebyshev ring distance from the hero (used for stagger delay).
+    func ringDistance(forIndex index: Int) -> Int {
+        let heroC = columns / 2
+        let heroR = rows / 2
+        return max(abs(column(of: index) - heroC), abs(row(of: index) - heroR))
+    }
+
+    func hue(forIndex index: Int) -> Double {
+        let total = Double(max(rows * columns - 1, 1))
+        return Double(index) / total
+    }
+}
+
+// MARK: - Hero tile content
+
+private struct HeroZoomScatterView_HeroTile: View {
+    let progress: CGFloat
+    let corner: CGFloat
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.36, green: 0.52, blue: 0.96),
+                            Color(red: 0.62, green: 0.34, blue: 0.92)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: corner, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                )
+
+            // Detail content fades in only when the hero is mostly expanded,
+            // so the zoom reads as "becoming a detail view," not just scaling.
+            detailOverlay
+                .opacity(Double(detailOpacity))
+                .padding(corner * 0.9)
+        }
+        .compositingGroup()
+    }
+
+    private var detailOpacity: CGFloat {
+        // Ramp 0 -> 1 across the second half of the zoom.
+        let p = (progress - 0.45) / 0.45
+        return max(0.0, min(1.0, p))
+    }
+
+    private var detailOverlay: some View {
+        GeometryReader { g in
+            let unit = min(g.size.width, g.size.height)
+            VStack(alignment: .leading, spacing: unit * 0.08) {
+                Circle()
+                    .fill(Color.white.opacity(0.9))
+                    .frame(width: unit * 0.22, height: unit * 0.22)
+                    .overlay(
+                        Image(systemName: "sparkles")
+                            .font(.system(size: unit * 0.11, weight: .bold))
+                            .foregroundStyle(Color(red: 0.45, green: 0.36, blue: 0.95))
+                    )
+                Spacer(minLength: 0)
+                RoundedRectangle(cornerRadius: unit * 0.04, style: .continuous)
+                    .fill(Color.white.opacity(0.88))
+                    .frame(width: g.size.width * 0.7, height: unit * 0.09)
+                RoundedRectangle(cornerRadius: unit * 0.03, style: .continuous)
+                    .fill(Color.white.opacity(0.5))
+                    .frame(width: g.size.width * 0.5, height: unit * 0.06)
+                RoundedRectangle(cornerRadius: unit * 0.03, style: .continuous)
+                    .fill(Color.white.opacity(0.32))
+                    .frame(width: g.size.width * 0.88, height: unit * 0.05)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+}
+
+// MARK: - Sibling tile content
+
+private struct HeroZoomScatterView_SiblingTile: View {
+    let hue: Double
+
+    var body: some View {
+        GeometryReader { g in
+            let r = min(g.size.width, g.size.height) * 0.22
+            RoundedRectangle(cornerRadius: r, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: gradientColors,
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: r, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                )
+        }
+    }
+
+    private var gradientColors: [Color] {
+        let base = Color(hue: hue, saturation: 0.42, brightness: 0.62)
+        let dark = Color(hue: hue, saturation: 0.5, brightness: 0.4)
+        return [base, dark]
+    }
+}
+"""###,
+        "tr-iris-shutter": ###"""
+import SwiftUI
+
+/// Iris Shutter Wipe — a ring of overlapping camera-aperture blades spirals open
+/// from the center, the polygonal opening growing to reveal the destination view.
+///
+/// The reveal is a real SwiftUI `Path` N-gon mask over the destination; the blades
+/// are a decorative `Canvas` overlay registered to the SAME center / radius /
+/// rotation / blade-count so the polygon reads as the hole the blades define.
+///
+/// Geometry is rebuilt every frame from a single `progress` value. Because
+/// `Canvas` and `Path` are not interpolated by SwiftUI on their own, the content
+/// is wrapped in an `Animatable` view (`IrisShutterView_IrisContent`) whose `animatableData` IS
+/// the progress — so both the `withAnimation(.spring)` tap and the continuous
+/// `TimelineView(.animation)` demo loop produce smooth, frame-by-frame motion.
+struct IrisShutterView: View {
+    var demo: Bool = false
+
+    // Interactive state: tap toggles the aperture open/closed.
+    @State private var isOpen: Bool = false
+
+    private let bladeCount: Int = 7
+
+    var body: some View {
+        GeometryReader { geo in
+            if demo {
+                demoBody(size: geo.size)
+            } else {
+                interactiveBody(size: geo.size)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Modes
+
+    @ViewBuilder
+    private func demoBody(size: CGSize) -> some View {
+        // Continuous, self-driving triangle-wave 0 -> 1 -> 0 over a ~3s period.
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let progress: CGFloat = Self.triangleWave(time: t, period: 3.0)
+            IrisShutterView_IrisContent(progress: progress, size: size, bladeCount: bladeCount)
+        }
+    }
+
+    @ViewBuilder
+    private func interactiveBody(size: CGSize) -> some View {
+        let progress: CGFloat = isOpen ? 1 : 0
+        IrisShutterView_IrisContent(progress: progress, size: size, bladeCount: bladeCount)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.spring(response: 0.7, dampingFraction: 0.72)) {
+                    isOpen.toggle()
+                }
+            }
+    }
+
+    /// Smooth 0 -> 1 -> 0 wave. Built from a smoothstep'd triangle so the demo
+    /// eases at the extremes instead of bouncing linearly.
+    private static func triangleWave(time: TimeInterval, period: TimeInterval) -> CGFloat {
+        let phase = (time.truncatingRemainder(dividingBy: period)) / period
+        let tri: CGFloat = phase < 0.5 ? CGFloat(phase * 2) : CGFloat((1 - phase) * 2)
+        // smoothstep for soft ends
+        return tri * tri * (3 - 2 * tri)
+    }
+}
+
+// MARK: - Animatable content
+
+/// Renders the full iris for a given `progress`. Conforming to `Animatable` with
+/// `animatableData == progress` makes SwiftUI interpolate progress every frame,
+/// so the Canvas-drawn blades + polygon mask animate smoothly under both
+/// `withAnimation` (tap) and a continuous `TimelineView` value (demo).
+private struct IrisShutterView_IrisContent: View, Animatable {
+    var progress: CGFloat
+    let size: CGSize
+    let bladeCount: Int
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    var body: some View {
+        let p: CGFloat = min(max(progress, 0), 1)
+        let metrics = IrisShutterView_IrisMetrics(size: size, progress: p, bladeCount: bladeCount)
+
+        return ZStack {
+            // 1. Dark camera housing behind everything.
+            housing(metrics: metrics)
+
+            // 2. Destination "scene" revealed through the polygonal opening.
+            destinationScene(metrics: metrics)
+                .mask(
+                    IrisShutterView_OpeningPolygon(metrics: metrics)
+                        .fill(style: FillStyle(eoFill: false, antialiased: true))
+                )
+
+            // 3. Decorative aperture blades in the annulus between opening and rim.
+            bladeCanvas(metrics: metrics)
+                .allowsHitTesting(false)
+
+            // 4. Bezel rim ring so it always reads as a lens aperture.
+            bezel(metrics: metrics)
+                .allowsHitTesting(false)
+        }
+        .clipShape(Circle().inset(by: metrics.bezelInset))
+    }
+
+    // MARK: - Layers
+
+    @ViewBuilder
+    private func housing(metrics: IrisShutterView_IrisMetrics) -> some View {
+        ZStack {
+            Color(red: 0.05, green: 0.06, blue: 0.09)
+            RadialGradient(
+                colors: [
+                    Color(red: 0.16, green: 0.17, blue: 0.21),
+                    Color(red: 0.05, green: 0.05, blue: 0.07)
+                ],
+                center: .center,
+                startRadius: 0,
+                endRadius: metrics.outerRadius
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func destinationScene(metrics: IrisShutterView_IrisMetrics) -> some View {
+        ZStack {
+            // A warm, vivid "next screen" so the reveal is satisfying.
+            LinearGradient(
+                colors: [
+                    Color(red: 0.99, green: 0.55, blue: 0.32),
+                    Color(red: 0.93, green: 0.27, blue: 0.49),
+                    Color(red: 0.40, green: 0.20, blue: 0.74)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            // Soft glow disc to give the scene some life through the iris.
+            RadialGradient(
+                colors: [
+                    Color(red: 1.0, green: 0.96, blue: 0.80).opacity(0.85),
+                    Color(red: 1.0, green: 0.96, blue: 0.80).opacity(0.0)
+                ],
+                center: UnitPoint(x: 0.42, y: 0.38),
+                startRadius: 0,
+                endRadius: metrics.outerRadius * 0.9
+            )
+            sunburst(metrics: metrics)
+        }
+    }
+
+    /// Faint radiating rays so the destination has detail, not a flat fill.
+    @ViewBuilder
+    private func sunburst(metrics: IrisShutterView_IrisMetrics) -> some View {
+        Canvas { ctx, _ in
+            let center = metrics.center
+            let rays = 24
+            for i in 0..<rays {
+                let a: CGFloat = (CGFloat(i) / CGFloat(rays)) * .pi * 2
+                var path = Path()
+                path.move(to: center)
+                let end = CGPoint(
+                    x: center.x + cos(a) * metrics.outerRadius * 1.4,
+                    y: center.y + sin(a) * metrics.outerRadius * 1.4
+                )
+                path.addLine(to: end)
+                ctx.stroke(
+                    path,
+                    with: .color(Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.06)),
+                    lineWidth: 2
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func bladeCanvas(metrics: IrisShutterView_IrisMetrics) -> some View {
+        Canvas { ctx, _ in
+            drawBlades(in: &ctx, metrics: metrics)
+        }
+    }
+
+    @ViewBuilder
+    private func bezel(metrics: IrisShutterView_IrisMetrics) -> some View {
+        let lineWidth: CGFloat = max(metrics.minDim * 0.035, 2)
+        ZStack {
+            Circle()
+                .inset(by: metrics.bezelInset)
+                .strokeBorder(
+                    AngularGradient(
+                        colors: [
+                            Color(red: 0.55, green: 0.58, blue: 0.66),
+                            Color(red: 0.12, green: 0.13, blue: 0.16),
+                            Color(red: 0.72, green: 0.75, blue: 0.82),
+                            Color(red: 0.10, green: 0.11, blue: 0.14),
+                            Color(red: 0.55, green: 0.58, blue: 0.66)
+                        ],
+                        center: .center
+                    ),
+                    lineWidth: lineWidth
+                )
+            Circle()
+                .inset(by: metrics.bezelInset + lineWidth)
+                .strokeBorder(
+                    Color(red: 0.02, green: 0.02, blue: 0.03).opacity(0.7),
+                    lineWidth: max(lineWidth * 0.4, 1)
+                )
+        }
+    }
+
+    // MARK: - Blade drawing
+
+    private func drawBlades(in ctx: inout GraphicsContext, metrics: IrisShutterView_IrisMetrics) {
+        let n = metrics.bladeCount
+        for i in 0..<n {
+            let blade = bladePath(index: i, metrics: metrics)
+
+            // Base blade fill — brushed metal gradient across the blade.
+            let g = Gradient(colors: [
+                Color(red: 0.30, green: 0.32, blue: 0.38),
+                Color(red: 0.16, green: 0.17, blue: 0.21),
+                Color(red: 0.09, green: 0.10, blue: 0.13)
+            ])
+            let baseAngle: CGFloat = metrics.bladeBaseAngle(index: i)
+            let shading = GraphicsContext.Shading.linearGradient(
+                g,
+                startPoint: CGPoint(
+                    x: metrics.center.x + cos(baseAngle) * metrics.outerRadius,
+                    y: metrics.center.y + sin(baseAngle) * metrics.outerRadius
+                ),
+                endPoint: metrics.center
+            )
+            ctx.fill(blade, with: shading)
+
+            // Seam line where this blade overlaps its neighbour — adds depth.
+            ctx.stroke(
+                blade,
+                with: .color(Color(red: 0.0, green: 0.0, blue: 0.0).opacity(0.45)),
+                lineWidth: 0.8
+            )
+
+            // Specular highlight along the inner (aperture-facing) edge.
+            let edge = bladeInnerEdge(index: i, metrics: metrics)
+            ctx.stroke(
+                edge,
+                with: .color(Color(red: 0.85, green: 0.88, blue: 0.95).opacity(0.55)),
+                lineWidth: max(metrics.minDim * 0.006, 0.8)
+            )
+        }
+    }
+
+    /// One curved blade: a quad spanning from the rim inward, with its inner edge
+    /// hugging two adjacent vertices of the opening polygon (so blades register
+    /// exactly with the mask).
+    private func bladePath(index: Int, metrics: IrisShutterView_IrisMetrics) -> Path {
+        let inner = metrics.openingVertices
+        let n = inner.count
+        let a = inner[index % n]
+        let b = inner[(index + 1) % n]
+
+        // Outer arc points pushed out to (beyond) the rim along each vertex angle.
+        let outerR: CGFloat = metrics.outerRadius * 1.25
+        let aAng: CGFloat = metrics.vertexAngle(index)
+        let bAng: CGFloat = metrics.vertexAngle(index + 1)
+        let outerA = metrics.point(angle: aAng, radius: outerR)
+        let outerB = metrics.point(angle: bAng, radius: outerR)
+
+        var path = Path()
+        path.move(to: a)
+        // Inner edge bows slightly outward for the curved-iris look.
+        path.addQuadCurve(to: b, control: metrics.innerEdgeControl(index))
+        path.addLine(to: outerB)
+        path.addLine(to: outerA)
+        path.closeSubpath()
+        return path
+    }
+
+    private func bladeInnerEdge(index: Int, metrics: IrisShutterView_IrisMetrics) -> Path {
+        let inner = metrics.openingVertices
+        let n = inner.count
+        let a = inner[index % n]
+        let b = inner[(index + 1) % n]
+        var path = Path()
+        path.move(to: a)
+        path.addQuadCurve(to: b, control: metrics.innerEdgeControl(index))
+        return path
+    }
+}
+
+// MARK: - Iris geometry
+
+/// All shared geometry for a given size + progress. Both the mask polygon and the
+/// decorative blades derive from this single source so they stay registered.
+private struct IrisShutterView_IrisMetrics {
+    let size: CGSize
+    let progress: CGFloat
+    let bladeCount: Int
+
+    let center: CGPoint
+    let minDim: CGFloat
+    let outerRadius: CGFloat
+    let bezelInset: CGFloat
+    let openingRadius: CGFloat
+    let rotation: CGFloat
+    let openingVertices: [CGPoint]
+
+    init(size: CGSize, progress: CGFloat, bladeCount: Int) {
+        self.size = size
+        self.progress = progress
+        self.bladeCount = bladeCount
+
+        let c = CGPoint(x: size.width / 2, y: size.height / 2)
+        self.center = c
+        let m: CGFloat = min(size.width, size.height)
+        self.minDim = m
+
+        let inset: CGFloat = m * 0.02
+        self.bezelInset = inset
+        // Outer radius reaches the bezel ring.
+        self.outerRadius = m / 2 - inset
+
+        // Opening grows linearly with progress from a tiny pinhole to slightly
+        // past the rim so it fully clears the frame when open. (Easing is applied
+        // by the caller's spring / demo wave, so we keep this linear to avoid
+        // double-easing.)
+        let minR: CGFloat = m * 0.02
+        let maxR: CGFloat = (m / 2) * 1.18
+        self.openingRadius = minR + (maxR - minR) * progress
+
+        // Blades spiral: rotate ~52 degrees as the aperture opens.
+        self.rotation = (52 * .pi / 180) * progress
+
+        // Precompute polygon vertices.
+        var verts: [CGPoint] = []
+        let n = bladeCount
+        for i in 0..<n {
+            let ang: CGFloat = IrisShutterView_IrisMetrics.angle(index: i, count: n, rotation: rotation)
+            verts.append(CGPoint(
+                x: c.x + cos(ang) * openingRadius,
+                y: c.y + sin(ang) * openingRadius
+            ))
+        }
+        self.openingVertices = verts
+    }
+
+    func vertexAngle(_ index: Int) -> CGFloat {
+        IrisShutterView_IrisMetrics.angle(index: index, count: bladeCount, rotation: rotation)
+    }
+
+    func point(angle: CGFloat, radius: CGFloat) -> CGPoint {
+        CGPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius)
+    }
+
+    /// Control point that bows the inner edge of a blade outward from center,
+    /// giving the curved-iris polygon its convex sides.
+    func innerEdgeControl(_ index: Int) -> CGPoint {
+        let a0: CGFloat = vertexAngle(index)
+        let a1: CGFloat = vertexAngle(index + 1)
+        let mid: CGFloat = (a0 + a1) / 2
+        let bow: CGFloat = openingRadius * 1.12
+        return point(angle: mid, radius: bow)
+    }
+
+    func bladeBaseAngle(index: Int) -> CGFloat {
+        let a0: CGFloat = vertexAngle(index)
+        let a1: CGFloat = vertexAngle(index + 1)
+        return (a0 + a1) / 2
+    }
+
+    static func angle(index: Int, count: Int, rotation: CGFloat) -> CGFloat {
+        let step: CGFloat = (.pi * 2) / CGFloat(count)
+        return CGFloat(index) * step + rotation - .pi / 2
+    }
+}
+
+// MARK: - Opening polygon shape (the actual reveal mask)
+
+private struct IrisShutterView_OpeningPolygon: Shape {
+    let metrics: IrisShutterView_IrisMetrics
+
+    func path(in rect: CGRect) -> Path {
+        let verts = metrics.openingVertices
+        guard verts.count >= 3 else { return Path() }
+        var path = Path()
+        path.move(to: verts[0])
+        for i in 0..<verts.count {
+            let next = verts[(i + 1) % verts.count]
+            // Bowed sides match the blade inner edges exactly.
+            path.addQuadCurve(to: next, control: metrics.innerEdgeControl(i))
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+"""###,
+        "tr-liquid-drip": ###"""
+import SwiftUI
+
+/// Liquid Drip Reveal
+///
+/// The top view's lower edge develops droplets that bulge, neck, and detach,
+/// the surface melting downward to expose the view beneath. The melt is drawn
+/// into a `Canvas` whose `.blur` + `.alphaThreshold` filters fuse overlapping
+/// shapes into a single gooey surface (metaball necking), and that Canvas is
+/// used as a `.mask` over the top view so material disappears as it drips away.
+///
+/// Interaction is `auto`: both the demo tile and the interactive component run
+/// the same self-driving `TimelineView(.animation)` melt loop. Tapping in the
+/// interactive mode re-syncs the melt to the start for a tactile restart.
+struct LiquidDripView: View {
+    var demo: Bool = false
+
+    // Re-sync point for the interactive restart tap. The looped progress is
+    // measured relative to this so a tap snaps the melt back to its dry state.
+    @State private var loopStart: Date = .init()
+
+    private let loopDuration: Double = 3.4
+
+    var body: some View {
+        GeometryReader { geo in
+            content(size: geo.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !demo else { return }
+            loopStart = .init()
+        }
+    }
+
+    @ViewBuilder
+    private func content(size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let phase = loopPhase(now: timeline.date)
+            let progress = meltProgress(phase: phase)
+            ZStack {
+                // The view revealed beneath the melting surface — always legible.
+                bottomView(size: size)
+
+                // The melting surface. Masked by the metaball Canvas so it
+                // recedes and drips away, exposing the bottom view. During the
+                // tail of the loop it crossfades back in for a seamless reset.
+                topView(size: size)
+                    .mask {
+                        meltCanvas(progress: progress, size: size)
+                    }
+                    .opacity(surfaceOpacity(phase: phase))
+            }
+            .frame(width: size.width, height: size.height)
+        }
+    }
+
+    // MARK: - Looped phase / progress
+
+    /// 0 → 1 wall-clock loop phase derived from time so the tile animates with
+    /// no touch.
+    private func loopPhase(now: Date) -> CGFloat {
+        let elapsed = now.timeIntervalSince(loopStart)
+        let t = elapsed.truncatingRemainder(dividingBy: loopDuration) / loopDuration
+        return CGFloat(t)
+    }
+
+    /// The melt itself runs over the first 82% of the loop; the final 18% holds
+    /// the revealed view, then a short crossfade restores the dry surface.
+    private func meltProgress(phase: CGFloat) -> CGFloat {
+        let meltSpan: CGFloat = 0.82
+        let raw = min(phase / meltSpan, 1.0)
+        return easeInOut(raw)
+    }
+
+    /// Keeps the top surface fully opaque during the melt, then fades it back
+    /// in over the last sliver of the loop so the reset reads as a soft
+    /// re-forming of the surface rather than a hard snap/flash.
+    private func surfaceOpacity(phase: CGFloat) -> Double {
+        let fadeStart: CGFloat = 0.94
+        guard phase >= fadeStart else { return 1 }
+        let f = (phase - fadeStart) / (1 - fadeStart)
+        return Double(easeInOut(f))
+    }
+
+    private func easeInOut(_ x: CGFloat) -> CGFloat {
+        let c = min(max(x, 0), 1)
+        return c * c * (3 - 2 * c)
+    }
+
+    // MARK: - Metaball melt mask
+
+    /// White = remaining top material. A receding rect (the surface body) is
+    /// unioned via the metaball filters with a row of droplet circles that
+    /// travel downward and detach. The blur is applied to the raw shapes and
+    /// the alphaThreshold then sharpens the blurred union into crisp necking
+    /// edges (the canonical gooey-metaball recipe).
+    private func meltCanvas(progress: CGFloat, size: CGSize) -> some View {
+        let blur = blurRadius(for: size)
+        let waterline = waterlineY(progress: progress, size: size)
+        let drops = droplets(at: progress, size: size, waterline: waterline)
+
+        return Canvas { context, _ in
+            context.addFilter(.alphaThreshold(min: 0.5, color: .white))
+            context.addFilter(.blur(radius: blur))
+            context.drawLayer { layer in
+                // The body of the surface above the waterline stays solid.
+                if waterline > 0 {
+                    let body = CGRect(x: -blur, y: -blur,
+                                      width: size.width + blur * 2,
+                                      height: waterline + blur)
+                    layer.fill(Path(body), with: .color(.white))
+                }
+                // Droplets — circles fused to the body until their neck thins
+                // past the blur threshold, then detaching and falling away.
+                for drop in drops {
+                    let rect = CGRect(x: drop.x - drop.radius,
+                                      y: drop.y - drop.radius,
+                                      width: drop.radius * 2,
+                                      height: drop.radius * 2)
+                    layer.fill(Path(ellipseIn: rect), with: .color(.white))
+                }
+            }
+        }
+    }
+
+    /// Blur radius scaled to the smaller dimension so the surface-tension
+    /// threshold reads identically in a 120pt tile and a large detail area.
+    private func blurRadius(for size: CGSize) -> CGFloat {
+        max(min(size.width, size.height) * 0.05, 3)
+    }
+
+    /// The flat surface recedes upward as the melt advances, eventually
+    /// clearing the frame entirely so the bottom view is fully exposed.
+    private func waterlineY(progress: CGFloat, size: CGSize) -> CGFloat {
+        // Hold a thin lip early so the first droplets read as forming on a
+        // surface, then sweep the waterline off the top edge.
+        let receded = max(progress - 0.18, 0) / 0.82
+        return size.height * (1 - easeInOut(receded))
+    }
+
+    // MARK: - Droplet model
+
+    struct Droplet {
+        var x: CGFloat
+        var y: CGFloat
+        var radius: CGFloat
+    }
+
+    /// Pure function: places a row of droplets along the waterline. Each has a
+    /// staggered phase so they bulge, neck, and detach at different moments,
+    /// giving the row a surface-tension cadence rather than marching in unison.
+    private func droplets(at progress: CGFloat, size: CGSize, waterline: CGFloat) -> [Droplet] {
+        let count = dropletCount(for: size)
+        guard count > 0 else { return [] }
+
+        let spacing = size.width / CGFloat(count)
+        let baseRadius = spacing * 0.42
+        let fallSpan = size.height + baseRadius * 2
+
+        var result: [Droplet] = []
+        result.reserveCapacity(count)
+
+        for i in 0..<count {
+            // Deterministic per-drop variation without RNG noise.
+            let seed = CGFloat((i * 1664525 + 1013904223) % 997) / 997
+            let phase = seed * 0.45
+            let xJitter = (seed - 0.5) * spacing * 0.3
+            let x = spacing * (CGFloat(i) + 0.5) + xJitter
+
+            // Local melt for this drop: ramps after its phase delay.
+            let local = clamp((progress - phase) / max(1 - phase, 0.001))
+
+            // Bulge: radius swells from a nub to full size as it forms.
+            let radius = baseRadius * (0.45 + 0.55 * easeInOut(min(local * 2, 1)))
+
+            // Travel: the drop slides down from the waterline, accelerating
+            // like gravity once it has necked off.
+            let travel = easeIn(local) * fallSpan
+            let y = waterline + radius * 0.4 + travel
+
+            result.append(Droplet(x: x, y: y, radius: radius))
+        }
+        return result
+    }
+
+    private func dropletCount(for size: CGSize) -> Int {
+        // Cap the count for Canvas redraw cost; scale gently with width.
+        let n = Int((size.width / 46).rounded())
+        return min(max(n, 4), 11)
+    }
+
+    private func easeIn(_ x: CGFloat) -> CGFloat {
+        let c = clamp(x)
+        return c * c
+    }
+
+    private func clamp(_ x: CGFloat) -> CGFloat {
+        min(max(x, 0), 1)
+    }
+
+    // MARK: - Content layers
+
+    /// The melting top surface: a warm molten gradient with a label, kept
+    /// full-bleed (no inset/clip) so the mask aligns to its content.
+    private func topView(size: CGSize) -> some View {
+        let glyphSize = min(size.width, size.height) * 0.26
+        return ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.98, green: 0.42, blue: 0.20),
+                    Color(red: 0.92, green: 0.20, blue: 0.36),
+                    Color(red: 0.62, green: 0.10, blue: 0.42)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            // A soft top sheen so the molten surface catches light.
+            LinearGradient(
+                colors: [Color.white.opacity(0.35), .clear],
+                startPoint: .top,
+                endPoint: .center
+            )
+            .blendMode(.softLight)
+
+            Image(systemName: "drop.fill")
+                .font(.system(size: glyphSize, weight: .bold))
+                .foregroundStyle(Color.white.opacity(0.92))
+                .shadow(color: Color(red: 0.55, green: 0.05, blue: 0.30).opacity(0.5),
+                        radius: glyphSize * 0.08, y: glyphSize * 0.04)
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    /// The view revealed beneath: a cool teal gradient with its own glyph, so
+    /// the fully-melted frame is always legible content, never blank.
+    private func bottomView(size: CGSize) -> some View {
+        let glyphSize = min(size.width, size.height) * 0.26
+        return ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.06, green: 0.22, blue: 0.34),
+                    Color(red: 0.10, green: 0.42, blue: 0.52),
+                    Color(red: 0.20, green: 0.62, blue: 0.60)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            // Faint vertical streaks evoke the wet surface left behind.
+            LinearGradient(
+                colors: [Color.white.opacity(0.10), .clear, Color.white.opacity(0.06)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .blendMode(.screen)
+
+            Image(systemName: "sparkles")
+                .font(.system(size: glyphSize, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.9))
+        }
+        .frame(width: size.width, height: size.height)
+    }
+}
+"""###,
+        "tr-magnetic-swap": ###"""
+import SwiftUI
+
+// MARK: - Magnetic Swap
+// Two cards trade slots with a springy magnetic pull and overshoot recoil.
+// demo == true  -> a self-driving PhaseAnimator loop cycles the swap continuously.
+// demo == false -> a real DragGesture on a card drives the swap; release past the
+//                  midpoint commits both cards with .spring(bounce:) + a haptic tick.
+struct MagneticSwapView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            if demo {
+                MagneticSwapView_DemoDriver(size: geo.size)
+            } else {
+                MagneticSwapView_InteractiveDriver(size: geo.size)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Shared geometry / colors
+
+private enum MagneticSwapView_SwapMetrics {
+    // Slot layout is computed from the available size so it reads at 120pt and large.
+    static func cardSize(for size: CGSize) -> CGSize {
+        let w = min(size.width, size.height * 1.6)
+        let cardW = max(28, w * 0.34)
+        let cardH = max(36, min(size.height * 0.62, cardW * 1.32))
+        return CGSize(width: cardW, height: cardH)
+    }
+
+    // Horizontal centers of the two slots, as a fraction-driven absolute point.
+    static func leftSlot(for size: CGSize) -> CGPoint {
+        CGPoint(x: size.width * 0.31, y: size.height * 0.5)
+    }
+    static func rightSlot(for size: CGSize) -> CGPoint {
+        CGPoint(x: size.width * 0.69, y: size.height * 0.5)
+    }
+
+    // Vertical arc amplitude so the two cards pass each other instead of colliding.
+    static func arc(for size: CGSize) -> CGFloat {
+        min(size.height * 0.22, 26)
+    }
+}
+
+private enum MagneticSwapView_SwapPalette {
+    static let backdropTop = Color(red: 0.07, green: 0.08, blue: 0.11)
+    static let backdropBottom = Color(red: 0.04, green: 0.05, blue: 0.07)
+
+    static let cardATop = Color(red: 0.36, green: 0.62, blue: 1.0)
+    static let cardABottom = Color(red: 0.20, green: 0.34, blue: 0.92)
+
+    static let cardBTop = Color(red: 1.0, green: 0.52, blue: 0.42)
+    static let cardBBottom = Color(red: 0.93, green: 0.30, blue: 0.46)
+
+    static let slotStroke = Color(red: 1.0, green: 1.0, blue: 1.0).opacity(0.10)
+}
+
+// MARK: - Pure progress -> layout helpers
+// One render path: both drivers feed `progress` (0 = original, 1 = swapped) and
+// `lean` (0...1 magnetic-attraction strength) into the same Stage view.
+
+private struct MagneticSwapView_SwapLayout {
+    let size: CGSize
+    let progress: CGFloat   // 0...1 (can mildly overshoot during a spring)
+    let lean: CGFloat       // 0...1 magnetic lean strength
+
+    private var clampedP: CGFloat { min(max(progress, 0), 1) }
+
+    // Card A travels left -> right over the top arc.
+    func centerA() -> CGPoint {
+        let l = MagneticSwapView_SwapMetrics.leftSlot(for: size)
+        let r = MagneticSwapView_SwapMetrics.rightSlot(for: size)
+        let x = l.x + (r.x - l.x) * progress
+        let arc = MagneticSwapView_SwapMetrics.arc(for: size)
+        // bell curve peak at p=0.5, lifting upward (negative y).
+        let y = l.y - arc * bell(clampedP)
+        return CGPoint(x: x, y: y)
+    }
+
+    // Card B travels right -> left under the bottom arc.
+    func centerB() -> CGPoint {
+        let l = MagneticSwapView_SwapMetrics.leftSlot(for: size)
+        let r = MagneticSwapView_SwapMetrics.rightSlot(for: size)
+        let x = r.x + (l.x - r.x) * progress
+        let arc = MagneticSwapView_SwapMetrics.arc(for: size)
+        let y = r.y + arc * bell(clampedP)
+        return CGPoint(x: x, y: y)
+    }
+
+    // Rotation: a base tilt as it travels, plus a magnetic lean toward the partner
+    // that becomes perceptible as the cards approach the swap threshold.
+    func rotationA() -> Angle {
+        let travel = sin(clampedP * .pi) * 8.0          // gentle banking through the arc
+        let magnet = leanCurve() * 14.0 * Double(lean)  // lean toward partner
+        return .degrees(Double(travel) + magnet)
+    }
+    func rotationB() -> Angle {
+        let travel = -sin(clampedP * .pi) * 8.0
+        let magnet = -leanCurve() * 14.0 * Double(lean)
+        return .degrees(Double(travel) + magnet)
+    }
+
+    // A tiny pull-together offset so the stationary card visibly "reaches" toward
+    // the dragged one before they commit. Scaled by card width to stay legible.
+    func magneticPull() -> CGFloat {
+        let cw = MagneticSwapView_SwapMetrics.cardSize(for: size).width
+        return CGFloat(leanCurve()) * lean * cw * 0.16
+    }
+
+    // Lift / scale while mid-flight so the moving card feels picked up.
+    func scaleA() -> CGFloat { 1.0 + 0.07 * CGFloat(bell(clampedP)) }
+    func scaleB() -> CGFloat { 1.0 + 0.07 * CGFloat(bell(clampedP)) }
+
+    // Shadow grows as the cards lift off their slots.
+    func shadowRadius() -> CGFloat {
+        let cw = MagneticSwapView_SwapMetrics.cardSize(for: size).width
+        return cw * (0.06 + 0.16 * CGFloat(bell(clampedP)))
+    }
+
+    private func bell(_ p: CGFloat) -> Double {
+        // 0 at the ends, 1 at the middle.
+        Double(sin(p * .pi))
+    }
+
+    // Lean ramps up as progress approaches the midpoint and fades after passing it.
+    private func leanCurve() -> Double {
+        let p = Double(clampedP)
+        // peak near the midpoint, signed so both halves pull inward.
+        let centred = 1.0 - abs(p - 0.5) * 2.0   // 0 at ends, 1 at middle
+        return max(0, centred)
+    }
+}
+
+// MARK: - The shared visual stage
+
+private struct MagneticSwapView_SwapStage: View {
+    let layout: MagneticSwapView_SwapLayout
+    // labels swap at the midpoint so the cards convincingly trade identities.
+    var labelFlipped: Bool
+
+    var body: some View {
+        ZStack {
+            backdrop
+            slotGuides
+            // Draw the lower-arc card first so the upper-arc card overlaps it
+            // as they cross — sells the physical "lift over" swap.
+            cardB
+            cardA
+        }
+    }
+
+    private var backdrop: some View {
+        LinearGradient(
+            colors: [MagneticSwapView_SwapPalette.backdropTop, MagneticSwapView_SwapPalette.backdropBottom],
+            startPoint: .top, endPoint: .bottom
+        )
+    }
+
+    private var slotGuides: some View {
+        let cs = MagneticSwapView_SwapMetrics.cardSize(for: layout.size)
+        let l = MagneticSwapView_SwapMetrics.leftSlot(for: layout.size)
+        let r = MagneticSwapView_SwapMetrics.rightSlot(for: layout.size)
+        return ZStack {
+            slotShape(cs).position(l)
+            slotShape(cs).position(r)
+        }
+    }
+
+    private func slotShape(_ cs: CGSize) -> some View {
+        RoundedRectangle(cornerRadius: cs.width * 0.18, style: .continuous)
+            .strokeBorder(MagneticSwapView_SwapPalette.slotStroke, style: StrokeStyle(lineWidth: 1.5, dash: [5, 5]))
+            .frame(width: cs.width, height: cs.height)
+    }
+
+    private var cardA: some View {
+        let cs = MagneticSwapView_SwapMetrics.cardSize(for: layout.size)
+        let pull = layout.magneticPull()
+        return MagneticSwapView_CardFace(
+            size: cs,
+            top: MagneticSwapView_SwapPalette.cardATop,
+            bottom: MagneticSwapView_SwapPalette.cardABottom,
+            symbol: labelFlipped ? "bolt.fill" : "sparkles",
+            shadow: layout.shadowRadius()
+        )
+        .scaleEffect(layout.scaleA())
+        .rotationEffect(layout.rotationA())
+        .position(layout.centerA())
+        // pull toward partner (A pulls right toward B's origin slot).
+        .offset(x: pull)
+    }
+
+    private var cardB: some View {
+        let cs = MagneticSwapView_SwapMetrics.cardSize(for: layout.size)
+        let pull = layout.magneticPull()
+        return MagneticSwapView_CardFace(
+            size: cs,
+            top: MagneticSwapView_SwapPalette.cardBTop,
+            bottom: MagneticSwapView_SwapPalette.cardBBottom,
+            symbol: labelFlipped ? "sparkles" : "bolt.fill",
+            shadow: layout.shadowRadius()
+        )
+        .scaleEffect(layout.scaleB())
+        .rotationEffect(layout.rotationB())
+        .position(layout.centerB())
+        // B pulls left toward A's origin slot.
+        .offset(x: -pull)
+    }
+}
+
+private struct MagneticSwapView_CardFace: View {
+    let size: CGSize
+    let top: Color
+    let bottom: Color
+    let symbol: String
+    let shadow: CGFloat
+
+    var body: some View {
+        let radius = size.width * 0.18
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [top, bottom],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+            )
+            .overlay(sheen(radius: radius))
+            .overlay(
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(Color(red: 1, green: 1, blue: 1).opacity(0.22), lineWidth: 1)
+            )
+            .overlay(glyph)
+            .frame(width: size.width, height: size.height)
+            .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(0.45),
+                    radius: shadow, x: 0, y: shadow * 0.45)
+    }
+
+    private func sheen(radius: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 1, green: 1, blue: 1).opacity(0.30),
+                        Color(red: 1, green: 1, blue: 1).opacity(0.0)
+                    ],
+                    startPoint: .top, endPoint: .center
+                )
+            )
+            .blendMode(.screen)
+    }
+
+    private var glyph: some View {
+        Image(systemName: symbol)
+            .font(.system(size: size.width * 0.30, weight: .bold))
+            .foregroundStyle(Color(red: 1, green: 1, blue: 1).opacity(0.92))
+            .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(0.3), radius: 2, y: 1)
+    }
+}
+
+// MARK: - Demo driver (self-playing, no touch, ~3.2s loop)
+
+private struct MagneticSwapView_DemoDriver: View {
+    let size: CGSize
+
+    // Phases: hold at 0, swap to 1, hold at 1, swap back to 0.
+    private let phases: [CGFloat] = [0, 0, 1, 1, 0]
+
+    var body: some View {
+        PhaseAnimator(phases) { p in
+            let lean = leanStrength(for: p)
+            MagneticSwapView_SwapStage(
+                layout: MagneticSwapView_SwapLayout(size: size, progress: p, lean: lean),
+                labelFlipped: p >= 0.5
+            )
+        } animation: { _ in
+            // Bouncy commit gives the overshoot recoil; the held phases keep the
+            // overall cadence inside the 2.5-4s window without strobing.
+            .spring(response: 0.7, dampingFraction: 0.55).delay(0.35)
+        }
+    }
+
+    private func leanStrength(for p: CGFloat) -> CGFloat {
+        // Always show some magnetism so the tile reads as "magnetic" even at rest.
+        0.85
+    }
+}
+
+// MARK: - Interactive driver
+
+private struct MagneticSwapView_InteractiveDriver: View {
+    let size: CGSize
+
+    @State private var committed: CGFloat = 0      // 0 or 1: last settled state
+    @State private var dragProgress: CGFloat = 0   // live progress while dragging
+    @State private var isDragging: Bool = false
+    @State private var snapTick: Int = 0           // drives sensory feedback on commit
+
+    var body: some View {
+        let progress = isDragging ? dragProgress : committed
+        let lean: CGFloat = isDragging ? 1.0 : 0.0
+
+        MagneticSwapView_SwapStage(
+            layout: MagneticSwapView_SwapLayout(size: size, progress: progress, lean: lean),
+            labelFlipped: progress >= 0.5
+        )
+        .contentShape(Rectangle())
+        .gesture(dragGesture)
+        .sensoryFeedback(.impact(flexibility: .soft), trigger: snapTick)
+    }
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if !isDragging { isDragging = true }
+                let span = travelSpan()
+                // Translation along the swap axis; direction depends on which way
+                // we're currently swapping (0->1 moves right, 1->0 moves left).
+                let raw = committed == 0 ? value.translation.width : -value.translation.width
+                let delta = raw / span
+                let base = committed
+                dragProgress = clamp(base + delta)
+            }
+            .onEnded { value in
+                let span = travelSpan()
+                let raw = committed == 0 ? value.translation.width : -value.translation.width
+                let velocity = committed == 0 ? value.predictedEndTranslation.width
+                                              : -value.predictedEndTranslation.width
+                let projected = (raw + (velocity - raw) * 0.25) / span
+                let target: CGFloat = (committed + projected) >= 0.5 ? 1 : 0
+
+                let changed = target != committed
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.55)) {
+                    committed = target
+                    dragProgress = target
+                    isDragging = false
+                }
+                if changed { snapTick += 1 } // haptic only on a real commit
+            }
+    }
+
+    private func travelSpan() -> CGFloat {
+        let l = MagneticSwapView_SwapMetrics.leftSlot(for: size)
+        let r = MagneticSwapView_SwapMetrics.rightSlot(for: size)
+        return max(1, r.x - l.x)
+    }
+
+    private func clamp(_ v: CGFloat) -> CGFloat { min(max(v, 0), 1) }
+}
+"""###,
+        "tr-metaball-merge": ###"""
+import SwiftUI
+
+/// Metaball Merge Reveal — two rounded pill blobs slide toward each other inside a
+/// Canvas whose layer is blurred then alpha-thresholded, so the overlapping blurred
+/// fields snap into a gooey liquid neck that pinches and separates. The thresholded
+/// Canvas is used as a `.mask` over a gradient-filled container, so the merge resolves
+/// into a clean destination shape rather than a flat fill.
+///
+/// - demo == true  → a self-driving TimelineView loop scrubs the blob separation on a
+///                   ~3s cycle: blobs fuse into one, stretch a neck, pinch, separate.
+/// - demo == false → still TimelineView-driven, but a DragGesture lets you scrub the
+///                   separation by hand (drag to pull the blobs together / apart and
+///                   watch the neck form and snap); release resumes the auto loop.
+///
+/// Pure SwiftUI Canvas filters (`.blur` + `.alphaThreshold`, both iOS 15+), iOS 17 clean.
+struct MetaballMergeView: View {
+    var demo: Bool = false
+
+    // Live hand-scrub state (only used when demo == false).
+    @State private var isDragging: Bool = false
+    @State private var dragProgress: CGFloat = 0.5
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            content(size: size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                // Attach the scrub gesture always, but mask it off in demo mode so
+                // demo == true stays a pure auto-loop. (`Optional<Gesture>` is not a
+                // Gesture, so a `demo ? nil : gesture` ternary would not type-check.)
+                .gesture(scrubGesture(size: size), including: demo ? .subviews : .all)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.051, green: 0.063, blue: 0.086)) // #0d1016 tint
+    }
+
+    // MARK: - Composition
+
+    @ViewBuilder
+    private func content(size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let progress = currentProgress(time: t)
+            ZStack {
+                backdrop(size: size)
+                MetaballMergeView_MetaballField(progress: progress, gradient: blobGradient)
+                    .allowsHitTesting(false)
+                glints(size: size, progress: progress)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+
+    /// The resolved progress (0…1) that drives blob separation.
+    /// 0   → fully merged (one blob)
+    /// ~0.5 → necked gooey bridge
+    /// 1   → separated (two distinct capsules)
+    private func currentProgress(time t: TimeInterval) -> CGFloat {
+        if !demo && isDragging {
+            return dragProgress
+        }
+        // Smooth, eased back-and-forth: merge → neck → separate → neck → merge.
+        let period: Double = 3.2
+        let phase = (t.truncatingRemainder(dividingBy: period)) / period // 0..1
+        let triangle = phase < 0.5 ? phase * 2.0 : (1.0 - phase) * 2.0    // 0..1..0
+        let eased = easeInOut(CGFloat(triangle))
+        return eased
+    }
+
+    private func easeInOut(_ x: CGFloat) -> CGFloat {
+        let c = min(max(x, 0), 1)
+        return c * c * (3 - 2 * c)
+    }
+
+    // MARK: - Subviews
+
+    private func backdrop(size: CGSize) -> some View {
+        let m = min(size.width, size.height)
+        return RoundedRectangle(cornerRadius: m * 0.16, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.078, green: 0.094, blue: 0.137),
+                        Color(red: 0.043, green: 0.051, blue: 0.078)
+                    ],
+                    startPoint: .top, endPoint: .bottom
+                )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: m * 0.16, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.05), lineWidth: 1)
+            )
+            .padding(m * 0.07)
+    }
+
+    /// Specular glints anchored to the two blob centers so the goo reads as glossy.
+    private func glints(size: CGSize, progress: CGFloat) -> some View {
+        let layout = MetaballMergeView_MetaballField.layout(for: size)
+        let sep = MetaballMergeView_MetaballField.separation(progress: progress, blobR: layout.blobR)
+        let left = CGPoint(x: layout.center.x - sep, y: layout.center.y)
+        let right = CGPoint(x: layout.center.x + sep, y: layout.center.y)
+        let glintR = layout.blobR * 0.42
+        return ZStack {
+            glintDot(at: left, radius: glintR)
+            glintDot(at: right, radius: glintR)
+        }
+    }
+
+    private func glintDot(at p: CGPoint, radius: CGFloat) -> some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [Color.white.opacity(0.55), Color.white.opacity(0.0)],
+                    center: .center, startRadius: 0, endRadius: radius
+                )
+            )
+            .frame(width: radius * 2, height: radius * 2)
+            .position(x: p.x - radius * 0.45, y: p.y - radius * 0.5)
+            .blendMode(.screen)
+    }
+
+    private var blobGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.404, green: 0.522, blue: 1.0),   // periwinkle
+                Color(red: 0.706, green: 0.420, blue: 0.973),  // violet
+                Color(red: 0.984, green: 0.451, blue: 0.643)   // pink
+            ],
+            startPoint: .topLeading, endPoint: .bottomTrailing
+        )
+    }
+
+    // MARK: - Gesture (demo == false)
+
+    private func scrubGesture(size: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                isDragging = true
+                // Map horizontal drag position across the view to separation 0…1.
+                let w = max(size.width, 1)
+                let p = value.location.x / w
+                dragProgress = min(max(p, 0), 1)
+            }
+            .onEnded { _ in
+                isDragging = false
+            }
+    }
+}
+
+// MARK: - Metaball Canvas (blur → alphaThreshold) used as a gradient mask
+
+private struct MetaballMergeView_MetaballField: View {
+    var progress: CGFloat
+    var gradient: LinearGradient
+
+    struct Layout {
+        var center: CGPoint
+        var blobR: CGFloat
+        var blurR: CGFloat
+    }
+
+    /// Proportional geometry so the neck-pinch holds at BOTH a 120pt tile and a large detail view.
+    static func layout(for size: CGSize) -> Layout {
+        let m = min(size.width, size.height)
+        let blobR = m * 0.17
+        let blurR = blobR * 0.62
+        return Layout(
+            center: CGPoint(x: size.width / 2, y: size.height / 2),
+            blobR: blobR,
+            blurR: blurR
+        )
+    }
+
+    /// Half the center-to-center distance. The travel range is a multiple of blobR,
+    /// which is what makes the gooey neck form mid-range and snap past the threshold.
+    /// progress 0 → centers coincident (merged); progress 1 → ~2.2×blobR apart (separated).
+    static func separation(progress: CGFloat, blobR: CGFloat) -> CGFloat {
+        let p = min(max(progress, 0), 1)
+        let maxHalfGap = blobR * 1.12          // full center gap ≈ 2.24×blobR at p=1
+        return maxHalfGap * p
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let size = geo.size
+            let l = MetaballMergeView_MetaballField.layout(for: size)
+            gradient
+                .mask(maskCanvas(size: size, layout: l))
+        }
+    }
+
+    private func maskCanvas(size: CGSize, layout l: Layout) -> some View {
+        Canvas { ctx, canvasSize in
+            // Filter order matters: a filter added LATER applies INNERMOST.
+            // We want draw → blur → threshold, so add threshold first, blur second.
+            ctx.addFilter(.alphaThreshold(min: 0.5, color: .white))
+            ctx.addFilter(.blur(radius: l.blurR))
+            ctx.drawLayer { layer in
+                let sep = MetaballMergeView_MetaballField.separation(progress: progress, blobR: l.blobR)
+                let left = CGPoint(x: l.center.x - sep, y: l.center.y)
+                let right = CGPoint(x: l.center.x + sep, y: l.center.y)
+                drawCapsule(in: layer, center: left, blobR: l.blobR)
+                drawCapsule(in: layer, center: right, blobR: l.blobR)
+            }
+        }
+    }
+
+    private func drawCapsule(in layer: GraphicsContext, center: CGPoint, blobR: CGFloat) {
+        // A vertically-oriented rounded pill blob. Opaque white so the threshold reads cleanly.
+        let w = blobR * 1.7
+        let h = blobR * 2.2
+        let rect = CGRect(x: center.x - w / 2, y: center.y - h / 2, width: w, height: h)
+        let path = Capsule(style: .continuous).path(in: rect)
+        layer.fill(path, with: .color(.white))
+    }
+}
+"""###,
+        "tr-mosaic-flip": ###"""
+import SwiftUI
+
+// MARK: - Mosaic Tile Flip
+// A 2D grid of tiles flips in a diagonal wave, each tile rotating on
+// rotation3DEffect about .y and swapping its face from the old view to the new
+// one at 90 degrees, like a split-flap departures board reshuffling.
+//
+// Demo: a TimelineView(.animation) drives a continuous triangle progress so the
+// staggered per-tile localProgress is live every frame and the wave renders.
+// Interactive: a tap toggles `flipped`; every tile springs from its OWN delayed
+// .animation keyed to (row+col), which is what produces the diagonal wave (not a
+// single shared withAnimation, which would flip everything in unison).
+
+struct MosaicFlipView: View {
+    var demo: Bool = false
+
+    private let rows: Int = 5
+    private let cols: Int = 6
+
+    var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        if demo {
+            demoBody(in: size)
+        } else {
+            interactiveBody(in: size)
+        }
+    }
+
+    // MARK: Demo (self-driving, no touch)
+
+    private func demoBody(in size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let progress: Double = triangleProgress(at: timeline.date)
+            grid(in: size, globalProgress: progress, flipped: nil)
+        }
+    }
+
+    // Continuous 0 -> 1 -> 0 triangle over `period` seconds. A triangle (not a
+    // sawtooth) avoids a hard snap-reverse at the loop point so the wave breathes.
+    private func triangleProgress(at date: Date) -> Double {
+        let period: Double = 3.6
+        let t: Double = date.timeIntervalSinceReferenceDate
+        let phase: Double = (t.truncatingRemainder(dividingBy: period)) / period
+        return phase < 0.5 ? phase * 2.0 : (1.0 - phase) * 2.0
+    }
+
+    // MARK: Interactive (tap to flip the wave)
+
+    private func interactiveBody(in size: CGSize) -> some View {
+        MosaicFlipView_InteractiveMosaic { flipped in
+            grid(in: size, globalProgress: flipped ? 1.0 : 0.0, flipped: flipped)
+        }
+    }
+
+    // MARK: Shared grid
+
+    // `flipped` is nil in demo (value is already live per-frame, no per-tile
+    // animation needed) and a Bool in interactive (drives each tile's own
+    // staggered spring).
+    private func grid(in size: CGSize, globalProgress: Double, flipped: Bool?) -> some View {
+        let inset: CGFloat = max(4, min(size.width, size.height) * 0.05)
+        let boardW: CGFloat = max(1, size.width - inset * 2)
+        let boardH: CGFloat = max(1, size.height - inset * 2)
+        let tileW: CGFloat = boardW / CGFloat(cols)
+        let tileH: CGFloat = boardH / CGFloat(rows)
+        let maxDiag: Double = Double((rows - 1) + (cols - 1))
+
+        return ZStack {
+            backdrop
+            tiles(boardW: boardW, boardH: boardH,
+                  tileW: tileW, tileH: tileH,
+                  maxDiag: maxDiag, globalProgress: globalProgress, flipped: flipped)
+                .frame(width: boardW, height: boardH)
+                .clipShape(RoundedRectangle(cornerRadius: inset, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: inset, style: .continuous)
+                        .strokeBorder(Color(red: 1, green: 1, blue: 1).opacity(0.08), lineWidth: 1)
+                )
+                .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(0.45),
+                        radius: 12, x: 0, y: 8)
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    private func tiles(boardW: CGFloat, boardH: CGFloat,
+                       tileW: CGFloat, tileH: CGFloat,
+                       maxDiag: Double, globalProgress: Double, flipped: Bool?) -> some View {
+        ZStack(alignment: .topLeading) {
+            ForEach(0..<rows, id: \.self) { row in
+                ForEach(0..<cols, id: \.self) { col in
+                    tile(row: row, col: col,
+                         boardW: boardW, boardH: boardH,
+                         tileW: tileW, tileH: tileH,
+                         maxDiag: maxDiag, globalProgress: globalProgress, flipped: flipped)
+                }
+            }
+        }
+    }
+
+    private func tile(row: Int, col: Int,
+                      boardW: CGFloat, boardH: CGFloat,
+                      tileW: CGFloat, tileH: CGFloat,
+                      maxDiag: Double, globalProgress: Double, flipped: Bool?) -> some View {
+        // Demo: localProgress is a live per-tile value (the wave lives in the value).
+        // Interactive: targetProgress is the same 0/1 for every tile; the wave lives
+        // entirely in the per-tile staggered .animation delay below.
+        let isInteractive: Bool = flipped != nil
+        let target: Double
+        if isInteractive {
+            target = globalProgress
+        } else {
+            target = localProgress(row: row, col: col, maxDiag: maxDiag, global: globalProgress)
+        }
+
+        let anim: Animation?
+        if isInteractive {
+            let unit: Double = 0.06
+            let delay: Double = Double(row + col) * unit
+            anim = .spring(response: 0.55, dampingFraction: 0.74).delay(delay)
+        } else {
+            anim = nil // value is already live per-frame; suppress ambient smear.
+        }
+
+        return MosaicFlipView_MosaicTile(
+            row: row, col: col,
+            boardW: boardW, boardH: boardH,
+            tileW: tileW, tileH: tileH,
+            targetProgress: target,
+            animation: anim
+        )
+        .frame(width: tileW, height: tileH)
+        .offset(x: CGFloat(col) * tileW, y: CGFloat(row) * tileH)
+    }
+
+    // Diagonal wave: stagger each tile's local progress by (row+col), windowed so
+    // the flip is shorter than the full timeline. Keeps the wave readable and
+    // guarantees the board is never fully edge-on at once.
+    private func localProgress(row: Int, col: Int, maxDiag: Double, global: Double) -> Double {
+        let diag: Double = Double(row + col)
+        let norm: Double = maxDiag > 0 ? diag / maxDiag : 0
+        let window: Double = 0.55           // each tile flips over 55% of the timeline
+        let spread: Double = 1.0 - window   // leading delay span
+        let start: Double = norm * spread
+        let raw: Double = (global - start) / window
+        return min(1, max(0, raw))
+    }
+
+    private var backdrop: some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.05, green: 0.06, blue: 0.09),
+                        Color(red: 0.02, green: 0.02, blue: 0.04)
+                    ],
+                    startPoint: .top, endPoint: .bottom
+                )
+            )
+            .ignoresSafeArea()
+    }
+}
+
+// MARK: - Interactive wrapper
+
+private struct MosaicFlipView_InteractiveMosaic<Content: View>: View {
+    @ViewBuilder var content: (Bool) -> Content
+
+    @State private var flipped: Bool = false
+
+    var body: some View {
+        content(flipped)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                // No withAnimation here: each tile owns its delayed spring so the
+                // angles fan out into a diagonal wave instead of flipping in unison.
+                flipped.toggle()
+            }
+    }
+}
+
+// MARK: - Single flipping tile
+
+private struct MosaicFlipView_MosaicTile: View {
+    let row: Int
+    let col: Int
+    let boardW: CGFloat
+    let boardH: CGFloat
+    let tileW: CGFloat
+    let tileH: CGFloat
+    let targetProgress: Double      // 0 -> 1 for THIS tile
+    let animation: Animation?       // non-nil => interactive (per-tile staggered spring)
+
+    private var angle: Double { targetProgress * 180.0 }
+    private var showsBack: Bool { angle >= 90.0 }
+
+    var body: some View {
+        ZStack {
+            // Front face (old view) visible 0..<90.
+            slice(of: MosaicFlipView_FaceA(boardW: boardW, boardH: boardH))
+                .opacity(showsBack ? 0 : 1)
+
+            // Back face (new view) visible 90..180.
+            // Pre-rotated 180 about .y so the parent's mirroring at full flip
+            // cancels out and the new face reassembles un-mirrored.
+            slice(of: MosaicFlipView_FaceB(boardW: boardW, boardH: boardH))
+                .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
+                .opacity(showsBack ? 1 : 0)
+        }
+        .overlay(seamSheen)
+        .rotation3DEffect(
+            .degrees(angle),
+            axis: (x: 0, y: 1, z: 0),
+            anchor: .center,
+            perspective: 0.55
+        )
+        .compositingGroup()
+        .shadow(color: Color(red: 0, green: 0, blue: 0).opacity(edgeShadowOpacity),
+                radius: 3, x: 0, y: 0)
+        // Outermost: governs angle AND face opacities together (both derive from
+        // targetProgress) so the swap stays glued to the rotation. nil in demo.
+        .animation(animation, value: targetProgress)
+    }
+
+    // Edge-on tiles darken slightly for depth as they pass 90.
+    private var edgeShadowOpacity: Double {
+        let t: Double = abs(sin(angle * .pi / 180.0))   // peaks at 90
+        return 0.05 + t * 0.35
+    }
+
+    // A thin specular line + edge shading that rakes as the tile turns.
+    private var seamSheen: some View {
+        let t: Double = abs(sin(angle * .pi / 180.0))
+        return Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 1, green: 1, blue: 1).opacity(0.0),
+                        Color(red: 1, green: 1, blue: 1).opacity(0.22 * t),
+                        Color(red: 0, green: 0, blue: 0).opacity(0.30 * t)
+                    ],
+                    startPoint: .leading, endPoint: .trailing
+                )
+            )
+            .blendMode(.plusLighter)
+            .allowsHitTesting(false)
+    }
+
+    // Crop tile (row,col) out of a full-bleed face. Offset BEFORE the clipping
+    // frame, top-leading alignment, so tiles reassemble seamlessly.
+    private func slice<F: View>(of face: F) -> some View {
+        face
+            .frame(width: boardW, height: boardH)
+            .offset(x: -CGFloat(col) * tileW, y: -CGFloat(row) * tileH)
+            .frame(width: tileW, height: tileH, alignment: .topLeading)
+            .clipped()
+    }
+}
+
+// MARK: - Full-bleed faces (must span the whole rect so every slice is legible)
+
+private struct MosaicFlipView_FaceA: View {
+    let boardW: CGFloat
+    let boardH: CGFloat
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.36, green: 0.20, blue: 0.62),
+                    Color(red: 0.16, green: 0.10, blue: 0.42),
+                    Color(red: 0.08, green: 0.06, blue: 0.24)
+                ],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+
+            // Diagonal motif so edge tiles still carry detail.
+            ForEach(0..<7, id: \.self) { i in
+                Capsule()
+                    .fill(Color(red: 1, green: 1, blue: 1).opacity(0.06))
+                    .frame(width: boardW * 1.4, height: max(6, boardH * 0.05))
+                    .rotationEffect(.degrees(-30))
+                    .offset(y: CGFloat(i) * boardH * 0.18 - boardH * 0.6)
+            }
+
+            RadialGradient(
+                colors: [
+                    Color(red: 0.95, green: 0.55, blue: 0.95).opacity(0.55),
+                    Color(red: 0.95, green: 0.55, blue: 0.95).opacity(0.0)
+                ],
+                center: .init(x: 0.3, y: 0.3),
+                startRadius: 0,
+                endRadius: max(boardW, boardH) * 0.7
+            )
+        }
+        .frame(width: boardW, height: boardH)
+    }
+}
+
+private struct MosaicFlipView_FaceB: View {
+    let boardW: CGFloat
+    let boardH: CGFloat
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.04, green: 0.55, blue: 0.58),
+                    Color(red: 0.05, green: 0.32, blue: 0.55),
+                    Color(red: 0.03, green: 0.14, blue: 0.30)
+                ],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+
+            // Grid motif so every slice reads as part of the new face.
+            ForEach(0..<8, id: \.self) { i in
+                Rectangle()
+                    .fill(Color(red: 1, green: 1, blue: 1).opacity(0.05))
+                    .frame(width: max(2, boardW * 0.012), height: boardH * 1.4)
+                    .offset(x: CGFloat(i) * boardW * 0.14 - boardW * 0.5)
+            }
+
+            RadialGradient(
+                colors: [
+                    Color(red: 0.45, green: 1.0, blue: 0.85).opacity(0.55),
+                    Color(red: 0.45, green: 1.0, blue: 0.85).opacity(0.0)
+                ],
+                center: .init(x: 0.7, y: 0.7),
+                startRadius: 0,
+                endRadius: max(boardW, boardH) * 0.7
+            )
+        }
+        .frame(width: boardW, height: boardH)
+    }
+}
+"""###,
+        "tr-origami-unfold": ###"""
+import SwiftUI
+
+/// Origami Unfold — a folded paper card opens along three creased panels that
+/// rotate in sequence on alternating hinge axes, revealing the destination view
+/// as the paper flattens. Each panel casts a soft crease-shadow on the one
+/// beneath it so it reads as real folded paper unfurling rather than a flat flip.
+///
+/// A single 0→1 `progress` drives all three hinge angles via STAGGERED windows
+/// (`panelProgress`), so the flaps open one after another. For the stagger to
+/// actually render, `progress` must flow through continuous intermediate values
+/// — SwiftUI only re-evaluates a body at animation endpoints, so we never let it
+/// interpolate the raw rotation angles directly:
+/// - demo == true  → `TimelineView(.animation)` feeds a continuous 0→1→0 ramp.
+/// - demo == false → `OrigamiUnfoldView_FoldingCard` is `Animatable` on `progress`, so
+///   `withAnimation(.spring)` interpolates `progress` THROUGH the body, which
+///   re-runs `panelProgress` every frame and surfaces the real staggered fold.
+struct OrigamiUnfoldView: View {
+    var demo: Bool = false
+
+    @State private var isOpen: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            content(size: geo.size)
+                .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(size: CGSize) -> some View {
+        if demo {
+            TimelineView(.animation) { timeline in
+                let p = OrigamiUnfoldView.loopProgress(timeline.date)
+                OrigamiUnfoldView_FoldingCard(progress: p, size: size)
+            }
+        } else {
+            OrigamiUnfoldView_FoldingCard(progress: isOpen ? 1.0 : 0.0, size: size)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.spring(duration: 0.6, bounce: 0.22)) {
+                        isOpen.toggle()
+                    }
+                }
+        }
+    }
+
+    /// Continuous, looping 0→1→0 triangle ramp (~3.2s) with a smooth ease so the
+    /// demo tile breathes open and closed forever with no input. Never settles
+    /// at a blank state — the base card is always legible underneath.
+    private static func loopProgress(_ date: Date) -> Double {
+        let period: Double = 3.2
+        let t = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
+        let triangle = t < 0.5 ? (t * 2.0) : (2.0 - t * 2.0)   // 0→1→0
+        return triangle * triangle * (3.0 - 2.0 * triangle)     // smoothstep ease
+    }
+}
+
+// MARK: - Animatable folding card
+
+/// The folded card: a fixed base panel plus three flaps that fold over it.
+/// Conforming to `Animatable` on `progress` is what makes the staggered
+/// sequence visible during `withAnimation` — SwiftUI interpolates `progress`
+/// and re-runs `body` (hence `panelProgress`) on every frame.
+private struct OrigamiUnfoldView_FoldingCard: View, Animatable {
+    var progress: Double
+    var size: CGSize
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    var body: some View {
+        let side = min(size.width, size.height)
+        // Open, the card is a cross 3·unit tall × 2·unit wide; unit = 0.30·side
+        // keeps it inside both a ~120pt grid tile and a large detail area.
+        let unit = side * 0.30
+        let cx = size.width / 2
+        let cy = size.height / 2
+
+        return ZStack {
+            backdrop
+            card(unit: unit)
+                .position(x: cx, y: cy)
+        }
+    }
+
+    /// Soft ambient backdrop that warms slightly as the card opens, so a frame
+    /// is never blank even at the folded extreme.
+    private var backdrop: some View {
+        let warm = 0.06 + clamp(progress, 0, 1) * 0.05
+        return LinearGradient(
+            colors: [
+                Color(red: 0.05 + warm, green: 0.06 + warm, blue: 0.10 + warm),
+                Color(red: 0.03, green: 0.035, blue: 0.06)
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+    }
+}
+
+// MARK: - Card composition
+
+private extension OrigamiUnfoldView_FoldingCard {
+
+    func card(unit: CGFloat) -> some View {
+        // Three flaps unfold over overlapping staggered windows so only one is
+        // ever near edge-on at a time and the motion reads as a sequence.
+        let pAbove = panelProgress(index: 0)   // .x hinge (top)
+        let pRight = panelProgress(index: 1)   // .y hinge
+        let pBelow = panelProgress(index: 2)   // .x hinge (bottom)
+
+        return ZStack {
+            // Base — always face-on, the anchor the flaps fold onto. Its emblem
+            // is the revealed content, so something legible shows beneath the
+            // folding paper at every frame.
+            basePanel(unit: unit)
+
+            foldingPanel(unit: unit, fold: pAbove, slot: .above,
+                         glyph: "leaf.fill",
+                         tint: Color(red: 0.36, green: 0.72, blue: 0.62))
+            foldingPanel(unit: unit, fold: pRight, slot: .right,
+                         glyph: "sparkles",
+                         tint: Color(red: 0.95, green: 0.78, blue: 0.42))
+            foldingPanel(unit: unit, fold: pBelow, slot: .below,
+                         glyph: "moon.stars.fill",
+                         tint: Color(red: 0.62, green: 0.55, blue: 0.95))
+        }
+        .frame(width: unit, height: unit)
+    }
+
+    /// The fixed base square; the emblem fades up as the card opens.
+    func basePanel(unit: CGFloat) -> some View {
+        let reveal = smoothstep(progress)
+        return RoundedRectangle(cornerRadius: unit * 0.07, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.97, green: 0.96, blue: 0.93),
+                        Color(red: 0.90, green: 0.88, blue: 0.83)
+                    ],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+            )
+            .overlay {
+                Image(systemName: "circle.hexagongrid.fill")
+                    .font(.system(size: unit * 0.34, weight: .light))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.40, green: 0.66, blue: 0.95),
+                                Color(red: 0.66, green: 0.46, blue: 0.92)
+                            ],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                    .opacity(0.28 + reveal * 0.62)
+                    .scaleEffect(0.84 + reveal * 0.16)
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: unit * 0.07, style: .continuous)
+                    .stroke(Color(red: 0.82, green: 0.80, blue: 0.74), lineWidth: 0.8)
+            )
+            .frame(width: unit, height: unit)
+            .shadow(color: Color.black.opacity(0.35), radius: unit * 0.06, y: unit * 0.03)
+    }
+}
+
+// MARK: - Folding flap
+
+private extension OrigamiUnfoldView_FoldingCard {
+
+    /// Describes a flap by its OPEN position relative to the base. Its hinge is
+    /// the edge SHARED with the base, so the flap anchors on its inner edge and
+    /// a constant offset + a 180°→0° rotation lands it exactly on the base when
+    /// closed. Alternating .x / .y / .x axes per the spec.
+    enum FlapSlot {
+        case above, right, below
+
+        var axis: (x: CGFloat, y: CGFloat, z: CGFloat) {
+            switch self {
+            case .above, .below: return (1, 0, 0)   // .x hinge
+            case .right:         return (0, 1, 0)    // .y hinge
+            }
+        }
+
+        /// Anchor = the edge shared with the base (the flap's inner edge).
+        var anchor: UnitPoint {
+            switch self {
+            case .above: return .bottom
+            case .right: return .leading
+            case .below: return .top
+            }
+        }
+
+        /// Constant offset placing the flap at its OPEN (coplanar) location.
+        func offset(unit: CGFloat) -> (CGFloat, CGFloat) {
+            switch self {
+            case .above: return (0, -unit)
+            case .right: return (unit, 0)
+            case .below: return (0, unit)
+            }
+        }
+
+        /// Crease-shadow gradient: dark at the hinge (inner) edge → clear at
+        /// the free (outer) edge.
+        var gradientPoints: (UnitPoint, UnitPoint) {
+            switch self {
+            case .above: return (.bottom, .top)
+            case .right: return (.leading, .trailing)
+            case .below: return (.top, .bottom)
+            }
+        }
+    }
+
+    /// One flap. `fold` 0 = folded flat over the base (closed card), 1 = laid
+    /// flat outward beside the base (open sheet). The flap sits at a CONSTANT
+    /// open offset and rotates 180°→0° about its shared (hinge) edge: at 180°
+    /// the flip lands it exactly on the base (covering it, fully legible); at 0°
+    /// it lies coplanar, extending the sheet. The rotation does all the
+    /// translation — no animated offset needed. Layer order keeps flaps
+    /// composited over the base, so the sweep direction reads as a fold.
+    func foldingPanel(unit: CGFloat, fold: Double, slot: FlapSlot,
+                      glyph: String, tint: Color) -> some View {
+        let f = smoothstep(fold)
+        let angle: Double = 180.0 * (1.0 - f)   // 180° closed → 0° open
+        let (dx, dy) = slot.offset(unit: unit)
+
+        return panelFace(unit: unit, glyph: glyph, tint: tint, openness: f)
+            .overlay { creaseShadow(unit: unit, slot: slot, fold: fold) }
+            .frame(width: unit, height: unit)
+            .rotation3DEffect(
+                .degrees(angle),
+                axis: slot.axis,
+                anchor: slot.anchor,
+                perspective: 0.45
+            )
+            .offset(x: dx, y: dy)
+            .zIndex(2.0 - f)   // closed flaps stack on top; open they recede
+    }
+
+    /// The paper face of a flap — warm card stock with a soft tinted glyph.
+    func panelFace(unit: CGFloat, glyph: String, tint: Color, openness: Double) -> some View {
+        // Past 90° (openness < 0.5) the flap shows its back; SwiftUI mirrors
+        // front content, so fade the glyph out while folded.
+        let glyphOpacity = max(0.0, (openness - 0.5) * 2.0) * 0.9
+        return RoundedRectangle(cornerRadius: unit * 0.07, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.99, green: 0.98, blue: 0.96),
+                        Color(red: 0.93, green: 0.91, blue: 0.86)
+                    ],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+            )
+            .overlay {
+                Image(systemName: glyph)
+                    .font(.system(size: unit * 0.26, weight: .regular))
+                    .foregroundStyle(tint)
+                    .opacity(glyphOpacity)
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: unit * 0.07, style: .continuous)
+                    .stroke(Color(red: 0.84, green: 0.81, blue: 0.75), lineWidth: 0.8)
+            )
+    }
+
+    /// A gradient that darkens toward the hinge edge and deepens while the flap
+    /// is still folded, so the crease reads as a real shadowed fold.
+    func creaseShadow(unit: CGFloat, slot: FlapSlot, fold: Double) -> some View {
+        let depth = 1.0 - smoothstep(fold)   // strong when folded, gone when flat
+        let (start, end) = slot.gradientPoints
+        return RoundedRectangle(cornerRadius: unit * 0.07, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(depth * 0.55),
+                        Color.black.opacity(0.0)
+                    ],
+                    startPoint: start, endPoint: end
+                )
+            )
+            .blendMode(.multiply)
+    }
+}
+
+// MARK: - Progress shaping
+
+private extension OrigamiUnfoldView_FoldingCard {
+
+    /// Stagger the three flaps across the master progress so they open in
+    /// sequence (above → right → below). Each opens over a 0.6-wide window
+    /// offset by 0.2 per index; windows overlap so the motion stays fluid while
+    /// only one flap is ever near edge-on at a time.
+    func panelProgress(index: Int) -> Double {
+        let start = Double(index) * 0.20
+        let span: Double = 0.60
+        let local = (progress - start) / span
+        return clamp(local, 0.0, 1.0)
+    }
+}
+
+// MARK: - Math helpers (file-private free functions)
+
+private func smoothstep(_ x: Double) -> Double {
+    let t = clamp(x, 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+}
+
+private func clamp(_ v: Double, _ lo: Double, _ hi: Double) -> Double {
+    min(max(v, lo), hi)
+}
+"""###,
+        "tr-page-peel": ###"""
+import SwiftUI
+
+// MARK: - Page Peel
+// A corner-anchored faked page curl. The bottom-right corner lifts and rotates
+// away via a single rotation3DEffect about the anti-diagonal axis, anchored at
+// the opposite (top-leading) corner that stays pinned. A LinearGradient shadow
+// gutter widens along the fold and a tinted back-of-page shows through, while
+// the next page is revealed underneath.
+//
+// demo == true  -> a TimelineView self-drives the curl progress 0 -> 1 -> 0.
+// demo == false -> a DragGesture on the lifted corner maps finger distance to
+//                  the curl progress; release past a threshold springs the page
+//                  fully off (advancing to the next page), else springs flat.
+
+struct PagePeelView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            content(in: proxy.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        if demo {
+            PagePeelView_PagePeelDemo(size: size)
+        } else {
+            PagePeelView_PagePeelInteractive(size: size)
+        }
+    }
+}
+
+// MARK: - Shared palette / content
+
+private enum PagePeelView_PeelPalette {
+    static let paperTop = Color(red: 0.97, green: 0.96, blue: 0.93)
+    static let paperBottom = Color(red: 0.93, green: 0.91, blue: 0.86)
+    static let backTintTop = Color(red: 0.82, green: 0.80, blue: 0.74)
+    static let backTintBottom = Color(red: 0.70, green: 0.67, blue: 0.60)
+    static let ink = Color(red: 0.16, green: 0.17, blue: 0.22)
+    static let accentA = Color(red: 0.20, green: 0.52, blue: 0.96)
+    static let accentB = Color(red: 0.55, green: 0.30, blue: 0.92)
+
+    static func pageTint(for index: Int) -> Color {
+        let palette: [Color] = [
+            Color(red: 0.97, green: 0.96, blue: 0.93),
+            Color(red: 0.95, green: 0.93, blue: 0.97),
+            Color(red: 0.93, green: 0.97, blue: 0.95),
+            Color(red: 0.97, green: 0.95, blue: 0.92)
+        ]
+        return palette[((index % palette.count) + palette.count) % palette.count]
+    }
+}
+
+// MARK: - A single page's face content
+
+private struct PagePeelView_PageFace: View {
+    let index: Int
+    let size: CGSize
+
+    private var corner: CGFloat { min(size.width, size.height) * 0.06 }
+    private var pad: CGFloat { max(8.0, min(size.width, size.height) * 0.1) }
+    private var numberSize: CGFloat { min(size.width, size.height) * 0.42 }
+    private var lineColor: Color {
+        Color(red: 0.16, green: 0.17, blue: 0.22).opacity(0.10)
+    }
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [PagePeelView_PeelPalette.pageTint(for: index), PagePeelView_PeelPalette.paperBottom],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+
+            ruledLines
+
+            pageNumber
+        }
+        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .strokeBorder(PagePeelView_PeelPalette.ink.opacity(0.08), lineWidth: 1)
+        )
+    }
+
+    private var ruledLines: some View {
+        VStack(spacing: max(6.0, size.height * 0.075)) {
+            ForEach(0..<7, id: \.self) { _ in
+                Capsule().fill(lineColor).frame(height: 2)
+            }
+        }
+        .padding(.horizontal, pad)
+        .padding(.vertical, pad * 0.6)
+    }
+
+    private var pageNumber: some View {
+        Text("\(index + 1)")
+            .font(.system(size: numberSize, weight: .heavy, design: .rounded))
+            .foregroundStyle(
+                LinearGradient(
+                    colors: [PagePeelView_PeelPalette.accentA, PagePeelView_PeelPalette.accentB],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .minimumScaleFactor(0.3)
+            .opacity(0.92)
+    }
+}
+
+// MARK: - The peeling top page (front + tinted back share ONE rotation)
+
+private struct PagePeelView_PeelingPage: View {
+    let frontIndex: Int
+    let progress: CGFloat        // 0 = flat, 1 = folded fully back
+    let size: CGSize
+
+    // The lifted (bottom-right) corner rotates about the anti-diagonal axis,
+    // pinned at the opposite top-leading corner. Stop short of 180 so the back
+    // stays visible and the page never flattens perfectly onto the next one.
+    private var angle: Double { Double(progress) * 158.0 }
+    private var corner: CGFloat { min(size.width, size.height) * 0.06 }
+
+    // Past 90deg the front is hidden and the tinted back faces us. Because the
+    // back is a flat gradient, the mirroring rotation3DEffect applies is invisible,
+    // so we avoid any counter-rotation.
+    private var showBack: Bool { angle >= 90.0 }
+
+    var body: some View {
+        ZStack {
+            PagePeelView_PageFace(index: frontIndex, size: size)
+                .opacity(showBack ? 0 : 1)
+
+            backFace
+                .opacity(showBack ? 1 : 0)
+        }
+        .frame(width: size.width, height: size.height)
+        // ASSUMPTION: positive angle lifts the bottom-right corner toward the
+        // viewer. If it folds the wrong way on device, negate `angle` or flip
+        // the axis signs — geometry is otherwise correct by construction.
+        .rotation3DEffect(
+            .degrees(angle),
+            axis: (x: 1.0, y: -1.0, z: 0.0),
+            anchor: .topLeading,
+            perspective: 0.55
+        )
+        // Soft self-shadow that deepens as the page lifts, grounding the curl.
+        .shadow(
+            color: Color.black.opacity(0.28 * Double(progress)),
+            radius: 14 * progress,
+            x: -8 * progress,
+            y: 8 * progress
+        )
+    }
+
+    private var backFace: some View {
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [PagePeelView_PeelPalette.backTintTop, PagePeelView_PeelPalette.backTintBottom],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(curlSheen)
+            .overlay(
+                RoundedRectangle(cornerRadius: corner, style: .continuous)
+                    .strokeBorder(PagePeelView_PeelPalette.ink.opacity(0.12), lineWidth: 1)
+            )
+    }
+
+    // A bright band running along the fold crease sells the paper's curved back.
+    private var curlSheen: some View {
+        LinearGradient(
+            colors: [
+                Color.white.opacity(0.0),
+                Color.white.opacity(0.35),
+                Color.white.opacity(0.0)
+            ],
+            startPoint: .topTrailing,
+            endPoint: .bottomLeading
+        )
+        .blendMode(.softLight)
+    }
+}
+
+// MARK: - Shadow gutter cast on the next page along the fold
+
+private struct PagePeelView_ShadowGutter: View {
+    let progress: CGFloat
+    let size: CGSize
+
+    private var corner: CGFloat { min(size.width, size.height) * 0.06 }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .fill(
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(0.0),
+                        Color.black.opacity(0.30 * Double(progress)),
+                        Color.black.opacity(0.0)
+                    ],
+                    startPoint: .topTrailing,
+                    endPoint: .bottomLeading
+                )
+            )
+            // The gutter widens as the fold opens.
+            .scaleEffect(x: 0.4 + 0.9 * progress, y: 0.4 + 0.9 * progress, anchor: .bottomTrailing)
+            .opacity(Double(min(1.0, progress * 1.6)))
+            .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Composed peel stack (shared by demo + interactive)
+
+private struct PagePeelView_PeelStack: View {
+    let topIndex: Int
+    let progress: CGFloat
+    let size: CGSize
+
+    var body: some View {
+        ZStack {
+            // Bottom: the next page, always fully rendered so the edge-on
+            // mid-frame never goes blank.
+            PagePeelView_PageFace(index: topIndex + 1, size: size)
+
+            // Middle: the fold's cast shadow on the next page.
+            PagePeelView_ShadowGutter(progress: progress, size: size)
+
+            // Top: the peeling page itself.
+            PagePeelView_PeelingPage(frontIndex: topIndex, progress: progress, size: size)
+        }
+        .frame(width: size.width, height: size.height)
+    }
+}
+
+// MARK: - Demo (self-driving)
+
+private struct PagePeelView_PagePeelDemo: View {
+    let size: CGSize
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            PagePeelView_PeelStack(topIndex: 0, progress: demoProgress(t), size: insetSize)
+                .padding(insetPadding)
+        }
+        .frame(width: size.width, height: size.height)
+    }
+
+    private var insetPadding: CGFloat { min(size.width, size.height) * 0.08 }
+    private var insetSize: CGSize {
+        CGSize(
+            width: max(1, size.width - insetPadding * 2),
+            height: max(1, size.height - insetPadding * 2)
+        )
+    }
+
+    // ~3.4s loop: ease 0 -> 1 -> 0 with a brief hold at each end so the reveal reads.
+    private func demoProgress(_ time: TimeInterval) -> CGFloat {
+        let period: Double = 3.4
+        let phase = (time.truncatingRemainder(dividingBy: period)) / period // 0..1
+        let triangle: Double = phase < 0.5 ? (phase * 2.0) : (2.0 - phase * 2.0)
+        let eased = easeInOut(triangle)
+        return CGFloat(eased)
+    }
+
+    private func easeInOut(_ x: Double) -> Double {
+        let c = min(max(x, 0.0), 1.0)
+        return c * c * (3.0 - 2.0 * c)
+    }
+}
+
+// MARK: - Interactive (drag the corner)
+
+private struct PagePeelView_PagePeelInteractive: View {
+    let size: CGSize
+
+    @State private var topIndex: Int = 0
+    @State private var progress: CGFloat = 0
+    @State private var dragging: Bool = false
+
+    var body: some View {
+        PagePeelView_PeelStack(topIndex: topIndex, progress: progress, size: insetSize)
+            .padding(insetPadding)
+            .contentShape(Rectangle())
+            .gesture(peelGesture)
+            .animation(dragging ? nil : .spring(response: 0.5, dampingFraction: 0.72), value: progress)
+            .frame(width: size.width, height: size.height)
+    }
+
+    private var insetPadding: CGFloat { min(size.width, size.height) * 0.08 }
+    private var insetSize: CGSize {
+        CGSize(
+            width: max(1, size.width - insetPadding * 2),
+            height: max(1, size.height - insetPadding * 2)
+        )
+    }
+
+    // The lifted corner is the bottom-right of the inset page.
+    private var liftedCorner: CGPoint {
+        CGPoint(x: size.width - insetPadding, y: size.height - insetPadding)
+    }
+
+    private var diagonalLength: CGFloat {
+        let w = insetSize.width
+        let h = insetSize.height
+        return max(1.0, sqrt(w * w + h * h))
+    }
+
+    private var peelGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                dragging = true
+                progress = progressFor(location: value.location)
+            }
+            .onEnded { value in
+                dragging = false
+                let final = progressFor(location: value.location)
+                if final > 0.5 {
+                    // Commit: peel fully off, then swap in the next page flat.
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.78)) {
+                        progress = 1.0
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.42) {
+                        // Swap the revealed page in instantly: suppress the
+                        // `.animation(value: progress)` so the fresh page does
+                        // not peel down from folded — it appears flat.
+                        var txn = Transaction()
+                        txn.disablesAnimations = true
+                        withTransaction(txn) {
+                            topIndex += 1
+                            progress = 0.0
+                        }
+                    }
+                } else {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.72)) {
+                        progress = 0.0
+                    }
+                }
+            }
+    }
+
+    // Distance the finger has pulled the lifted corner toward the hinge maps to
+    // curl progress, clamped to 0...1.
+    private func progressFor(location: CGPoint) -> CGFloat {
+        let dx = liftedCorner.x - location.x
+        let dy = liftedCorner.y - location.y
+        let pulled = sqrt(dx * dx + dy * dy)
+        let raw = pulled / diagonalLength
+        return min(max(raw, 0.0), 1.0)
+    }
+}
+"""###,
+        "tr-spotlight-sweep": ###"""
+import SwiftUI
+
+/// Spotlight Sweep — a moving radial spotlight mask travels across the view, and
+/// wherever its soft-edged beam falls the "after" scene is revealed over the
+/// "before" scene. A penumbra falloff makes content fade up gradually, like a
+/// torch sweeping a dark room.
+///
+/// - demo == true:  a TimelineView(.animation) drives the beam along a looping
+///   path on a ~3.2s cycle so the tile is always alive with no touch.
+/// - demo == false: a DragGesture aims the beam; the beam springs toward the
+///   finger. Content fades back as the beam moves away (the plain "re-hidden
+///   behind the beam" reading).
+struct SpotlightSweepView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            if demo {
+                demoContent(in: size)
+            } else {
+                interactiveContent(in: size)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    // MARK: - Demo (self-driving)
+
+    private func demoContent(in size: CGSize) -> some View {
+        TimelineView(.animation) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let center = demoBeamCenter(at: t, in: size)
+            let radius = beamRadius(for: size)
+            sweepStack(beamCenter: center, radius: radius, in: size)
+        }
+    }
+
+    /// A looping path: a left↔right sweep with a gentle vertical bob.
+    /// Period ~3.2s so the spotlight crosses and returns smoothly.
+    private func demoBeamCenter(at time: TimeInterval, in size: CGSize) -> CGPoint {
+        let period: Double = 3.2
+        let phase = (time.truncatingRemainder(dividingBy: period)) / period
+        // Smooth back-and-forth on x (triangle-ish via cosine), bob on y.
+        let sweep = (1.0 - cos(phase * 2.0 * .pi)) / 2.0          // 0→1→0
+        let bob = sin(phase * 2.0 * .pi * 2.0)                    // -1…1, two bobs
+        let margin: CGFloat = 0.16
+        let x = (margin + CGFloat(sweep) * (1.0 - margin * 2.0)) * size.width
+        let y = (0.5 + CGFloat(bob) * 0.16) * size.height
+        return CGPoint(x: x, y: y)
+    }
+
+    // MARK: - Interactive
+
+    private func interactiveContent(in size: CGSize) -> some View {
+        SpotlightSweepView_InteractiveSweep(size: size,
+                         radius: beamRadius(for: size)) { center, radius in
+            sweepStack(beamCenter: center, radius: radius, in: size)
+        }
+    }
+
+    // MARK: - Shared composition
+
+    private func sweepStack(beamCenter: CGPoint, radius: CGFloat, in size: CGSize) -> some View {
+        ZStack {
+            SpotlightSweepView_BeforeScene()
+            SpotlightSweepView_AfterScene()
+                .mask(spotlightMask(center: beamCenter, radius: radius, in: size))
+            // A faint warm rim so the beam reads as light, not just a reveal.
+            beamGlow(center: beamCenter, radius: radius, in: size)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private func spotlightMask(center: CGPoint, radius: CGFloat, in size: CGSize) -> some View {
+        let cx = size.width > 0 ? center.x / size.width : 0.5
+        let cy = size.height > 0 ? center.y / size.height : 0.5
+        return RadialGradient(
+            stops: [
+                .init(color: .white, location: 0.0),
+                .init(color: .white, location: 0.55),
+                .init(color: .white.opacity(0.0), location: 1.0)
+            ],
+            center: UnitPoint(x: cx, y: cy),
+            startRadius: 0,
+            endRadius: radius
+        )
+    }
+
+    private func beamGlow(center: CGPoint, radius: CGFloat, in size: CGSize) -> some View {
+        let cx = size.width > 0 ? center.x / size.width : 0.5
+        let cy = size.height > 0 ? center.y / size.height : 0.5
+        return RadialGradient(
+            stops: [
+                .init(color: Color(red: 1.0, green: 0.93, blue: 0.74).opacity(0.22), location: 0.0),
+                .init(color: Color(red: 1.0, green: 0.85, blue: 0.55).opacity(0.05), location: 0.5),
+                .init(color: .clear, location: 1.0)
+            ],
+            center: UnitPoint(x: cx, y: cy),
+            startRadius: 0,
+            endRadius: radius * 0.95
+        )
+        .blendMode(.screen)
+    }
+
+    private func beamRadius(for size: CGSize) -> CGFloat {
+        0.45 * min(size.width, size.height)
+    }
+}
+
+// MARK: - Interactive driver
+
+/// Holds the beam point and springs it toward the finger. Kept separate so the
+/// demo path never touches @State (and never fights the TimelineView clock).
+private struct SpotlightSweepView_InteractiveSweep<Content: View>: View {
+    let size: CGSize
+    let radius: CGFloat
+    let content: (CGPoint, CGFloat) -> Content
+
+    @State private var beam: CGPoint? = nil
+
+    var body: some View {
+        let center = beam ?? CGPoint(x: size.width / 2, y: size.height / 2)
+        content(center, radius)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.78)) {
+                            beam = clamp(value.location, in: size)
+                        }
+                    }
+            )
+    }
+
+    private func clamp(_ point: CGPoint, in size: CGSize) -> CGPoint {
+        CGPoint(
+            x: min(max(point.x, 0), size.width),
+            y: min(max(point.y, 0), size.height)
+        )
+    }
+}
+
+// MARK: - Scenes
+
+/// Dim, cool "before" state — a dark room before the torch arrives.
+private struct SpotlightSweepView_BeforeScene: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.05, green: 0.06, blue: 0.09),
+                    Color(red: 0.07, green: 0.08, blue: 0.13)
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+            SpotlightSweepView_SceneMotif(
+                stroke: Color(red: 0.20, green: 0.24, blue: 0.34),
+                fill: Color(red: 0.11, green: 0.13, blue: 0.20),
+                glyph: Color(red: 0.28, green: 0.33, blue: 0.45),
+                dimmed: true
+            )
+        }
+    }
+}
+
+/// Bright, warm "after" state — the same motif lit by the spotlight.
+private struct SpotlightSweepView_AfterScene: View {
+    var body: some View {
+        ZStack {
+            RadialGradient(
+                colors: [
+                    Color(red: 0.16, green: 0.12, blue: 0.06),
+                    Color(red: 0.09, green: 0.07, blue: 0.05)
+                ],
+                center: .center, startRadius: 0, endRadius: 220
+            )
+            SpotlightSweepView_SceneMotif(
+                stroke: Color(red: 1.0, green: 0.82, blue: 0.42),
+                fill: Color(red: 0.98, green: 0.62, blue: 0.20),
+                glyph: Color(red: 1.0, green: 0.95, blue: 0.84),
+                dimmed: false
+            )
+        }
+    }
+}
+
+/// A simple, layout-independent motif (concentric arc + centered star) so the
+/// before/after states share geometry but differ clearly in color/brightness.
+private struct SpotlightSweepView_SceneMotif: View {
+    let stroke: Color
+    let fill: Color
+    let glyph: Color
+    let dimmed: Bool
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            let dim = min(size.width, size.height)
+            ZStack {
+                Circle()
+                    .stroke(stroke.opacity(dimmed ? 0.5 : 0.95), lineWidth: dim * 0.018)
+                    .frame(width: dim * 0.78, height: dim * 0.78)
+                Circle()
+                    .stroke(stroke.opacity(dimmed ? 0.28 : 0.6),
+                            style: StrokeStyle(lineWidth: dim * 0.012, dash: [dim * 0.05, dim * 0.045]))
+                    .frame(width: dim * 0.54, height: dim * 0.54)
+                SpotlightSweepView_Star(points: 5, smoothness: 0.46)
+                    .fill(fill.opacity(dimmed ? 0.55 : 1.0))
+                    .frame(width: dim * 0.34, height: dim * 0.34)
+                    .shadow(color: dimmed ? .clear : fill.opacity(0.6),
+                            radius: dim * 0.05)
+                Image(systemName: "sun.max.fill")
+                    .font(.system(size: dim * 0.10, weight: .bold))
+                    .foregroundStyle(glyph.opacity(dimmed ? 0.5 : 1.0))
+                    .offset(y: dim * 0.30)
+            }
+            .frame(width: size.width, height: size.height)
+        }
+    }
+}
+
+/// A pointed star shape used by the motif. Pure path math, size-relative.
+private struct SpotlightSweepView_Star: Shape {
+    var points: Int = 5
+    var smoothness: CGFloat = 0.45
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let outer = min(rect.width, rect.height) / 2
+        let inner = outer * smoothness
+        let count = max(points, 2) * 2
+        let step = (.pi * 2.0) / CGFloat(count)
+        var angle = -CGFloat.pi / 2.0
+        for i in 0..<count {
+            let radius = (i % 2 == 0) ? outer : inner
+            let pt = CGPoint(
+                x: center.x + cos(angle) * radius,
+                y: center.y + sin(angle) * radius
+            )
+            if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
+            angle += step
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+"""###,
+        "tr-taffy-bridge": ###"""
+import SwiftUI
+
+// MARK: - Taffy Bridge Morph
+//
+// A source blob stretches a thinning 1D liquid bridge toward a destination
+// position. The connecting strand necks and snaps with surface-tension recoil
+// as the shape arrives and re-rounds. Pure-SwiftUI metaball via Canvas
+// blur + alphaThreshold filters (blur is the inner filter so shapes are
+// blurred THEN thresholded into a hard gooey edge — that ordering is what
+// produces the neck-snap rather than a soft fuzzy fade).
+//
+// Spec interaction == "auto": both demo and non-demo run the same continuous
+// TimelineView(.animation) loop. The non-demo branch additionally lets a tap
+// re-launch the pull early. Both blobs are on screen every frame, so the tile
+// is never blank or zero-opacity.
+
+struct TaffyBridgeView: View {
+    var demo: Bool = false
+
+    // Re-launch token: bumping it restarts the pull on tap (non-demo only).
+    @State private var launchDate: Date = .now
+
+    private let loopDuration: Double = 3.2
+
+    var body: some View {
+        GeometryReader { geo in
+            TimelineView(.animation) { timeline in
+                let t = phase(now: timeline.date, size: geo.size)
+                TaffyBridgeView_MetaballCanvas(progress: t, size: geo.size)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard !demo else { return }
+                launchDate = .now
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.051, green: 0.063, blue: 0.086))
+    }
+
+    // 0 → 1 → (reset) loop phase. Demo loops freely from a fixed epoch;
+    // interactive resets the clock origin to the most recent tap/launch.
+    private func phase(now: Date, size: CGSize) -> CGFloat {
+        let origin = demo ? referenceEpoch : launchDate
+        let elapsed = now.timeIntervalSince(origin)
+        let frac = (elapsed.truncatingRemainder(dividingBy: loopDuration)) / loopDuration
+        return CGFloat(max(0.0, min(1.0, frac)))
+    }
+}
+
+// Stable epoch so the demo loop is deterministic across instances/frames.
+private let referenceEpoch = Date(timeIntervalSince1970: 0)
+
+// MARK: - Metaball Canvas
+
+private struct TaffyBridgeView_MetaballCanvas: View {
+    let progress: CGFloat   // 0 → 1 loop position
+    let size: CGSize
+
+    var body: some View {
+        let geo = TaffyBridgeView_BridgeGeometry(progress: progress, size: size)
+        ZStack {
+            // The thresholded metaball field, rendered white, then masked
+            // over a candy gradient so the taffy reads as a glossy material
+            // rather than a flat fill.
+            taffyGradient
+                .mask(metaballField(geo: geo))
+            // A soft inner glow re-rounds visually at the ends.
+            metaballField(geo: geo)
+                .blur(radius: max(1.0, minSide * 0.012))
+                .blendMode(.plusLighter)
+                .opacity(0.35)
+        }
+        .drawingGroup()
+    }
+
+    private var minSide: CGFloat { min(size.width, size.height) }
+
+    private var taffyGradient: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 1.00, green: 0.55, blue: 0.78),
+                Color(red: 0.99, green: 0.36, blue: 0.62),
+                Color(red: 0.62, green: 0.40, blue: 0.98)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    @ViewBuilder
+    private func metaballField(geo: TaffyBridgeView_BridgeGeometry) -> some View {
+        Canvas { ctx, _ in
+            // Filter order matters: alphaThreshold added first (outermost),
+            // blur added second (innermost). Result: contents are blurred,
+            // then the blurred alpha is hard-thresholded → gooey hard edge.
+            ctx.addFilter(.alphaThreshold(min: 0.42, color: .white))
+            ctx.addFilter(.blur(radius: geo.blurRadius))
+            ctx.drawLayer { layer in
+                drawSourceAndDest(in: &layer, geo: geo)
+                drawStrand(in: &layer, geo: geo)
+            }
+        }
+    }
+
+    private func drawSourceAndDest(in layer: inout GraphicsContext,
+                                   geo: TaffyBridgeView_BridgeGeometry) {
+        layer.fill(circlePath(center: geo.sourceCenter, radius: geo.sourceRadius),
+                   with: .color(.white))
+        layer.fill(circlePath(center: geo.destCenter, radius: geo.destRadius),
+                   with: .color(.white))
+    }
+
+    // The taffy strand: a chain of overlapping circles sampled along the
+    // line from source → dest, whose radius dips at the waist. As travel
+    // progresses the waist thins until neighbouring circles no longer
+    // overlap; the threshold then severs the connection — the snap.
+    private func drawStrand(in layer: inout GraphicsContext,
+                            geo: TaffyBridgeView_BridgeGeometry) {
+        guard geo.strandOpacity > 0.001 else { return }
+        let samples = geo.strandSamples
+        guard samples > 1 else { return }
+        for i in 0...samples {
+            let u = CGFloat(i) / CGFloat(samples)           // 0..1 along strand
+            let p = lerpPoint(geo.sourceCenter, geo.destCenter, u)
+            let r = geo.strandRadius(atU: u)
+            guard r > 0.2 else { continue }
+            layer.fill(circlePath(center: p, radius: r),
+                       with: .color(.white.opacity(geo.strandOpacity)))
+        }
+    }
+
+    private func circlePath(center: CGPoint, radius: CGFloat) -> Path {
+        Path(ellipseIn: CGRect(x: center.x - radius,
+                               y: center.y - radius,
+                               width: radius * 2,
+                               height: radius * 2))
+    }
+
+    private func lerpPoint(_ a: CGPoint, _ b: CGPoint, _ t: CGFloat) -> CGPoint {
+        CGPoint(x: a.x + (b.x - a.x) * t,
+                y: a.y + (b.y - a.y) * t)
+    }
+}
+
+// MARK: - Bridge Geometry (all size-relative)
+
+private struct TaffyBridgeView_BridgeGeometry {
+    let progress: CGFloat
+    let size: CGSize
+
+    var minSide: CGFloat { min(size.width, size.height) }
+
+    // Blur scales with geometry so the gooey edge looks identical in a 120pt
+    // tile and a large detail area.
+    var blurRadius: CGFloat { max(2.0, minSide * 0.045) }
+
+    var strandSamples: Int {
+        // A few more samples on larger canvases for a smoother strand.
+        Int(max(10.0, min(22.0, minSide * 0.12)))
+    }
+
+    // Endpoints sit on a gentle diagonal, inset from the edges.
+    private var anchorSource: CGPoint {
+        CGPoint(x: size.width * 0.26, y: size.height * 0.62)
+    }
+    private var anchorDest: CGPoint {
+        CGPoint(x: size.width * 0.74, y: size.height * 0.38)
+    }
+
+    private var baseRadius: CGFloat { minSide * 0.16 }
+
+    // --- Phase shaping over the loop ----------------------------------------
+    // travel : how far the source has moved toward the destination (0..1)
+    // strand : how present/thick the connecting bridge is (1 → 0 as it snaps)
+    // arrive : re-round / settle pop at the destination
+
+    private var travel: CGFloat {
+        // Ease the source across during the first ~62% of the loop, then hold.
+        let raw = clamp(progress / 0.62)
+        return easeInOut(raw)
+    }
+
+    // The strand is fully present early, thins through the middle, snaps near
+    // arrival, then is absent while the shape re-rounds and resets.
+    private var strandLife: CGFloat {
+        // Present 0..0.58, thinning, gone by ~0.6 (the snap moment).
+        if progress < 0.58 {
+            return easeOut(1.0 - clamp(progress / 0.58))
+        }
+        return 0
+    }
+
+    var strandOpacity: CGFloat { strandLife }
+
+    var sourceCenter: CGPoint {
+        lerp(anchorSource, anchorDest, travel)
+    }
+
+    var destCenter: CGPoint { anchorDest }
+
+    // Source loses a touch of mass as it pays it into the strand, then the
+    // destination gains a recoil pop the instant the neck snaps.
+    var sourceRadius: CGFloat {
+        let drain = 0.10 * strandLife
+        return baseRadius * (1.0 - drain)
+    }
+
+    var destRadius: CGFloat {
+        // Surface-tension recoil: a quick overshoot just after the snap.
+        let recoil = recoilPop(progress)
+        return baseRadius * (0.88 + 0.22 * recoil)
+    }
+
+    // Strand radius profile along u (0 at source, 1 at dest). A catenary-like
+    // waist that dips in the middle; overall thickness collapses with progress.
+    func strandRadius(atU u: CGFloat) -> CGFloat {
+        // Waist factor: ~1 at the ends, dips toward the middle.
+        let waistDip = 0.55 + 0.45 * abs(cos(u * .pi))   // 0.55..1.0
+        // Global thinning as the pull stretches (and travel lengthens it).
+        let stretch = 1.0 - 0.35 * travel
+        let thickness = baseRadius * 0.42 * waistDip * stretch * strandLife
+        return max(0, thickness)
+    }
+
+    // MARK: helpers
+    private func recoilPop(_ p: CGFloat) -> CGFloat {
+        // Bell centred just after the snap (~0.62) so the dest blob pulses.
+        let center: CGFloat = 0.66
+        let width: CGFloat = 0.14
+        let x = (p - center) / width
+        return exp(-x * x)
+    }
+
+    private func lerp(_ a: CGPoint, _ b: CGPoint, _ t: CGFloat) -> CGPoint {
+        CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+    }
+    private func clamp(_ v: CGFloat) -> CGFloat { max(0, min(1, v)) }
+    private func easeInOut(_ t: CGFloat) -> CGFloat {
+        t < 0.5 ? 2 * t * t : 1 - pow(-2 * t + 2, 2) / 2
+    }
+    private func easeOut(_ t: CGFloat) -> CGFloat { 1 - pow(1 - t, 2) }
+}
+"""###,
+        "tr-theater-curtain": ###"""
+import SwiftUI
+
+// MARK: - Theater Curtain
+// Two gathered velvet curtain panels, drawn as pleated Animatable Shapes,
+// draw apart from the center to reveal the stage behind.
+//   demo == true  -> a PhaseAnimator loops openFraction 0 -> 1 -> 0.
+//   demo == false -> tap toggles the curtain open / closed with a spring.
+
+struct TheaterCurtainView: View {
+    var demo: Bool = false
+
+    @State private var isOpen: Bool = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            content(size: proxy.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+    }
+
+    @ViewBuilder
+    private func content(size: CGSize) -> some View {
+        if demo {
+            PhaseAnimator([CGFloat(0.0), CGFloat(1.0)]) { open in
+                stage(size: size, open: open)
+            } animation: { _ in
+                .spring(response: 1.5, dampingFraction: 0.78)
+            }
+        } else {
+            stage(size: size, open: isOpen ? 1.0 : 0.0)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation(.spring(response: 0.7, dampingFraction: 0.72)) {
+                        isOpen.toggle()
+                    }
+                }
+        }
+    }
+
+    // MARK: - Stage (backdrop + two curtain panels)
+
+    private func stage(size: CGSize, open: CGFloat) -> some View {
+        ZStack {
+            TheaterCurtainView_StageBackdrop(open: open)
+
+            TheaterCurtainView_CurtainPanel(openFraction: open, side: .leading, size: size)
+            TheaterCurtainView_CurtainPanel(openFraction: open, side: .trailing, size: size)
+        }
+    }
+}
+
+// MARK: - Stage backdrop
+
+private struct TheaterCurtainView_StageBackdrop: View {
+    var open: CGFloat
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            ZStack {
+                // Deep stage floor.
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.05, green: 0.04, blue: 0.07),
+                        Color(red: 0.10, green: 0.07, blue: 0.11),
+                        Color(red: 0.04, green: 0.03, blue: 0.05)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+
+                // Warm follow-spot that blooms brighter as the reveal happens.
+                RadialGradient(
+                    colors: [
+                        Color(red: 1.0, green: 0.92, blue: 0.74).opacity(0.55 * Double(open) + 0.10),
+                        Color(red: 0.95, green: 0.78, blue: 0.50).opacity(0.20 * Double(open)),
+                        .clear
+                    ],
+                    center: UnitPoint(x: 0.5, y: 0.42),
+                    startRadius: 2,
+                    endRadius: max(size.width, size.height) * 0.62
+                )
+
+                // Floorboard glow line for a hint of depth.
+                LinearGradient(
+                    colors: [.clear, Color(red: 0.55, green: 0.40, blue: 0.22).opacity(0.30 * Double(open))],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
+            }
+        }
+    }
+}
+
+// MARK: - One curtain panel
+
+private struct TheaterCurtainView_CurtainPanel: View {
+    enum Side { case leading, trailing }
+
+    var openFraction: CGFloat
+    var side: Side
+    var size: CGSize
+
+    var body: some View {
+        let shape = TheaterCurtainView_CurtainPanelShape(openFraction: openFraction)
+        panelBody(shape: shape)
+            // Mirror the trailing panel so the pair is symmetric about the center.
+            .scaleEffect(x: side == .trailing ? -1 : 1, y: 1, anchor: .center)
+    }
+
+    @ViewBuilder
+    private func panelBody(shape: TheaterCurtainView_CurtainPanelShape) -> some View {
+        ZStack {
+            // Velvet body: horizontal multi-stop gradient -> folds bunch as the
+            // shape narrows on opening.
+            LinearGradient(
+                stops: TheaterCurtainView_VelvetPalette.stops(),
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            .clipShape(shape)
+
+            // Vertical depth shading: darker at top (under the valance) and toward hem.
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.32),
+                    Color.clear,
+                    Color.black.opacity(0.10),
+                    Color.black.opacity(0.30)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .clipShape(shape)
+            .blendMode(.multiply)
+
+            // Moving sheen riding across the folds.
+            TheaterCurtainView_SheenOverlay(openFraction: openFraction)
+                .clipShape(shape)
+                .blendMode(.screen)
+
+            // Crisp inner-edge highlight where the gathered fabric catches light.
+            shape
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 1.0, green: 0.86, blue: 0.74).opacity(0.0),
+                            Color(red: 1.0, green: 0.88, blue: 0.76).opacity(0.45),
+                            Color(red: 1.0, green: 0.86, blue: 0.74).opacity(0.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1.2
+                )
+        }
+        .compositingGroup()
+        .shadow(
+            color: Color.black.opacity(0.45),
+            radius: 10 + 8 * openFraction,
+            x: 6 + 8 * openFraction,
+            y: 4
+        )
+    }
+}
+
+// MARK: - Velvet palette
+
+private enum TheaterCurtainView_VelvetPalette {
+    // Alternating darker / lighter velvet reds. A fixed set of stops means the
+    // folds compress automatically as the clipped shape narrows.
+    static func stops() -> [Gradient.Stop] {
+        let deep = Color(red: 0.34, green: 0.03, blue: 0.07)
+        let mid = Color(red: 0.58, green: 0.07, blue: 0.12)
+        let bright = Color(red: 0.78, green: 0.16, blue: 0.21)
+        let shadow = Color(red: 0.22, green: 0.02, blue: 0.05)
+
+        var result: [Gradient.Stop] = []
+        let foldCount: Int = 9
+        for index in 0...foldCount {
+            let location = CGFloat(index) / CGFloat(foldCount)
+            let phase = index % 2 == 0
+            let crest = index % 3 == 0
+            let color: Color = crest ? bright : (phase ? deep : mid)
+            result.append(Gradient.Stop(color: color, location: location))
+            // Tuck a thin shadow line at each fold valley.
+            if index < foldCount {
+                let valley = location + (0.5 / CGFloat(foldCount))
+                result.append(Gradient.Stop(color: shadow, location: valley))
+            }
+        }
+        return result
+    }
+}
+
+// MARK: - Moving sheen
+
+private struct TheaterCurtainView_SheenOverlay: View {
+    var openFraction: CGFloat
+
+    var body: some View {
+        // A diagonal band of light that drifts across the panel as it gathers.
+        let travel: CGFloat = -0.4 + 1.4 * openFraction
+        LinearGradient(
+            colors: [
+                Color.clear,
+                Color(red: 1.0, green: 0.95, blue: 0.85).opacity(0.0),
+                Color(red: 1.0, green: 0.96, blue: 0.88).opacity(0.35),
+                Color(red: 1.0, green: 0.95, blue: 0.85).opacity(0.0),
+                Color.clear
+            ],
+            startPoint: UnitPoint(x: travel - 0.25, y: 0.0),
+            endPoint: UnitPoint(x: travel + 0.25, y: 1.0)
+        )
+    }
+}
+
+// MARK: - Animatable curtain shape
+
+private struct TheaterCurtainView_CurtainPanelShape: Shape {
+    var openFraction: CGFloat
+
+    var animatableData: CGFloat {
+        get { openFraction }
+        set { openFraction = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+
+        let clamped = min(max(openFraction, 0), 1)
+
+        // The leading panel covers the left half when closed. As it opens it
+        // narrows toward the left edge but never collapses past a bunched floor.
+        let halfWidth = rect.width / 2.0
+        let minWidth = halfWidth * 0.16           // bunched velvet floor — never blank
+        let panelWidth = minWidth + (halfWidth - minWidth) * (1.0 - clamped)
+
+        let left = rect.minX
+        let topY = rect.minY
+        let bottomY = rect.maxY
+
+        // Scalloped inner edge: a fixed number of vertical scallops so the
+        // wavelength compresses for free as panelWidth shrinks.
+        let innerBase = left + panelWidth
+        let scallopCount: Int = 7
+        let scallopDepth = panelWidth * (0.10 + 0.16 * clamped)
+
+        // Bottom hem: sine pleats, fixed count -> bunches as the panel narrows.
+        let hemCount: Int = 8
+        let hemRise = rect.height * (0.02 + 0.07 * clamped)
+
+        // --- Top edge: straight under the valance.
+        path.move(to: CGPoint(x: left, y: topY))
+        path.addLine(to: CGPoint(x: innerBase, y: topY))
+
+        // --- Inner (right) edge: scalloped, gathering inward as it opens.
+        let innerSteps: Int = scallopCount * 6
+        for step in 0...innerSteps {
+            let t = CGFloat(step) / CGFloat(innerSteps)
+            let y = topY + t * (bottomY - topY)
+            let wave = sin(t * CGFloat(scallopCount) * .pi * 2.0)
+            // Scallops deepen toward the bottom where fabric pools.
+            let depthRamp = 0.35 + 0.65 * t
+            let x = innerBase - scallopDepth * depthRamp * (0.5 + 0.5 * wave)
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+
+        // --- Bottom hem: sine pleats from inner edge back to the left edge.
+        let hemSteps: Int = hemCount * 5
+        let hemStartX = innerBase - scallopDepth * (0.5)
+        for step in 0...hemSteps {
+            let t = CGFloat(step) / CGFloat(hemSteps)
+            let x = hemStartX + (left - hemStartX) * t
+            let wave = sin(t * CGFloat(hemCount) * .pi * 2.0)
+            let y = bottomY - hemRise * (0.5 + 0.5 * wave)
+            path.addLine(to: CGPoint(x: x, y: y))
+        }
+
+        // --- Left edge back up to the start (outer edge stays anchored).
+        path.addLine(to: CGPoint(x: left, y: topY))
+        path.closeSubpath()
+
+        return path
+    }
+}
+"""###,
+        "tr-venetian-blinds": ###"""
+import SwiftUI
+
+// MARK: - Venetian Blinds
+// Horizontal slats flip in unison on their long axis (rotation3DEffect about .x).
+// As each slat turns edge-on the destination view shows through the gaps; at the
+// 90-degree apex the slat's content swaps from the "old" face to the "new" face,
+// then flattens back face-on to compose the next view. A directional light rake
+// (brightness gradient keyed to tilt, phase-shifted per slat) sweeps the row.
+
+public struct VenetianBlindsView: View {
+    public var demo: Bool = false
+
+    public init(demo: Bool = false) {
+        self.demo = demo
+    }
+
+    public var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        if demo {
+            TimelineView(.animation) { timeline in
+                let p = Self.loopProgress(timeline.date)
+                VenetianBlindsView_BlindsStage(size: size, progress: p)
+            }
+        } else {
+            VenetianBlindsView_InteractiveBlinds(size: size)
+        }
+    }
+
+    // Triangle ping-pong 0 -> 1 -> 0 over a ~3.4s loop for the self-driving demo.
+    private static func loopProgress(_ date: Date) -> Double {
+        let period: Double = 3.4
+        let t = date.timeIntervalSinceReferenceDate
+        let phase = (t.truncatingRemainder(dividingBy: period)) / period
+        // ease the triangle a touch so the swap feels less mechanical
+        let tri = phase < 0.5 ? phase * 2.0 : (1.0 - phase) * 2.0
+        return Self.easeInOut(tri)
+    }
+
+    private static func easeInOut(_ x: Double) -> Double {
+        let c = min(max(x, 0), 1)
+        return c * c * (3 - 2 * c)
+    }
+}
+
+// MARK: - Interactive (tap to flip)
+
+private struct VenetianBlindsView_InteractiveBlinds: View {
+    let size: CGSize
+    @State private var flipped: Bool = false
+
+    var body: some View {
+        VenetianBlindsView_BlindsStage(size: size, progress: flipped ? 1 : 0, staggered: true)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.72)) {
+                    flipped.toggle()
+                }
+            }
+    }
+}
+
+// MARK: - Stage (shared by demo + interactive)
+
+private struct VenetianBlindsView_BlindsStage: View {
+    let size: CGSize
+    let progress: Double
+    var staggered: Bool = false
+
+    private var slatCount: Int {
+        // Derive from height so it works in a 120pt tile and a large detail area.
+        let h = max(size.height, 1)
+        let n = Int((h / 26).rounded())
+        return min(max(n, 7), 13)
+    }
+
+    var body: some View {
+        let count = slatCount
+        let slatHeight = size.height / CGFloat(count)
+
+        ZStack {
+            // Backing destination view: ALWAYS visible through the gaps, so the
+            // frame is never blank even when every slat is near edge-on.
+            VenetianBlindsView_DestinationFace(size: size)
+
+            // Soft inner vignette for depth behind the slats.
+            Rectangle()
+                .fill(
+                    RadialGradient(
+                        colors: [Color(red: 0, green: 0, blue: 0).opacity(0),
+                                 Color(red: 0, green: 0, blue: 0).opacity(0.35)],
+                        center: .center,
+                        startRadius: size.height * 0.2,
+                        endRadius: size.height * 0.75
+                    )
+                )
+                .allowsHitTesting(false)
+
+            ForEach(0..<count, id: \.self) { i in
+                VenetianBlindsView_Slat(
+                    index: i,
+                    count: count,
+                    size: size,
+                    slatHeight: slatHeight,
+                    progress: slatProgress(for: i, count: count)
+                )
+                .modifier(
+                    VenetianBlindsView_StaggerAnimation(
+                        enabled: staggered,
+                        index: i,
+                        progress: progress
+                    )
+                )
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .clipped()
+    }
+
+    // Per-slat progress with a small index stagger so the row isn't all edge-on
+    // on the same frame (drives the light-rake sweep and avoids a blank frame).
+    private func slatProgress(for index: Int, count: Int) -> Double {
+        guard !staggered else { return progress }
+        let spread = 0.18
+        let frac = count > 1 ? Double(index) / Double(count - 1) : 0
+        let delay = (frac - 0.5) * spread
+        return min(max(progress + delay, 0), 1)
+    }
+}
+
+// In the interactive path a single `flipped` toggle drives `progress`; we apply
+// a per-slat delayed spring so the flip reads as a top-to-bottom wave.
+private struct VenetianBlindsView_StaggerAnimation: ViewModifier {
+    let enabled: Bool
+    let index: Int
+    let progress: Double
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.animation(
+                .spring(response: 0.6, dampingFraction: 0.72)
+                    .delay(Double(index) * 0.035),
+                value: progress
+            )
+        } else {
+            content
+        }
+    }
+}
+
+// MARK: - Single slat
+
+private struct VenetianBlindsView_Slat: View, Animatable {
+    let index: Int
+    let count: Int
+    let size: CGSize
+    let slatHeight: CGFloat
+    var progress: Double   // 0 = old face flat, 1 = new face flat
+
+    // Make `progress` the animatable attribute so the slat's body re-evaluates
+    // at every interpolated step of a withAnimation/.animation transaction.
+    // Without this, an endpoint-only progress (flipped ? 1 : 0) would interpolate
+    // the already-derived rotation angle (0 at both ends) and never rotate
+    // edge-on — degrading the tap into a plain cross-fade.
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    // Map 0->1 progress into a 0 -> 90 -> 0 tilt. The content swaps at the apex,
+    // so the slat returns to face-on but now shows the new view (no mirrored
+    // back-face math required).
+    private var tilt: Double {
+        let half = progress <= 0.5 ? progress : (1 - progress)
+        return Double(half) * 2.0 * 90.0
+    }
+
+    // How "edge-on" the slat is, 0 (flat) -> 1 (edge-on). Drives the light rake.
+    private var edgeOn: Double {
+        tilt / 90.0
+    }
+
+    private var showingNewFace: Bool { progress > 0.5 }
+
+    var body: some View {
+        ZStack {
+            faceBand(isNew: false)
+                .opacity(showingNewFace ? 0 : 1)
+            faceBand(isNew: true)
+                .opacity(showingNewFace ? 1 : 0)
+        }
+        .frame(width: size.width, height: slatHeight)
+        .overlay(lightRake)
+        .overlay(slatSeams)
+        .compositingGroup()
+        .rotation3DEffect(
+            .degrees(tilt),
+            axis: (x: 1, y: 0, z: 0),
+            anchor: .center,
+            anchorZ: 0,
+            perspective: 0.7
+        )
+        // Foreshorten height as it tilts toward edge-on for a physical read.
+        .scaleEffect(x: 1, y: CGFloat(0.18 + 0.82 * (1 - edgeOn)), anchor: .center)
+        .position(
+            x: size.width / 2,
+            y: slatHeight * CGFloat(index) + slatHeight / 2
+        )
+        .zIndex(edgeOn)
+    }
+
+    // A horizontal BAND of the full source/destination view, offset so the slats
+    // reconstruct the complete image when face-on (slice, not tile).
+    @ViewBuilder
+    private func faceBand(isNew: Bool) -> some View {
+        let face = Group {
+            if isNew {
+                VenetianBlindsView_DestinationFace(size: size)
+            } else {
+                VenetianBlindsView_SourceFace(size: size)
+            }
+        }
+        face
+            .frame(width: size.width, height: size.height)
+            .offset(y: -slatHeight * CGFloat(index))
+            .frame(width: size.width, height: slatHeight, alignment: .top)
+            .clipped()
+    }
+
+    // Directional light gradient that brightens as the slat turns edge-on, with
+    // a per-index phase shift so the highlight sweeps along the row.
+    private var lightRake: some View {
+        let phase = count > 1 ? Double(index) / Double(count - 1) : 0
+        let sweep = 0.5 + 0.5 * sin((phase + progress) * .pi * 2)
+        let intensity = edgeOn * (0.35 + 0.55 * sweep)
+        return LinearGradient(
+            colors: [
+                Color(red: 1, green: 1, blue: 1).opacity(0),
+                Color(red: 1, green: 1, blue: 1).opacity(intensity),
+                Color(red: 1, green: 1, blue: 1).opacity(0)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .blendMode(.screen)
+        .allowsHitTesting(false)
+    }
+
+    // Thin top/bottom edge shading so adjacent slats read as separate louvres.
+    private var slatSeams: some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(Color(red: 1, green: 1, blue: 1).opacity(0.12 + 0.18 * edgeOn))
+                .frame(height: 1)
+            Spacer(minLength: 0)
+            Rectangle()
+                .fill(Color(red: 0, green: 0, blue: 0).opacity(0.22 + 0.28 * edgeOn))
+                .frame(height: 1)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+// MARK: - The two faces being composed
+
+// "Old" / source view shown before the flip.
+private struct VenetianBlindsView_SourceFace: View {
+    let size: CGSize
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.07, green: 0.09, blue: 0.16),
+                    Color(red: 0.16, green: 0.12, blue: 0.26),
+                    Color(red: 0.06, green: 0.10, blue: 0.20)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            // a soft moon/sun disc for recognizable composition
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.95, green: 0.86, blue: 0.62),
+                            Color(red: 0.85, green: 0.62, blue: 0.40).opacity(0.0)
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: size.height * 0.28
+                    )
+                )
+                .frame(width: size.height * 0.42, height: size.height * 0.42)
+                .position(x: size.width * 0.72, y: size.height * 0.32)
+        }
+    }
+}
+
+// "New" / destination view revealed by the flip. Also the always-on backing.
+private struct VenetianBlindsView_DestinationFace: View {
+    let size: CGSize
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.99, green: 0.72, blue: 0.40),
+                    Color(red: 0.96, green: 0.45, blue: 0.42),
+                    Color(red: 0.55, green: 0.28, blue: 0.55)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            // bright horizon glow to read clearly through the slat gaps
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 1, green: 0.97, blue: 0.86).opacity(0.9),
+                            Color(red: 1, green: 0.85, blue: 0.55).opacity(0.0)
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: size.height * 0.35
+                    )
+                )
+                .frame(width: size.width * 0.9, height: size.height * 0.5)
+                .position(x: size.width * 0.5, y: size.height * 0.62)
+        }
+    }
+}
+"""###,
+        "tr-vortex-spiral": ###"""
+import SwiftUI
+
+// MARK: - Vortex Spiral
+// The outgoing view rotates and scales down into a vanishing spiral while
+// concentric ring overlays sweep inward, then the next view un-spirals back
+// out to full size. Pure transforms + overlay rings, no shader. iOS 17.
+//
+// A single `progress` (0...1) is the only input to the render. Both card faces
+// stay mounted at all times; opacity carries the handoff so the center is never
+// blank — at progress ≈ 0.5 the rings peak and both faces are mid-fade, so there
+// is always a legible state on screen.
+//
+// IMPORTANT: the render lives in an `Animatable` child view (`VortexSpiralView_VortexContent`)
+// so its `body` is re-evaluated at every interpolated `progress`. Without that,
+// SwiftUI would only sample the endpoint outputs (0 and 1) and the non-monotonic
+// ring sweep / ring opacity (which peak at 0.5) would never appear.
+struct VortexSpiralView: View {
+    var demo: Bool = false
+
+    // Interactive: a tap toggles `spiraled`, animating progress 0 <-> 1.
+    @State private var spiraled: Bool = false
+
+    var body: some View {
+        GeometryReader { geo in
+            let side = min(geo.size.width, geo.size.height)
+
+            ZStack {
+                backdrop
+
+                if demo {
+                    autoDrivenContent(side: side)
+                } else {
+                    interactiveContent(side: side)
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .contentShape(Rectangle())
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Demo loop (self-driving)
+
+    @ViewBuilder
+    private func autoDrivenContent(side: CGFloat) -> some View {
+        PhaseAnimator([0.0, 1.0]) { value in
+            VortexSpiralView_VortexContent(progress: value, side: side)
+        } animation: { _ in
+            .easeInOut(duration: 1.7)
+        }
+    }
+
+    // MARK: Interactive (tap to spiral the swap)
+
+    @ViewBuilder
+    private func interactiveContent(side: CGFloat) -> some View {
+        let progress: Double = spiraled ? 1.0 : 0.0
+        VortexSpiralView_VortexContent(progress: progress, side: side)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.spring(response: 0.7, dampingFraction: 0.72)) {
+                    spiraled.toggle()
+                }
+            }
+    }
+
+    // MARK: Backdrop
+
+    private var backdrop: some View {
+        RadialGradient(
+            colors: [
+                Color(red: 0.07, green: 0.08, blue: 0.13),
+                Color(red: 0.02, green: 0.02, blue: 0.05)
+            ],
+            center: .center,
+            startRadius: 2,
+            endRadius: 240
+        )
+        .ignoresSafeArea()
+    }
+}
+
+// MARK: - Animatable vortex render
+//
+// `progress` is exposed as `animatableData`, so SwiftUI re-evaluates `body`
+// at every interpolated progress value during a `withAnimation` transition or
+// across `PhaseAnimator` phases. This is what lets the inward ring sweep and
+// the mid-transition ring opacity peak (both non-monotonic in progress) play.
+private struct VortexSpiralView_VortexContent: View, Animatable {
+    var progress: Double
+    var side: CGFloat
+
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    var body: some View {
+        let clamped: Double = min(max(progress, 0.0), 1.0)
+        let corner: CGFloat = side * 0.14
+
+        ZStack {
+            // Face A: full at progress 0, drains into the vortex by ~0.55.
+            VortexSpiralView_CardFace(index: 0)
+                .modifier(VortexSpiralView_SpiralTransform(progress: faceAProgress(clamped), side: side))
+                .opacity(faceAOpacity(clamped))
+
+            // Face B: emerges from the vortex starting ~0.45, full at progress 1.
+            VortexSpiralView_CardFace(index: 1)
+                .modifier(VortexSpiralView_SpiralTransform(progress: faceBProgress(clamped), side: side))
+                .opacity(faceBOpacity(clamped))
+
+            // Concentric ring sweep — peaks at mid-transition so the center
+            // always carries something legible during the crossover.
+            VortexSpiralView_RingsOverlay(progress: clamped, side: side)
+                .opacity(ringOpacity(clamped))
+                .allowsHitTesting(false)
+        }
+        .frame(width: side, height: side)
+        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: corner, style: .continuous)
+                .strokeBorder(Color(red: 1, green: 1, blue: 1).opacity(0.10), lineWidth: 1)
+        )
+    }
+
+    // MARK: Progress mapping helpers
+    //
+    // Face A: drains 0 -> 0.55 (1 = full present, 0 = fully spiralled away).
+    private func faceAProgress(_ p: Double) -> Double {
+        let t: Double = min(p / 0.55, 1.0)
+        return 1.0 - t
+    }
+
+    // Face B: emerges 0.45 -> 1 (0 = fully spiralled away, 1 = full present).
+    private func faceBProgress(_ p: Double) -> Double {
+        let t: Double = max((p - 0.45) / 0.55, 0.0)
+        return min(t, 1.0)
+    }
+
+    private func faceAOpacity(_ p: Double) -> Double {
+        // Fades out as it drains; never starts from literal 0 at p=0.
+        let t: Double = min(p / 0.58, 1.0)
+        return max(1.0 - t, 0.0)
+    }
+
+    private func faceBOpacity(_ p: Double) -> Double {
+        let t: Double = max((p - 0.42) / 0.58, 0.0)
+        return min(t, 1.0)
+    }
+
+    private func ringOpacity(_ p: Double) -> Double {
+        // Triangle peak at p = 0.5, clamped non-negative.
+        let tri: Double = 1.0 - abs(p * 2.0 - 1.0)
+        return max(tri, 0.0) * 0.9
+    }
+}
+
+// MARK: - Spiral transform
+//
+// A single 0...1 `presence` value drives rotation + scale together. At
+// presence 1 the face is upright and full; at 0 it is spun several turns and
+// shrunk to a floored scale (never literal zero) — the drain-down vortex.
+private struct VortexSpiralView_SpiralTransform: ViewModifier {
+    var progress: Double   // 1 = present/full, 0 = spiralled away
+    var side: CGFloat
+
+    private let turns: Double = 2.5
+    private let minScale: CGFloat = 0.06
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(scale)
+            .rotationEffect(angle)
+            .blur(radius: blur)
+    }
+
+    private var scale: CGFloat {
+        let presence: CGFloat = CGFloat(progress)
+        return minScale + (1.0 - minScale) * presence
+    }
+
+    private var angle: Angle {
+        // Spins more the further it is drained (presence -> 0).
+        let drained: Double = 1.0 - progress
+        return .degrees(turns * 360.0 * drained)
+    }
+
+    private var blur: CGFloat {
+        // A touch of motion-blur as it whirls into the vortex.
+        let drained: CGFloat = CGFloat(1.0 - progress)
+        return drained * (side * 0.012)
+    }
+}
+
+// MARK: - Card faces
+//
+// Two distinct legible faces so the swap actually reads as a transition
+// between content, not a single thing vanishing.
+private struct VortexSpiralView_CardFace: View {
+    let index: Int
+
+    var body: some View {
+        GeometryReader { geo in
+            let s = min(geo.size.width, geo.size.height)
+            ZStack {
+                LinearGradient(
+                    colors: palette,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                // Soft swirl glyph reinforcing the vortex theme.
+                VortexSpiralView_SwirlMark()
+                    .stroke(
+                        Color(red: 1, green: 1, blue: 1).opacity(0.22),
+                        style: StrokeStyle(lineWidth: max(s * 0.012, 1.0), lineCap: .round)
+                    )
+                    .frame(width: s * 0.62, height: s * 0.62)
+
+                VStack(spacing: s * 0.04) {
+                    Text(symbol)
+                        .font(.system(size: s * 0.30, weight: .heavy, design: .rounded))
+                        .foregroundColor(Color(red: 1, green: 1, blue: 1).opacity(0.95))
+                    Text(label)
+                        .font(.system(size: s * 0.085, weight: .semibold, design: .rounded))
+                        .tracking(s * 0.012)
+                        .foregroundColor(Color(red: 1, green: 1, blue: 1).opacity(0.78))
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipShape(RoundedRectangle(cornerRadius: s * 0.14, style: .continuous))
+        }
+    }
+
+    private var palette: [Color] {
+        if index == 0 {
+            return [
+                Color(red: 0.36, green: 0.30, blue: 0.92),
+                Color(red: 0.62, green: 0.24, blue: 0.78)
+            ]
+        } else {
+            return [
+                Color(red: 0.98, green: 0.55, blue: 0.26),
+                Color(red: 0.92, green: 0.27, blue: 0.45)
+            ]
+        }
+    }
+
+    private var symbol: String { index == 0 ? "A" : "B" }
+    private var label: String { index == 0 ? "ORIGIN" : "ARRIVAL" }
+}
+
+// MARK: - Swirl mark (decorative spiral path)
+private struct VortexSpiralView_SwirlMark: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let maxR: CGFloat = min(rect.width, rect.height) / 2.0
+        let turns: Double = 3.0
+        let steps: Int = 220
+
+        for i in 0...steps {
+            let t: Double = Double(i) / Double(steps)
+            let theta: Double = t * turns * 2.0 * .pi
+            let r: CGFloat = maxR * CGFloat(t)
+            let x: CGFloat = center.x + r * CGFloat(cos(theta))
+            let y: CGFloat = center.y + r * CGFloat(sin(theta))
+            let pt = CGPoint(x: x, y: y)
+            if i == 0 {
+                path.move(to: pt)
+            } else {
+                path.addLine(to: pt)
+            }
+        }
+        return path
+    }
+}
+
+// MARK: - Concentric ring sweep overlay
+//
+// Several stroked circles whose radii sweep inward with progress. Clipped to
+// the card bounds so they read as a vortex drawing toward the center.
+private struct VortexSpiralView_RingsOverlay: View {
+    var progress: Double
+    var side: CGFloat
+
+    private let count: Int = 5
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<count, id: \.self) { i in
+                ring(index: i)
+            }
+        }
+        .frame(width: side, height: side)
+        .clipShape(RoundedRectangle(cornerRadius: side * 0.14, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func ring(index i: Int) -> some View {
+        let base: Double = Double(i) / Double(count)          // 0...~0.8 staggered
+        // Each ring's radius sweeps inward as progress crosses 0.5.
+        let sweep: Double = 1.0 - abs(progress * 2.0 - 1.0)   // 0 at ends, 1 at mid
+        let phase: Double = max(0.0, min(1.0, base + sweep * 0.6))
+        let radius: CGFloat = side * 0.5 * CGFloat(1.0 - phase * 0.85)
+        let diameter: CGFloat = max(radius * 2.0, 1.0)
+        let line: CGFloat = max(side * 0.012, 1.0)
+
+        Circle()
+            .stroke(
+                Color(red: 0.85, green: 0.92, blue: 1.0).opacity(0.45),
+                lineWidth: line
+            )
+            .frame(width: diameter, height: diameter)
+            .blur(radius: 0.5)
+    }
+}
+"""###,
+        "tr-zipper-unzip": ###"""
+import SwiftUI
+
+// MARK: - Zipper Unzip
+
+/// Two halves of a front cover are joined by interleaving Path-drawn zipper
+/// teeth along a center seam. Pulling the slider down separates the halves —
+/// the region the puller has passed (above it) spreads open to reveal the
+/// destination view behind, while the region below stays meshed.
+///
+/// progress (p): 0 = fully zipped (puller at top, cover closed)
+///               1 = fully unzipped (puller at bottom, destination revealed)
+struct ZipperUnzipTransitionView: View {
+    var demo: Bool = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZipperUnzipTransitionView_ZipperBoard(size: proxy.size, demo: demo)
+                .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+// MARK: - Board
+
+private struct ZipperUnzipTransitionView_ZipperBoard: View {
+    let size: CGSize
+    let demo: Bool
+
+    // Interactive state
+    @State private var progress: CGFloat = 0
+    @State private var dragStartProgress: CGFloat? = nil
+
+    // Geometry-derived tooth metrics
+    private var toothHeight: CGFloat { max(10, size.height / 16) }
+    private var teethCount: Int { max(6, Int(size.height / toothHeight)) }
+
+    // Where the puller sits vertically for a given progress.
+    private func pullerY(_ p: CGFloat) -> CGFloat { p * size.height }
+
+    var body: some View {
+        if demo {
+            PhaseAnimator([CGFloat(0), CGFloat(1)]) { phase in
+                content(for: phase)
+            } animation: { _ in
+                .easeInOut(duration: 1.6)
+            }
+        } else {
+            content(for: progress)
+                .gesture(dragGesture)
+                .sensoryFeedback(.impact(weight: .light, intensity: 0.6),
+                                 trigger: crossedToothCount(progress))
+        }
+    }
+
+    // The live progress value the visuals should use:
+    // in demo it follows the phase; interactively it follows @State.
+    private func content(for p: CGFloat) -> some View {
+        let py = pullerY(p)
+        return ZStack {
+            destinationLayer(p: p)
+            frontHalves(p: p, pullerY: py)
+            seam(p: p, pullerY: py)
+            puller(p: p, pullerY: py)
+        }
+        .compositingGroup()
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .contentShape(Rectangle())
+    }
+
+    private var cornerRadius: CGFloat { min(size.width, size.height) * 0.10 }
+
+    // MARK: Destination (always mounted, revealed as the cover opens)
+
+    private func destinationLayer(p: CGFloat) -> some View {
+        let reveal = Double(min(1, p * 1.2))
+        return ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.16, green: 0.36, blue: 0.62),
+                    Color(red: 0.34, green: 0.20, blue: 0.55)
+                ],
+                startPoint: .topLeading, endPoint: .bottomTrailing
+            )
+            VStack(spacing: size.height * 0.05) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: min(size.width, size.height) * 0.22,
+                                  weight: .semibold))
+                    .foregroundStyle(.white)
+                Text("Unzipped")
+                    .font(.system(size: min(size.width, size.height) * 0.10,
+                                  weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+            .opacity(reveal)
+            .scaleEffect(0.92 + 0.08 * reveal)
+        }
+    }
+
+    // MARK: Front cover halves
+
+    private func frontHalves(p: CGFloat, pullerY: CGFloat) -> some View {
+        // Each half splays its top corner outward as the puller descends,
+        // forming a V-shaped opening above the puller while staying sealed
+        // at the center seam below it.
+        ZStack {
+            coverHalf(isLeft: true, p: p, pullerY: pullerY)
+            coverHalf(isLeft: false, p: p, pullerY: pullerY)
+        }
+    }
+
+    private func coverHalf(isLeft: Bool, p: CGFloat, pullerY: CGFloat) -> some View {
+        let halfW = size.width / 2
+        // Maximum horizontal splay of a half's top corner once fully opened.
+        let maxSpread = halfW * 0.96
+        let spread = maxSpread * easeOut(p)
+        let dir: CGFloat = isLeft ? -1 : 1
+
+        return ZipperUnzipTransitionView_ZipperHalfClip(isLeft: isLeft, pullerY: pullerY, spread: spread, size: size)
+            .fill(coverGradient(isLeft: isLeft))
+            .overlay(
+                ZipperUnzipTransitionView_ZipperHalfClip(isLeft: isLeft, pullerY: pullerY, spread: spread, size: size)
+                    .fill(coverSheen(isLeft: isLeft))
+            )
+            .shadow(color: .black.opacity(0.35 * Double(p)),
+                    radius: 8 * p, x: dir * 4 * p, y: 0)
+    }
+
+    private func coverGradient(isLeft: Bool) -> LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.12, green: 0.13, blue: 0.17),
+                Color(red: 0.06, green: 0.07, blue: 0.10)
+            ],
+            startPoint: isLeft ? .topLeading : .topTrailing,
+            endPoint: isLeft ? .bottomTrailing : .bottomLeading
+        )
+    }
+
+    private func coverSheen(isLeft: Bool) -> LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.white.opacity(0.10),
+                Color.white.opacity(0.0),
+                Color.black.opacity(0.12)
+            ],
+            startPoint: isLeft ? .leading : .trailing,
+            endPoint: isLeft ? .trailing : .leading
+        )
+    }
+
+    // MARK: Seam (the teeth)
+
+    private func seam(p: CGFloat, pullerY: CGFloat) -> some View {
+        let halfW = size.width / 2
+        let maxSpread = halfW * 0.96
+        let spread = maxSpread * easeOut(p)
+
+        return ZStack {
+            // Meshed tape below the puller — a darker channel.
+            ZipperUnzipTransitionView_ZipperTape(pullerY: pullerY, size: size)
+                .fill(Color(red: 0.04, green: 0.04, blue: 0.06))
+
+            ZipperUnzipTransitionView_ZipperTeeth(pullerY: pullerY,
+                        spread: spread,
+                        toothHeight: toothHeight,
+                        teethCount: teethCount,
+                        size: size)
+                .fill(teethGradient)
+                .overlay(
+                    ZipperUnzipTransitionView_ZipperTeeth(pullerY: pullerY,
+                                spread: spread,
+                                toothHeight: toothHeight,
+                                teethCount: teethCount,
+                                size: size)
+                        .stroke(Color.black.opacity(0.35), lineWidth: 0.75)
+                )
+        }
+    }
+
+    private var teethGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.86, green: 0.87, blue: 0.90),
+                Color(red: 0.55, green: 0.57, blue: 0.62),
+                Color(red: 0.80, green: 0.81, blue: 0.85)
+            ],
+            startPoint: .leading, endPoint: .trailing
+        )
+    }
+
+    // MARK: Puller (slider)
+
+    private func puller(p: CGFloat, pullerY: CGFloat) -> some View {
+        let bodyW = max(14, size.width * 0.14)
+        let bodyH = max(18, size.height * 0.10)
+        let tabH = bodyH * 0.85
+
+        return VStack(spacing: 0) {
+            // Trapezoidal slider body
+            ZipperUnzipTransitionView_PullerBody()
+                .fill(pullerGradient)
+                .overlay(
+                    ZipperUnzipTransitionView_PullerBody()
+                        .stroke(Color.black.opacity(0.4), lineWidth: 1)
+                )
+                .frame(width: bodyW, height: bodyH)
+            // Pull tab
+            ZStack {
+                Capsule()
+                    .fill(pullerGradient)
+                    .overlay(Capsule().stroke(Color.black.opacity(0.4), lineWidth: 1))
+                Capsule()
+                    .stroke(Color.black.opacity(0.25), lineWidth: 1)
+                    .frame(width: bodyW * 0.28, height: tabH * 0.55)
+            }
+            .frame(width: bodyW * 0.62, height: tabH)
+        }
+        .shadow(color: .black.opacity(0.5), radius: 3, x: 0, y: 2)
+        .position(x: size.width / 2, y: max(bodyH / 2, pullerY))
+    }
+
+    private var pullerGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.93, green: 0.94, blue: 0.97),
+                Color(red: 0.62, green: 0.64, blue: 0.70),
+                Color(red: 0.40, green: 0.42, blue: 0.47)
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+    }
+
+    // MARK: Gesture
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if dragStartProgress == nil { dragStartProgress = progress }
+                let base = dragStartProgress ?? progress
+                let delta = value.translation.height / max(1, size.height)
+                progress = clamp(base + delta)
+            }
+            .onEnded { value in
+                dragStartProgress = nil
+                // Use velocity (predicted end) to decide open vs. snap-back.
+                let predicted = value.predictedEndTranslation.height
+                let base = progress
+                let goOpen: Bool
+                if predicted > size.height * 0.25 {
+                    goOpen = true
+                } else if predicted < -size.height * 0.25 {
+                    goOpen = false
+                } else {
+                    goOpen = base > 0.5
+                }
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.72)) {
+                    progress = goOpen ? 1 : 0
+                }
+            }
+    }
+
+    // MARK: Helpers
+
+    private func crossedToothCount(_ p: CGFloat) -> Int {
+        Int(p * CGFloat(teethCount))
+    }
+
+    private func clamp(_ v: CGFloat) -> CGFloat { min(1, max(0, v)) }
+
+    private func easeOut(_ t: CGFloat) -> CGFloat {
+        let c = clamp(t)
+        return 1 - (1 - c) * (1 - c)
+    }
+}
+
+// MARK: - Cover half clip Shape
+//
+// Each half occupies its side of the board. Its inner edge is flush at the
+// center seam from the bottom up to the puller (meshed), then splays out to
+// `spread` at the very top so the opening widens into a V above the puller.
+
+private struct ZipperUnzipTransitionView_ZipperHalfClip: Shape {
+    let isLeft: Bool
+    var pullerY: CGFloat
+    var spread: CGFloat
+    let size: CGSize
+
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(pullerY, spread) }
+        set { pullerY = newValue.first; spread = newValue.second }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let centerX = rect.midX
+        let py = max(0, min(rect.height, pullerY))
+        // Inner edge is flush at the center seam from the bottom up to the
+        // puller (meshed), then splays out to `spread` at the very top so the
+        // opening widens into a V above the puller — closed below, open above.
+        var p = Path()
+
+        if isLeft {
+            // Down the left edge, across the bottom, up the inner (center)
+            // edge to the puller, then out to the splayed top corner.
+            p.move(to: CGPoint(x: rect.minX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+            p.addLine(to: CGPoint(x: centerX, y: rect.maxY))
+            p.addLine(to: CGPoint(x: centerX, y: py))                   // sealed up to puller
+            p.addLine(to: CGPoint(x: centerX - spread, y: rect.minY))   // splay at top
+            p.closeSubpath()
+        } else {
+            p.move(to: CGPoint(x: rect.maxX, y: rect.minY))
+            p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            p.addLine(to: CGPoint(x: centerX, y: rect.maxY))
+            p.addLine(to: CGPoint(x: centerX, y: py))
+            p.addLine(to: CGPoint(x: centerX + spread, y: rect.minY))
+            p.closeSubpath()
+        }
+        return p
+    }
+}
+
+// MARK: - Zipper tape (meshed channel below puller)
+
+private struct ZipperUnzipTransitionView_ZipperTape: Shape {
+    var pullerY: CGFloat
+    let size: CGSize
+
+    var animatableData: CGFloat {
+        get { pullerY }
+        set { pullerY = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let w = max(3, rect.width * 0.045)
+        let py = max(0, min(rect.height, pullerY))
+        let r = CGRect(x: rect.midX - w / 2, y: py,
+                       width: w, height: max(0, rect.maxY - py))
+        return Path(roundedRect: r, cornerRadius: w / 2)
+    }
+}
+
+// MARK: - Zipper teeth Shape
+//
+// Interleaved trapezoids along the seam. Below the puller they mesh at the
+// center (left and right teeth interlock). Above the puller each side's teeth
+// ride outward with the opening half, so they un-mesh tooth-by-tooth.
+
+private struct ZipperUnzipTransitionView_ZipperTeeth: Shape {
+    var pullerY: CGFloat
+    var spread: CGFloat
+    let toothHeight: CGFloat
+    let teethCount: Int
+    let size: CGSize
+
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(pullerY, spread) }
+        set { pullerY = newValue.first; spread = newValue.second }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let centerX = rect.midX
+        let py = max(0, min(rect.height, pullerY))
+        let toothW = max(6, rect.width * 0.075)
+        let h = toothHeight
+        let count = teethCount
+
+        for i in 0..<count {
+            let topY = CGFloat(i) * h
+            let isLeftTooth = (i % 2 == 0)
+            // Is this tooth above the puller (separated) or below (meshed)?
+            let isOpen = topY + h * 0.5 < py
+            // Fraction of how far above the puller (for a graded V spread).
+            let openFrac: CGFloat = isOpen
+                ? min(1, max(0, (py - (topY + h * 0.5)) / max(1, py)))
+                : 0
+            let sideSpread = spread * openFrac
+            let dir: CGFloat = isLeftTooth ? -1 : 1
+            // Meshed teeth poke slightly past center; opened ones ride out.
+            let baseOffset: CGFloat = isLeftTooth ? -toothW * 0.15 : toothW * 0.15
+            let cx = centerX + baseOffset + dir * sideSpread
+
+            appendTooth(to: &path,
+                        centerX: cx,
+                        topY: topY,
+                        toothW: toothW,
+                        h: h,
+                        pointsRight: isLeftTooth)
+        }
+        return path
+    }
+
+    // A trapezoid tooth. Left-side teeth point right (into the seam), and
+    // right-side teeth point left, so they interleave when meshed.
+    private func appendTooth(to path: inout Path,
+                             centerX: CGFloat,
+                             topY: CGFloat,
+                             toothW: CGFloat,
+                             h: CGFloat,
+                             pointsRight: Bool) {
+        let halfW = toothW / 2
+        let inset = toothW * 0.30
+        let midY = topY + h / 2
+        let top = topY + h * 0.12
+        let bot = topY + h * 0.88
+
+        var t = Path()
+        if pointsRight {
+            // wide on the left, tapered point toward the right
+            t.move(to: CGPoint(x: centerX - halfW, y: top))
+            t.addLine(to: CGPoint(x: centerX + halfW - inset, y: top))
+            t.addLine(to: CGPoint(x: centerX + halfW, y: midY))
+            t.addLine(to: CGPoint(x: centerX + halfW - inset, y: bot))
+            t.addLine(to: CGPoint(x: centerX - halfW, y: bot))
+        } else {
+            t.move(to: CGPoint(x: centerX + halfW, y: top))
+            t.addLine(to: CGPoint(x: centerX - halfW + inset, y: top))
+            t.addLine(to: CGPoint(x: centerX - halfW, y: midY))
+            t.addLine(to: CGPoint(x: centerX - halfW + inset, y: bot))
+            t.addLine(to: CGPoint(x: centerX + halfW, y: bot))
+        }
+        t.closeSubpath()
+        path.addPath(t)
+    }
+}
+
+// MARK: - Puller body Shape (trapezoid slider)
+
+private struct ZipperUnzipTransitionView_PullerBody: Shape {
+    func path(in rect: CGRect) -> Path {
+        let inset = rect.width * 0.18
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX + inset, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX - inset, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        p.closeSubpath()
+        return p
+    }
+}
+"""###,
         "tx-confetti-letters": ###"""
 import SwiftUI
 
@@ -39720,6 +45799,638 @@ private extension Color {
         let g = Double((rgb >> 8) & 0xFF) / 255.0
         let b = Double(rgb & 0xFF) / 255.0
         self.init(red: r, green: g, blue: b)
+    }
+}
+"""###,
+        "tx-decode-matrix": ###"""
+import SwiftUI
+
+/// Glyph Decode Cascade — text resolves out of a column of rapidly cycling
+/// random glyphs per slot. Each character locks from left to right: the
+/// still-scrambling characters dim and jitter while the locked ones brighten
+/// and settle. A wave of order sweeps across the chaos.
+///
+/// - `demo == true`  : self-driving loop derived purely from the timeline clock.
+/// - `demo == false` : real interactive component — tap to replay the cascade.
+struct DecodeMatrixView: View {
+    var demo: Bool = false
+
+    // MARK: - Tunables
+
+    /// The string that resolves out of the noise. Short so it fits a 120pt tile.
+    private let target: [Character] = Array("INSPIRE")
+
+    /// Glyph pool the unlocked slots cycle through.
+    private let glyphPool: [Character] = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&*+=<>/\\")
+
+    /// Quantum for the ~20fps glyph flip (0.05s == 20 flips/sec).
+    private let flipQuantum: Double = 0.05
+
+    /// Delay before the first slot may lock.
+    private let baseDelay: Double = 0.35
+
+    /// Extra delay per slot index, producing the left-to-right cascade.
+    private let stagger: Double = 0.26
+
+    /// How long to hold the fully-resolved word before the demo re-scrambles.
+    private let holdDuration: Double = 1.1
+
+    // MARK: - State (interactive only)
+
+    /// When the current cascade began. Tapping resets this to "now".
+    @State private var cascadeStart: Date = Date()
+
+    // MARK: - Body
+
+    var body: some View {
+        GeometryReader { geo in
+            content(in: geo.size)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(backgroundFill)
+                .contentShape(Rectangle())
+                .modifier(DecodeMatrixView_TapReplay(enabled: !demo) {
+                    cascadeStart = Date()
+                })
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Driver
+
+    @ViewBuilder
+    private func content(in size: CGSize) -> some View {
+        let dimension = min(size.width, size.height)
+        let fontSize = max(13.0, dimension * 0.20)
+        let slotWidth = fontSize * 0.74
+        let jitter = fontSize * 0.10
+
+        TimelineView(.animation) { timeline in
+            let elapsed = elapsedTime(now: timeline.date)
+            let step = Int(elapsed / flipQuantum)
+
+            row(elapsed: elapsed,
+                step: step,
+                fontSize: fontSize,
+                slotWidth: slotWidth,
+                jitter: jitter)
+        }
+    }
+
+    /// `demo` derives a looping clock; interactive measures from the last tap.
+    private func elapsedTime(now: Date) -> Double {
+        if demo {
+            let period = loopPeriod
+            let raw = now.timeIntervalSince1970.truncatingRemainder(dividingBy: period)
+            return raw < 0 ? raw + period : raw
+        } else {
+            return now.timeIntervalSince(cascadeStart)
+        }
+    }
+
+    /// Total loop length: last slot locks, then we hold the resolved word.
+    private var loopPeriod: Double {
+        let lastLock = lockTime(for: target.count - 1)
+        return lastLock + holdDuration
+    }
+
+    // MARK: - Layout
+
+    @ViewBuilder
+    private func row(elapsed: Double,
+                     step: Int,
+                     fontSize: CGFloat,
+                     slotWidth: CGFloat,
+                     jitter: CGFloat) -> some View {
+        HStack(spacing: slotWidth * 0.16) {
+            ForEach(target.indices, id: \.self) { index in
+                slotView(index: index,
+                         elapsed: elapsed,
+                         step: step,
+                         fontSize: fontSize,
+                         slotWidth: slotWidth,
+                         jitter: jitter)
+            }
+        }
+        .padding(.horizontal, fontSize * 0.4)
+    }
+
+    // MARK: - Per-slot rendering
+
+    @ViewBuilder
+    private func slotView(index: Int,
+                          elapsed: Double,
+                          step: Int,
+                          fontSize: CGFloat,
+                          slotWidth: CGFloat,
+                          jitter: CGFloat) -> some View {
+        let locked = elapsed >= lockTime(for: index)
+        let character = locked ? target[index] : scrambleGlyph(slot: index, step: step)
+
+        // Slot just before the lock front gets a brief "charging" pulse.
+        let nearFront = !locked && (elapsed >= lockTime(for: index) - flipQuantum * 4)
+        let yOffset = locked ? 0.0 : jitterOffset(slot: index, step: step, amount: jitter)
+
+        Text(String(character))
+            .font(.system(size: fontSize, weight: locked ? .bold : .regular, design: .monospaced))
+            .foregroundStyle(slotColor(locked: locked, nearFront: nearFront))
+            .brightness(locked ? 0.10 : 0.0)
+            .shadow(color: lockedGlow.opacity(locked ? 0.9 : 0.0),
+                    radius: locked ? fontSize * 0.28 : 0)
+            .scaleEffect(lockScale(locked: locked, index: index, elapsed: elapsed))
+            .offset(y: yOffset)
+            .frame(width: slotWidth)
+            .animation(.spring(response: 0.28, dampingFraction: 0.55), value: locked)
+    }
+
+    // MARK: - Timing
+
+    /// When slot `index` is permitted to lock onto its target glyph.
+    private func lockTime(for index: Int) -> Double {
+        baseDelay + Double(index) * stagger
+    }
+
+    /// A small settle pop the instant a slot locks, decaying back to 1.0.
+    private func lockScale(locked: Bool, index: Int, elapsed: Double) -> CGFloat {
+        guard locked else { return 0.96 }
+        let sinceLock = elapsed - lockTime(for: index)
+        guard sinceLock < 0.22 else { return 1.0 }
+        // Snap up then ease back to rest.
+        let t = sinceLock / 0.22
+        let pop = sin(t * .pi) * 0.16
+        return 1.0 + CGFloat(pop)
+    }
+
+    // MARK: - Deterministic glyph selection (quantized to ~20fps)
+
+    /// Pure function of (slot, step) so the glyph is stable within a frame
+    /// quantum and flips ~20 times/sec instead of re-rolling every render frame.
+    private func scrambleGlyph(slot: Int, step: Int) -> Character {
+        let h = hash(slot: slot, step: step)
+        return glyphPool[h % glyphPool.count]
+    }
+
+    /// Deterministic vertical jitter for unlocked slots, also quantized.
+    private func jitterOffset(slot: Int, step: Int, amount: CGFloat) -> CGFloat {
+        let h = hash(slot: slot &+ 101, step: step)
+        let normalized = (Double(h % 1000) / 1000.0) * 2.0 - 1.0 // -1...1
+        return CGFloat(normalized) * amount
+    }
+
+    /// Cheap integer hash mixing slot and step into a well-spread value.
+    private func hash(slot: Int, step: Int) -> Int {
+        var x = UInt64(bitPattern: Int64(slot &* 73856093 ^ step &* 19349663))
+        x ^= x >> 33
+        x = x &* 0xff51afd7ed558ccd
+        x ^= x >> 33
+        return Int(x & 0x7fff_ffff)
+    }
+
+    // MARK: - Palette
+
+    /// Locked = bright phosphor green-white; unlocked = dim, never invisible.
+    private func slotColor(locked: Bool, nearFront: Bool) -> Color {
+        if locked {
+            return Color(red: 0.78, green: 1.0, blue: 0.86)
+        } else if nearFront {
+            return Color(red: 0.42, green: 0.78, blue: 0.55)
+        } else {
+            return Color(red: 0.26, green: 0.46, blue: 0.36)
+        }
+    }
+
+    private var lockedGlow: Color {
+        Color(red: 0.30, green: 1.0, blue: 0.55)
+    }
+
+    private var backgroundFill: some View {
+        LinearGradient(
+            colors: [
+                Color(red: 0.015, green: 0.020, blue: 0.040),
+                Color(red: 0.020, green: 0.035, blue: 0.030)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+}
+
+// MARK: - Tap replay modifier
+
+/// Adds an onTapGesture only for the real interactive component, keeping the
+/// demo tile purely self-driving.
+private struct DecodeMatrixView_TapReplay: ViewModifier {
+    let enabled: Bool
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.onTapGesture { action() }
+        } else {
+            content
+        }
+    }
+}
+"""###,
+        "tx-elastic-pop": ###"""
+import SwiftUI
+
+// MARK: - Per-Character Pop
+// Characters spring in from zero scale with an overshoot bounce, one after
+// another, each landing with a tiny squash-and-stretch and a soft shadow that
+// settles — like letters dropping onto a trampoline surface.
+//
+// demo == true  → self-driving TimelineView loop: a continuous staggered
+//                 "breathing" spring pop. Letters spring up to full scale with
+//                 a squash-and-stretch landing, hold legibly, then ease back to
+//                 a still-legible floor (popFloor) before the next cycle — they
+//                 never fully exit and never re-enter from zero, so the word is
+//                 never blank or discontinuous on any frame.
+// demo == false → real interactive component: starts fully formed; a tap
+//                 replays the staggered per-letter spring pop with the
+//                 squash-and-stretch landing.
+
+struct ElasticPopView: View {
+    var demo: Bool = false
+
+    private let word = "BOUNCE"
+    private let stagger: Double = 0.07
+
+    // Tap-incremented trigger for the interactive (demo == false) path.
+    @State private var popToken: Int = 0
+
+    var body: some View {
+        GeometryReader { geo in
+            let metrics = ElasticPopView_Metrics(size: geo.size, count: word.count)
+            ZStack {
+                backdrop
+                content(metrics: metrics)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !demo else { return }
+            popToken += 1
+        }
+    }
+
+    // MARK: Backdrop
+
+    private var backdrop: some View {
+        // The catalog tint (#04050a) as a soft vertical wash.
+        LinearGradient(
+            colors: [
+                Color(red: 0.035, green: 0.043, blue: 0.078),
+                Color(red: 0.012, green: 0.016, blue: 0.039)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+
+    // MARK: Content router
+
+    @ViewBuilder
+    private func content(metrics: ElasticPopView_Metrics) -> some View {
+        if demo {
+            demoRow(metrics: metrics)
+        } else {
+            interactiveRow(metrics: metrics)
+        }
+    }
+
+    // MARK: Demo — self-driving loop
+
+    private func demoRow(metrics: ElasticPopView_Metrics) -> some View {
+        TimelineView(.animation) { timeline in
+            let loop = loopPhase(date: timeline.date)
+            characterRow(metrics: metrics) { index in
+                demoProgress(loopPhase: loop, index: index)
+            }
+        }
+    }
+
+    // MARK: Interactive — tap to replay
+
+    private func interactiveRow(metrics: ElasticPopView_Metrics) -> some View {
+        characterRow(metrics: metrics) { _ in 1.0 }
+            .overlay(alignment: .center) {
+                // Per-character keyframe pop, retriggered by popToken.
+                interactiveOverlay(metrics: metrics)
+            }
+            // The resting row beneath stays fully formed so the detail view is
+            // never blank; the overlay supplies the animated replay.
+            .opacity(popToken == 0 ? 1 : 0)
+    }
+
+    @ViewBuilder
+    private func interactiveOverlay(metrics: ElasticPopView_Metrics) -> some View {
+        if popToken > 0 {
+            HStack(spacing: metrics.spacing) {
+                ForEach(Array(word.enumerated()), id: \.offset) { index, ch in
+                    ElasticPopView_KeyframePopCharacter(
+                        character: String(ch),
+                        fontSize: metrics.fontSize,
+                        delay: Double(index) * stagger,
+                        trigger: popToken
+                    )
+                }
+            }
+        }
+    }
+
+    // MARK: Shared row of pop characters
+
+    private func characterRow(
+        metrics: ElasticPopView_Metrics,
+        progress: @escaping (Int) -> Double
+    ) -> some View {
+        HStack(spacing: metrics.spacing) {
+            ForEach(Array(word.enumerated()), id: \.offset) { index, ch in
+                ElasticPopView_PopCharacter(
+                    character: String(ch),
+                    fontSize: metrics.fontSize,
+                    progress: progress(index)
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: Demo timing
+
+    // Normalized 0→1 phase over a ~3.2s loop.
+    private func loopPhase(date: Date) -> Double {
+        let period: Double = 3.2
+        let t = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period)
+        return t / period
+    }
+
+    // Per-character progress for the demo loop.
+    //
+    // A single continuous, seam-safe "breathing" pop per letter:
+    //   - A per-letter local phase is offset by the stagger wave, so letters
+    //     bounce left-to-right.
+    //   - The shaping curve `bump` is exactly 0 at both ends of the local
+    //     phase and rises (with a little spring overshoot) to 1 in between.
+    //   - We map [0, 1] of that bump onto [popFloor, ~1.0] so the *minimum*
+    //     progress any letter ever reaches is popFloor (never 0).
+    //
+    // Result: progress == popFloor at both phase→0 and phase→1 (no wrap
+    // discontinuity), and never below popFloor (never blank: opacity is
+    // min(1, prog*1.6) and popFloor*1.6 > 1, so it stays fully opaque).
+    private func demoProgress(loopPhase: Double, index: Int) -> Double {
+        let count = Double(word.count)
+        let norm = count > 1 ? Double(index) / (count - 1) : 0
+
+        // Floor the breathing pop never drops below (keeps every letter legible).
+        let popFloor: Double = 0.66
+
+        // Per-letter local phase in [0, 1), staggered left-to-right.
+        let spreadFrac: Double = 0.18
+        var local = loopPhase - norm * spreadFrac
+        local = local - floor(local)          // wrap into [0, 1)
+
+        // Shaping bump: 0 at both ends, springs up to ~1 in between.
+        let shaped = bump(local)
+
+        return popFloor + (1.0 - popFloor) * shaped
+    }
+
+    // A 0→(overshoot)→hold→0 bump over [0,1] that is exactly 0 at both ends,
+    // giving a spring-like rise, a legible hold near the top, then an ease back.
+    private func bump(_ x: Double) -> Double {
+        let t = clamp(x)
+        let riseEnd: Double = 0.34   // spring up
+        let fallStart: Double = 0.78 // start easing back
+
+        if t < riseEnd {
+            let p = t / riseEnd
+            return clamp(easeOutBack(p))      // 0 → ~1 with overshoot
+        } else if t < fallStart {
+            return 1.0                        // legible hold at full scale
+        } else {
+            let span = max(1.0 - fallStart, 0.0001)
+            let p = (t - fallStart) / span    // 0 → 1
+            return clamp(1.0 - easeInCubic(p)) // 1 → 0, smooth landing at the seam
+        }
+    }
+
+    private func clamp(_ v: Double) -> Double { min(1, max(0, v)) }
+
+    private func easeInCubic(_ x: Double) -> Double { x * x * x }
+
+    // Overshoot ease for the spring rise (back-out). Note easeOutBack(0)==0
+    // and easeOutBack(1)==1, so the bump pins to 0 at the seam.
+    private func easeOutBack(_ x: Double) -> Double {
+        let c1: Double = 1.70158
+        let c3: Double = c1 + 1
+        let p = x - 1
+        return 1 + c3 * p * p * p + c1 * p * p
+    }
+}
+
+// MARK: - Layout metrics
+
+private struct ElasticPopView_Metrics {
+    let fontSize: CGFloat
+    let spacing: CGFloat
+
+    init(size: CGSize, count: Int) {
+        let w = max(size.width, 1)
+        let h = max(size.height, 1)
+        // Fit the word horizontally and keep headroom for the bounce vertically.
+        let byWidth = w / (CGFloat(max(count, 1)) * 0.92)
+        let byHeight = h * 0.42
+        let f = min(byWidth, byHeight)
+        self.fontSize = max(12, min(f, 120))
+        self.spacing = self.fontSize * 0.04
+    }
+}
+
+// MARK: - Squash/stretch model
+
+// Maps a 0→1 entrance progress to non-uniform scaleX/scaleY, a vertical drop,
+// and a soft landing shadow. The non-uniform scales near landing are what
+// produce the squash-and-stretch, which fully settles to (1, 1) at rest.
+private struct ElasticPopView_PopShape {
+    var scaleX: CGFloat
+    var scaleY: CGFloat
+    var yOffset: CGFloat
+    var shadowRadius: CGFloat
+    var shadowOpacity: Double
+    var opacity: Double
+
+    static func from(progress p: Double, fontSize: CGFloat) -> ElasticPopView_PopShape {
+        let prog = min(1, max(0, p))
+
+        // Base uniform scale follows the back-out ease already applied upstream.
+        let base = CGFloat(prog)
+
+        // Squash window: a brief non-uniform pulse around the landing (~0.6–0.95).
+        // bell peaks near landing; a (1 - prog) falloff forces it to exactly 0
+        // at prog == 1 so the letter settles perfectly square at rest.
+        let raw = bell(prog, center: 0.80, width: 0.16)
+        let settle = max(0, 1 - prog)            // → 0 at rest
+        let squash = CGFloat(raw * settle)
+
+        // At landing the letter flattens: wider X, shorter Y, then settles to 1.
+        let sx = base + squash * 0.26
+        let sy = base - squash * 0.24
+
+        // Drop in from slightly above; settle to baseline with the bounce.
+        let drop = (1 - CGFloat(easeOutSoft(prog))) * fontSize * 0.18
+
+        // Shadow grows as the letter approaches the surface.
+        let shadowR = fontSize * 0.10 * CGFloat(prog)
+        let shadowO = 0.45 * prog
+
+        // Opacity ramps quickly so letters read almost immediately, never harsh.
+        let op = min(1, prog * 1.6)
+
+        return ElasticPopView_PopShape(
+            scaleX: max(0.001, sx),
+            scaleY: max(0.001, sy),
+            yOffset: drop,
+            shadowRadius: shadowR,
+            shadowOpacity: shadowO,
+            opacity: op
+        )
+    }
+
+    // Gaussian-ish bell, 0..1.
+    private static func bell(_ x: Double, center: Double, width: Double) -> Double {
+        let d = (x - center) / width
+        return exp(-d * d)
+    }
+
+    private static func easeOutSoft(_ x: Double) -> Double {
+        1 - pow(1 - x, 3)
+    }
+}
+
+// MARK: - Demo character (driven by external progress)
+
+private struct ElasticPopView_PopCharacter: View {
+    let character: String
+    let fontSize: CGFloat
+    let progress: Double
+
+    var body: some View {
+        let shape = ElasticPopView_PopShape.from(progress: progress, fontSize: fontSize)
+        glyph
+            .scaleEffect(x: shape.scaleX, y: shape.scaleY, anchor: .bottom)
+            .offset(y: shape.yOffset)
+            .shadow(
+                color: Color.black.opacity(shape.shadowOpacity),
+                radius: shape.shadowRadius,
+                x: 0,
+                y: shape.shadowRadius * 0.6
+            )
+            .opacity(shape.opacity)
+    }
+
+    private var glyph: some View {
+        Text(character)
+            .font(.system(size: fontSize, weight: .heavy, design: .rounded))
+            .foregroundStyle(glyphFill)
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    private var glyphFill: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.62, green: 0.83, blue: 1.0),
+                Color(red: 0.38, green: 0.55, blue: 0.98)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+}
+
+// MARK: - Interactive character (KeyframeAnimator, replays on tap)
+
+private struct ElasticPopView_KeyframePopCharacter: View {
+    let character: String
+    let fontSize: CGFloat
+    let delay: Double
+    let trigger: Int
+
+    struct PopValues {
+        var scaleX: CGFloat = 0.001
+        var scaleY: CGFloat = 0.001
+        var yOffset: CGFloat = 0
+        var shadow: Double = 0
+        var opacity: Double = 0
+    }
+
+    var body: some View {
+        KeyframeAnimator(
+            initialValue: PopValues(),
+            trigger: trigger
+        ) { v in
+            Text(character)
+                .font(.system(size: fontSize, weight: .heavy, design: .rounded))
+                .foregroundStyle(fill)
+                .lineLimit(1)
+                .fixedSize()
+                .scaleEffect(x: v.scaleX, y: v.scaleY, anchor: .bottom)
+                .offset(y: v.yOffset)
+                .shadow(
+                    color: Color.black.opacity(v.shadow),
+                    radius: fontSize * 0.10 * CGFloat(v.opacity),
+                    x: 0,
+                    y: fontSize * 0.06 * CGFloat(v.opacity)
+                )
+                .opacity(v.opacity)
+        } keyframes: { _ in
+            // scaleX: grows, overshoots wide at landing (stretch), settles to 1.
+            KeyframeTrack(\.scaleX) {
+                LinearKeyframe(0.001, duration: delay)
+                SpringKeyframe(0.82, duration: 0.18, spring: .bouncy)
+                SpringKeyframe(1.18, duration: 0.12)   // stretch wide on landing
+                SpringKeyframe(1.0, duration: 0.30, spring: .snappy)
+            }
+            // scaleY: grows tall, then squashes short at landing, settles to 1.
+            KeyframeTrack(\.scaleY) {
+                LinearKeyframe(0.001, duration: delay)
+                SpringKeyframe(1.20, duration: 0.18, spring: .bouncy) // tall arriving
+                SpringKeyframe(0.80, duration: 0.12)   // squash short on landing
+                SpringKeyframe(1.0, duration: 0.30, spring: .snappy)
+            }
+            // yOffset: drops in from above, lands at baseline.
+            KeyframeTrack(\.yOffset) {
+                LinearKeyframe(-fontSize * 0.22, duration: delay)
+                SpringKeyframe(0, duration: 0.30, spring: .bouncy)
+            }
+            // shadow: blooms as it lands, eases off slightly.
+            KeyframeTrack(\.shadow) {
+                LinearKeyframe(0, duration: delay)
+                LinearKeyframe(0, duration: 0.16)
+                CubicKeyframe(0.5, duration: 0.12)
+                CubicKeyframe(0.38, duration: 0.30)
+            }
+            // opacity: snaps in fast so the letter is legible immediately.
+            KeyframeTrack(\.opacity) {
+                LinearKeyframe(0, duration: delay)
+                CubicKeyframe(1, duration: 0.12)
+            }
+        }
+    }
+
+    private var fill: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.62, green: 0.83, blue: 1.0),
+                Color(red: 0.38, green: 0.55, blue: 0.98)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 }
 """###,

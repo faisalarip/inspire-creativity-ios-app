@@ -27,7 +27,9 @@ def main():
             probs.append("no spec")
         else:
             if "import SwiftUI" not in vs: probs.append("no import")
-            if f"struct {s['typeName']}" not in vs: probs.append("missing struct")
+            # The main view struct is renamed to the (possibly disambiguated) typeName
+            # by integrate_batch.normalize; here just require a View struct exists.
+            if "struct " not in vs or ": View" not in vs: probs.append("no view struct")
             if "var demo" not in vs: probs.append("no demo")
             if s["isMetal"] and not (r.get("metalSource") or "").strip(): probs.append("no metal")
         if probs:

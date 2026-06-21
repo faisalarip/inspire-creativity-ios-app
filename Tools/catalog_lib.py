@@ -30,7 +30,7 @@ _PREFIXES = {"ges", "mi", "btn", "tr", "tx", "ld", "nav", "ob", "bg", "mtl"}
 def load_catalog():
     return {c["id"]: c for c in json.load(open(CATALOG_JSON, encoding="utf-8"))}
 
-def type_name(cid: str) -> str:
+def _base_type_name(cid: str) -> str:
     """`ges-magnetic-snap` -> `MagneticSnapView`. Drops the category prefix."""
     parts = cid.split("-")
     if parts and parts[0] in _PREFIXES:
@@ -41,6 +41,39 @@ def type_name(cid: str) -> str:
     if camel[0].isdigit():
         camel = "A" + camel
     return camel + "View"
+
+_CAT_ORDER = ["Gestures", "Micro-interactions", "Buttons", "Transitions", "Text effects",
+              "Loaders", "Navigation", "Onboarding", "Backgrounds", "Metal Shaders"]
+_CAT_WORD = {"Gestures": "Gesture", "Micro-interactions": "Micro", "Buttons": "Button",
+             "Transitions": "Transition", "Text effects": "Text", "Loaders": "Loader",
+             "Navigation": "Nav", "Onboarding": "Onboarding", "Backgrounds": "Background",
+             "Metal Shaders": "Metal"}
+_UNIQUE = None
+
+def _build_unique():
+    import collections
+    cat = load_catalog()
+    groups = collections.defaultdict(list)
+    for cid, c in cat.items():
+        groups[_base_type_name(cid)].append((cid, c["category"]))
+    m = {}
+    for base, members in groups.items():
+        if len(members) == 1:
+            m[members[0][0]] = base
+        else:
+            # Canonical-first (by category order then id) keeps the base name —
+            # so already-integrated names stay stable; later ones get a category suffix.
+            members.sort(key=lambda x: (_CAT_ORDER.index(x[1]) if x[1] in _CAT_ORDER else 99, x[0]))
+            for i, (cid, catg) in enumerate(members):
+                m[cid] = base if i == 0 else base[:-4] + _CAT_WORD.get(catg, "X") + "View"
+    return m
+
+def type_name(cid: str) -> str:
+    """Globally-unique view type name; disambiguates cross-category base clashes."""
+    global _UNIQUE
+    if _UNIQUE is None:
+        _UNIQUE = _build_unique()
+    return _UNIQUE.get(cid) or _base_type_name(cid)
 
 def is_metal(cat: str) -> bool:
     return cat == "Metal Shaders"

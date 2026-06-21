@@ -33,6 +33,11 @@ def normalize(src: str, typename: str) -> str:
        left untouched, so no access-level cascades are introduced.
     """
     out = src
+    # 0. Ensure the main View struct is named exactly `typename` (handles disambiguated
+    #    typeNames where the generator used the shared base name).
+    mm = re.search(r'(?m)^(?:public |final )*struct (\w+)\s*:\s*View\b', out)
+    if mm and mm.group(1) != typename:
+        out = re.sub(rf'\b{mm.group(1)}\b', typename, out)
     # 1. strip #Preview blocks (balanced braces)
     while True:
         m = re.search(r'\n[ \t]*(//[^\n]*\n[ \t]*)?#Preview\b', out)

@@ -52,7 +52,7 @@ final class AnalyticsInstrumentationTests: XCTestCase {
         let spy = SpyAnalyticsTracker()
         let router = AppRouter()
         router.analytics = spy
-        router.push(.paywall)
+        router.push(.paywall(source: "settings"))
         XCTAssertEqual(spy.screens, [.paywall],
                        "pushing .paywall must track the paywall screen")
     }
@@ -64,6 +64,40 @@ final class AnalyticsInstrumentationTests: XCTestCase {
         router.push(.settings)
         XCTAssertTrue(spy.screens.isEmpty,
                       ".settings is intentionally unmapped — no screen view on push")
+    }
+
+    /// Bug 2 regression: constructing a BrowseViewModel must NOT log
+    /// `category_selected` on launch. CombineLatest3 emits its initial
+    /// `(nil, .featured, "")` on subscription; the dedup baseline is seeded to
+    /// the initial category so that synthetic emission is treated as
+    /// already-seen. The first genuine user category change must still log.
+    func testBrowseDoesNotLogCategorySelectedOnLaunch() {
+        let spy = SpyAnalyticsTracker()
+        let vm = BrowseViewModel(repository: InMemoryAnimationRepository(),
+                                 analytics: spy)
+
+        // Let the 120ms debounce (DispatchQueue.main) settle without any user action.
+        let settled = expectation(description: "debounce settled")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { settled.fulfill() }
+        wait(for: [settled], timeout: 1.0)
+
+        XCTAssertTrue(categoryEvents(in: spy).isEmpty,
+                      "no category_selected event may fire before the user changes the category")
+
+        // A genuine user category change must log exactly once.
+        vm.selectedCategory = .loaders
+        let logged = expectation(description: "category change logged")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { logged.fulfill() }
+        wait(for: [logged], timeout: 1.0)
+
+        XCTAssertEqual(categoryEvents(in: spy), [.categorySelected(Category.loaders.rawValue)],
+                       "the first genuine category change must log category_selected exactly once")
+    }
+
+    /// Filters a spy's events down to `category_selected` only (search events
+    /// also flow through the same sink).
+    private func categoryEvents(in spy: SpyAnalyticsTracker) -> [AnalyticsEvent] {
+        spy.events.filter { if case .categorySelected = $0 { return true } else { return false } }
     }
 
     /// Isolated, empty UserDefaults so favorites state is deterministic per test.

@@ -107,7 +107,7 @@ struct SettingsView: View {
                 }
                 Spacer()
                 if !store.isPro {
-                    Button { router.push(.paywall) } label: {
+                    Button { router.push(.paywall(source: "settings")) } label: {
                         Text("Go Pro")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(.white)

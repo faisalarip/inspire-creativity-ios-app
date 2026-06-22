@@ -27,7 +27,9 @@ final class BrowseViewModel: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
     /// Last-logged values so we fire `category_selected` / `search` only when
     /// the dimension actually changes (the sink fires on every debounced edit).
-    private var lastLoggedCategory: Category?? = nil
+    /// Seeded to the initial category (`nil`/"all") so CombineLatest3's synthetic
+    /// emission on subscription is treated as already-seen and does NOT log.
+    private var lastLoggedCategory: Category?? = .some(nil)
     private var lastLoggedQueryLen: Int = -1
 
     init(repository: AnimationRepositoryProtocol,

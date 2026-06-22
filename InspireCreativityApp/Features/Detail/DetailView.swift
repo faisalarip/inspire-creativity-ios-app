@@ -99,7 +99,7 @@ struct DetailView: View {
                             : "Unlock to view full code",
                         onUnlock: {
                             switch access {
-                            case .needsPro: router.push(.paywall)
+                            case .needsPro: router.push(.paywall(source: "detail"))
                             case .needsSignIn: showAuthSheet = true
                             case .granted: break
                             }
@@ -239,7 +239,7 @@ struct DetailView: View {
             .padding(.vertical, 14)
             .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
         } else {
-            Button { router.push(.paywall) } label: {
+            Button { router.push(.paywall(source: "detail")) } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "lock.fill")
                     Text("Unlock everything with Pro")

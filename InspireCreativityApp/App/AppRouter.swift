@@ -37,7 +37,7 @@ enum AppTab: String, CaseIterable, Hashable, Identifiable {
 /// Route values pushed onto a tab's NavigationStack.
 enum AppRoute: Hashable {
     case detail(animationId: String)
-    case paywall
+    case paywall(source: String)
     case settings
 }
 

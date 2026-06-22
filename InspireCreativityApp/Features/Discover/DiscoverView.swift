@@ -50,7 +50,7 @@ struct DiscoverView: View {
 
                 AuroraPackPromoCard {
                     container.analytics.log(.auroraPromoTap)
-                    router.push(.paywall)
+                    router.push(.paywall(source: "promo"))
                 }
                 .padding(.horizontal, Theme.Spacing.xl)
                 .padding(.top, Theme.Spacing.xxxl)

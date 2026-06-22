@@ -8,6 +8,9 @@
 //
 
 import Foundation
+#if canImport(FirebaseCore)
+import FirebaseCore
+#endif
 
 /// Composition root. One instance per app launch, kept alive by the App.
 @MainActor
@@ -38,13 +41,7 @@ final class AppContainer: ObservableObject {
             : InMemoryAnimationRepository(),
         favoritesRepository: FavoritesRepositoryProtocol = FavoritesRepository()
     ) {
-        let analytics: AnalyticsTracking = {
-            #if DEBUG
-            return ConsoleAnalyticsTracker()
-            #else
-            return NoOpAnalyticsTracker()   // replaced by Firebase in a later task
-            #endif
-        }()
+        let analytics: AnalyticsTracking = AppContainer.makeAnalyticsTracker()
         self.analytics = analytics
         let enabled = UserDefaults.standard.object(forKey: "analyticsEnabled") as? Bool ?? true
         analytics.setCollectionEnabled(enabled)
@@ -61,6 +58,24 @@ final class AppContainer: ObservableObject {
         Task { [weak self] in
             await self?.refreshUsageMockups()
         }
+    }
+
+    /// Selects the analytics backend. Returns the Firebase-backed tracker once
+    /// the FirebaseAnalytics package + GoogleService-Info.plist are present and
+    /// `FirebaseApp.configure()` has run (so `FirebaseApp.app()` is non-nil).
+    /// Until then the `#if canImport` branch compiles out and the app falls
+    /// back to the console echo (DEBUG) or a no-op (release).
+    private static func makeAnalyticsTracker() -> AnalyticsTracking {
+        #if canImport(FirebaseAnalytics) && canImport(FirebaseCore)
+        if FirebaseApp.app() != nil {
+            return FirebaseAnalyticsTracker()
+        }
+        #endif
+        #if DEBUG
+        return ConsoleAnalyticsTracker()
+        #else
+        return NoOpAnalyticsTracker()
+        #endif
     }
 
     /// Fetches `/rest/v1/usage_mockups` from Supabase and replaces the

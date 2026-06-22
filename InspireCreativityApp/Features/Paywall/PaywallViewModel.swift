@@ -50,9 +50,18 @@ final class PaywallViewModel: ObservableObject {
     @Published private(set) var didComplete = false
 
     let store: StoreManager
+    private let analytics: AnalyticsTracking
 
-    init(store: StoreManager) {
+    /// Where the user opened the paywall from (e.g. "detail", "settings",
+    /// "promo", "library"). Single source of truth for both `paywall_viewed`
+    /// (logged by the view) and `purchase_completed` (logged here on success),
+    /// so GA4 attributes the IAP to the same feature that surfaced the paywall.
+    let source: String
+
+    init(store: StoreManager, analytics: AnalyticsTracking, source: String) {
         self.store = store
+        self.analytics = analytics
+        self.source = source
     }
 
     var isLoadingProducts: Bool { store.isLoadingProducts }
@@ -95,6 +104,7 @@ final class PaywallViewModel: ObservableObject {
         do {
             switch try await store.purchase(product) {
             case .success:
+                analytics.log(.purchaseCompleted(productID: product.id, source: source))
                 didComplete = true
             case .pending:
                 errorMessage = "Your purchase is pending approval. You'll get access once it's approved."

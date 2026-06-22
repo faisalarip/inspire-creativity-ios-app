@@ -11,13 +11,8 @@ struct PaywallView: View {
     @EnvironmentObject private var container: AppContainer
     @StateObject private var viewModel: PaywallViewModel
 
-    /// Where the user opened the paywall from (e.g. "detail", "settings",
-    /// "promo", "library"). Logged as the `paywall_viewed` source.
-    private let source: String
-
-    init(viewModel: PaywallViewModel, source: String) {
+    init(viewModel: PaywallViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
-        self.source = source
     }
 
     var body: some View {
@@ -36,7 +31,7 @@ struct PaywallView: View {
             if done { router.pop() }
         }
         .onAppear {
-            container.analytics.log(.paywallViewed(source: source))
+            container.analytics.log(.paywallViewed(source: viewModel.source))
         }
     }
 

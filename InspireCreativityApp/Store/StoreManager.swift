@@ -49,11 +49,6 @@ final class StoreManager: ObservableObject, PurchaseRepositoryProtocol {
     /// UI can show a one-time "you're Pro" celebration. The view resets it.
     @Published var justPurchased: Bool = false
 
-    /// Analytics sink. Settable (rather than init-injected) so the many
-    /// existing `StoreManager()` call sites stay unchanged; `AppContainer`
-    /// assigns the real tracker right after construction.
-    var analytics: AnalyticsTracking = NoOpAnalyticsTracker()
-
     // MARK: - PurchaseRepositoryProtocol
 
     var isProPublisher: AnyPublisher<Bool, Never> { $isPro.eraseToAnyPublisher() }
@@ -107,7 +102,6 @@ final class StoreManager: ObservableObject, PurchaseRepositoryProtocol {
             await transaction.finish()
             await refreshEntitlements()
             justPurchased = true
-            analytics.log(.purchaseCompleted(productID: product.id))
             return .success
         case .pending:
             return .pending

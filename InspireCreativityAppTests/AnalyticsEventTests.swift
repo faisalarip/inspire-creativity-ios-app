@@ -13,7 +13,7 @@ final class AnalyticsEventTests: XCTestCase {
             .search(termLength: 4),
             .categorySelected("Gestures"),
             .paywallViewed(source: "detail"),
-            .purchaseCompleted(productID: "pro.lifetime"),
+            .purchaseCompleted(productID: "pro.lifetime", source: "detail"),
             .signIn(method: "apple"),
             .auroraPromoTap
         ]
@@ -44,6 +44,19 @@ final class AnalyticsEventTests: XCTestCase {
             XCTAssertLessThanOrEqual(key.count, 40, "param key \(key) too long")
             if let s = value as? String { XCTAssertLessThanOrEqual(s.count, 100, "param \(key) value too long") }
         }
+    }
+
+    func testPurchaseCompletedCarriesProductAndSource() {
+        let event = AnalyticsEvent.purchaseCompleted(
+            productID: "com.faisalarip.InspireCreativityApp.pro.lifetime",
+            source: "settings"
+        )
+        XCTAssertEqual(event.name, "purchase_completed")
+        let params = event.parameters
+        XCTAssertEqual(params["product_id"] as? String,
+                       "com.faisalarip.InspireCreativityApp.pro.lifetime")
+        XCTAssertEqual(params["source"] as? String, "settings",
+                       "purchase_completed must record where the IAP originated, matching paywall_viewed's taxonomy")
     }
 
     func testEventEquatable() {

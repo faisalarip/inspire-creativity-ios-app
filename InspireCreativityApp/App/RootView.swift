@@ -101,7 +101,7 @@ struct RootView: View {
                         DetailView(viewModel: container.makeDetailViewModel(animationId: id))
                             .toolbar(.hidden, for: .navigationBar)
                     case .paywall(let source):
-                        PaywallView(viewModel: container.makePaywallViewModel(), source: source)
+                        PaywallView(viewModel: container.makePaywallViewModel(source: source))
                             .toolbar(.hidden, for: .navigationBar)
                     case .settings:
                         SettingsView(store: container.store)

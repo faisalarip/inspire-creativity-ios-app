@@ -16,7 +16,7 @@ enum AnalyticsEvent: Equatable {
     case search(termLength: Int)
     case categorySelected(String)
     case paywallViewed(source: String)
-    case purchaseCompleted(productID: String)
+    case purchaseCompleted(productID: String, source: String)
     case signIn(method: String)
     case auroraPromoTap
 
@@ -48,8 +48,8 @@ enum AnalyticsEvent: Equatable {
             return ["category": category]
         case let .paywallViewed(source):
             return ["source": source]
-        case let .purchaseCompleted(productID):
-            return ["product_id": productID]
+        case let .purchaseCompleted(productID, source):
+            return ["product_id": productID, "source": source]
         case let .signIn(method):
             return ["method": method]
         case .auroraPromoTap:

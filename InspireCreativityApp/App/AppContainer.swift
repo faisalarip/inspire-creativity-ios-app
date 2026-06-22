@@ -47,7 +47,6 @@ final class AppContainer: ObservableObject {
         analytics.setCollectionEnabled(enabled)
 
         let store = StoreManager()
-        store.analytics = analytics
         self.store = store
         self.purchaseRepository = store
         self.animationRepository = animationRepository
@@ -146,8 +145,8 @@ final class AppContainer: ObservableObject {
         )
     }
 
-    func makePaywallViewModel() -> PaywallViewModel {
-        PaywallViewModel(store: store)
+    func makePaywallViewModel(source: String) -> PaywallViewModel {
+        PaywallViewModel(store: store, analytics: analytics, source: source)
     }
 }
 

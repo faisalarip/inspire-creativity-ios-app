@@ -261,6 +261,10 @@
 		D6D960F701F21637FBCED599 /* ConcertinaSidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 425D0F805EB53AE9C7B46263 /* ConcertinaSidebarView.swift */; };
 		D70083428BBE28C83B71DC43 /* CausticLensView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2BDFFF69662EEF984B11CDC /* CausticLensView.swift */; };
 		D7B403AE040AB9EED15DE299 /* CodeSamples.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CAA33CAEBEF39553607CEB9 /* CodeSamples.swift */; };
+		D82C815A2FE96A4800CD63AA /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = D82C81592FE96A4800CD63AA /* FirebaseAnalytics */; };
+		D82C815C2FE96A4800CD63AA /* FirebaseAnalyticsCore in Frameworks */ = {isa = PBXBuildFile; productRef = D82C815B2FE96A4800CD63AA /* FirebaseAnalyticsCore */; };
+		D82C815E2FE96A4800CD63AA /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = D82C815D2FE96A4800CD63AA /* FirebaseCrashlytics */; };
+		D82C81602FE96C0B00CD63AA /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = D82C815F2FE96C0B00CD63AA /* GoogleService-Info.plist */; };
 		D9228AAF0A58561B817A2656 /* SwiftCodeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 935D098AF14DDA0F49C9DC8B /* SwiftCodeView.swift */; };
 		D9CCD50286276CBD2AC112A4 /* PunchoutCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1825BD4A68E66667911BD63C /* PunchoutCheckView.swift */; };
 		DA9B0DAFCC2DC9F10FB669C1 /* VolumeFluidView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 473305573637A34DB5274FAF /* VolumeFluidView.swift */; };
@@ -326,7 +330,7 @@
 		06EE30DC21A52A26A6DA8BC2 /* FanDeckView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FanDeckView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/FanDeckView.swift; sourceTree = "<group>"; };
 		078F8EB2FDCF67045A047E56 /* JellyWobbleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = JellyWobbleView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/JellyWobbleView.swift; sourceTree = "<group>"; };
 		0804B204F0E72E433A500305 /* SwipeStampImpressView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SwipeStampImpressView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/SwipeStampImpressView.swift; sourceTree = "<group>"; };
-		08E92BDF1B56F57B16A5969C /* JellyWobbleView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = JellyWobbleView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/JellyWobbleView.metal; sourceTree = "<group>"; };
+		08E92BDF1B56F57B16A5969C /* JellyWobbleView.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; name = JellyWobbleView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/JellyWobbleView.metal; sourceTree = "<group>"; };
 		093CDD403EB3D71EF6C506E9 /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
 		0A6703F807C783B2C426ADB6 /* HexColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HexColor.swift; sourceTree = "<group>"; };
 		0AEA8E26388833F35CA554A4 /* PinchCollapseGridView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PinchCollapseGridView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/PinchCollapseGridView.swift; sourceTree = "<group>"; };
@@ -358,7 +362,7 @@
 		22DCD11BEBD9C32C40E4393C /* DragElasticGridWarpView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DragElasticGridWarpView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/DragElasticGridWarpView.swift; sourceTree = "<group>"; };
 		24133A0FDBE410C3CDD77866 /* FlowLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowLayout.swift; sourceTree = "<group>"; };
 		249BBC358A73314402E7942E /* ChromaticVelocityView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ChromaticVelocityView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/ChromaticVelocityView.swift; sourceTree = "<group>"; };
-		24B6FB797254F19CF3B37474 /* FoilTiltView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = FoilTiltView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/FoilTiltView.metal; sourceTree = "<group>"; };
+		24B6FB797254F19CF3B37474 /* FoilTiltView.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; name = FoilTiltView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/FoilTiltView.metal; sourceTree = "<group>"; };
 		25951F00CC2C1C37B13AB5DC /* CrtPoweronView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CrtPoweronView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/CrtPoweronView.swift; sourceTree = "<group>"; };
 		25E0A8D421B3F17211AAD853 /* GenieWarpView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GenieWarpView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/GenieWarpView.swift; sourceTree = "<group>"; };
 		2726380BC40CDF96B36FD6CD /* RolodexQuantityView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RolodexQuantityView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/RolodexQuantityView.swift; sourceTree = "<group>"; };
@@ -374,7 +378,7 @@
 		31CC49938FE9D1F6FB5F551F /* ParticleAssembleLogoView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ParticleAssembleLogoView.swift; path = InspireCreativityApp/Animations/Catalog/Loaders/ParticleAssembleLogoView.swift; sourceTree = "<group>"; };
 		3288925741A3C7A6F3FB1B36 /* InkbleedSegmentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InkbleedSegmentView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/InkbleedSegmentView.swift; sourceTree = "<group>"; };
 		328CF05BD82582AB0DD93EDC /* ColumnSlatSlideView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ColumnSlatSlideView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/ColumnSlatSlideView.swift; sourceTree = "<group>"; };
-		3360C558EB7FC93513583F8F /* DevelopPixelsView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = DevelopPixelsView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/DevelopPixelsView.metal; sourceTree = "<group>"; };
+		3360C558EB7FC93513583F8F /* DevelopPixelsView.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; name = DevelopPixelsView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/DevelopPixelsView.metal; sourceTree = "<group>"; };
 		343DE53FF962645126281CA9 /* MercuryPourView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MercuryPourView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/MercuryPourView.swift; sourceTree = "<group>"; };
 		3449310CC5054890B09E6758 /* ShatterReformView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShatterReformView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/ShatterReformView.swift; sourceTree = "<group>"; };
 		35357A91C39A0DBD0E0C90BC /* RotateGearTrainView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RotateGearTrainView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/RotateGearTrainView.swift; sourceTree = "<group>"; };
@@ -399,8 +403,8 @@
 		425D0F805EB53AE9C7B46263 /* ConcertinaSidebarView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConcertinaSidebarView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/ConcertinaSidebarView.swift; sourceTree = "<group>"; };
 		428E624D5E7CA6E0620F3083 /* ConveyorLoadView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConveyorLoadView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/ConveyorLoadView.swift; sourceTree = "<group>"; };
 		44AE7E63BD4563B3880AC146 /* WeightBreatheView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WeightBreatheView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/WeightBreatheView.swift; sourceTree = "<group>"; };
-		4547194AD2548699F3D6EEA0 /* CausticLensView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = CausticLensView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/CausticLensView.metal; sourceTree = "<group>"; };
-		460ACA8577787CA9D59F21BE /* CrtPoweronView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = CrtPoweronView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/CrtPoweronView.metal; sourceTree = "<group>"; };
+		4547194AD2548699F3D6EEA0 /* CausticLensView.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; name = CausticLensView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/CausticLensView.metal; sourceTree = "<group>"; };
+		460ACA8577787CA9D59F21BE /* CrtPoweronView.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; name = CrtPoweronView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/CrtPoweronView.metal; sourceTree = "<group>"; };
 		473305573637A34DB5274FAF /* VolumeFluidView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VolumeFluidView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/VolumeFluidView.swift; sourceTree = "<group>"; };
 		4736F16C60209C316E2A5DBC /* MagneticDotFieldView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticDotFieldView.swift; path = InspireCreativityApp/Animations/Catalog/Backgrounds/MagneticDotFieldView.swift; sourceTree = "<group>"; };
 		4777F0AE8ECB9092AB5E218C /* SlideToConfirmView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SlideToConfirmView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/SlideToConfirmView.swift; sourceTree = "<group>"; };
@@ -428,7 +432,7 @@
 		5CBA204DDC6885CE97F8CAA4 /* SpyAnalyticsTracker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SpyAnalyticsTracker.swift; path = InspireCreativityAppTests/Support/SpyAnalyticsTracker.swift; sourceTree = "<group>"; };
 		5CE02328DBEA11A067FC4127 /* GradientFlowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GradientFlowView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/GradientFlowView.swift; sourceTree = "<group>"; };
 		5E62DF6C009F124077079CF0 /* ElasticRopeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ElasticRopeView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/ElasticRopeView.swift; sourceTree = "<group>"; };
-		5EF6C9DD6E2EC0EDDBE14132 /* WaxMeltView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = WaxMeltView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/WaxMeltView.metal; sourceTree = "<group>"; };
+		5EF6C9DD6E2EC0EDDBE14132 /* WaxMeltView.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; name = WaxMeltView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/WaxMeltView.metal; sourceTree = "<group>"; };
 		5EF880BE97E4D575B2EE4D42 /* StretchPillSwitchView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StretchPillSwitchView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/StretchPillSwitchView.swift; sourceTree = "<group>"; };
 		5F1D6355086CAD815EBCC81E /* MetaballMergeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MetaballMergeView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/MetaballMergeView.swift; sourceTree = "<group>"; };
 		5F396DCAE73BF48FD8FF5110 /* ScrubberWaveView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ScrubberWaveView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/ScrubberWaveView.swift; sourceTree = "<group>"; };
@@ -474,7 +478,7 @@
 		82F73253939283D6444C5164 /* GlassShatterSettleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GlassShatterSettleView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/GlassShatterSettleView.swift; sourceTree = "<group>"; };
 		8629FCD4490840B09A8AF225 /* GlassShatterView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GlassShatterView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/GlassShatterView.swift; sourceTree = "<group>"; };
 		86BEA9C9375495718FF2CA70 /* DecodeMatrixView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DecodeMatrixView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/DecodeMatrixView.swift; sourceTree = "<group>"; };
-		87E0EA9BCD38E5501040B632 /* MercuryPourView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = MercuryPourView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/MercuryPourView.metal; sourceTree = "<group>"; };
+		87E0EA9BCD38E5501040B632 /* MercuryPourView.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; name = MercuryPourView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/MercuryPourView.metal; sourceTree = "<group>"; };
 		8933304484F9F75442E694F8 /* MuteMorphView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MuteMorphView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/MuteMorphView.swift; sourceTree = "<group>"; };
 		893DC8EF73079679BF69D22C /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
 		8D7172619DB15AD08404D409 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -492,7 +496,7 @@
 		959AF64BF0F8536C8885F891 /* PurchaseRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseRepository.swift; sourceTree = "<group>"; };
 		96843BA6D2FD6043918D753C /* AnalyticsEvent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AnalyticsEvent.swift; path = InspireCreativityApp/Analytics/AnalyticsEvent.swift; sourceTree = "<group>"; };
 		97EC98780C194E82CA688AC0 /* OtpCascadeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OtpCascadeView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/OtpCascadeView.swift; sourceTree = "<group>"; };
-		98639AAABE57B5BE20AED3B4 /* HalftonePressView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = HalftonePressView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/HalftonePressView.metal; sourceTree = "<group>"; };
+		98639AAABE57B5BE20AED3B4 /* HalftonePressView.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; name = HalftonePressView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/HalftonePressView.metal; sourceTree = "<group>"; };
 		9969A5201420094F6CD42E65 /* PeelAwayCardView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PeelAwayCardView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/PeelAwayCardView.swift; sourceTree = "<group>"; };
 		99D4970B4184F960B9778F17 /* DepthStarfieldView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DepthStarfieldView.swift; path = InspireCreativityApp/Animations/Catalog/Backgrounds/DepthStarfieldView.swift; sourceTree = "<group>"; };
 		9B33E8615462F6DB3135BDE3 /* BespokeSeed.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BespokeSeed.swift; path = InspireCreativityApp/Repositories/Seed/BespokeSeed.swift; sourceTree = "<group>"; };
@@ -518,7 +522,7 @@
 		A7B3C1055F9F37F5F69622FA /* NeonFlickerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NeonFlickerView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/NeonFlickerView.swift; sourceTree = "<group>"; };
 		A95644011F2EB7F2977266E8 /* FerrofluidDotsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FerrofluidDotsView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/FerrofluidDotsView.swift; sourceTree = "<group>"; };
 		AA75BD038E4E82FAEA107CBB /* CreativePreviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreativePreviews.swift; sourceTree = "<group>"; };
-		AAF1F67C5AC8D4841F1166F2 /* HeatMirage.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = HeatMirage.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/HeatMirage.metal; sourceTree = "<group>"; };
+		AAF1F67C5AC8D4841F1166F2 /* HeatMirage.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; name = HeatMirage.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/HeatMirage.metal; sourceTree = "<group>"; };
 		AB312229AEDC94F2DD50012A /* PullToTriggerBowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PullToTriggerBowView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/PullToTriggerBowView.swift; sourceTree = "<group>"; };
 		AC940BBE4EFB42C2419D0663 /* HeatMirageView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HeatMirageView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/HeatMirageView.swift; sourceTree = "<group>"; };
 		ACCF4D0ECA9616FDD5417407 /* HoldChargeBurstView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HoldChargeBurstView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/HoldChargeBurstView.swift; sourceTree = "<group>"; };
@@ -575,6 +579,7 @@
 		D719BD58DFD32E988D50E17F /* DominoSegmentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DominoSegmentView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/DominoSegmentView.swift; sourceTree = "<group>"; };
 		D801DA85F2E4716F8D1E5706 /* StampInkView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StampInkView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/StampInkView.swift; sourceTree = "<group>"; };
 		D80D4CAD87F963D2E48D4149 /* ConstellationHeroView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ConstellationHeroView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/ConstellationHeroView.swift; sourceTree = "<group>"; };
+		D82C815F2FE96C0B00CD63AA /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		D8E098F02A61DA347E619932 /* HalftonePressView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HalftonePressView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/HalftonePressView.swift; sourceTree = "<group>"; };
 		D93BA63D315F2243AD0F0332 /* DrawerCascadeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DrawerCascadeView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/DrawerCascadeView.swift; sourceTree = "<group>"; };
 		D978EA3B7380013024868C2C /* PinchFocusDepthView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PinchFocusDepthView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/PinchFocusDepthView.swift; sourceTree = "<group>"; };
@@ -583,7 +588,7 @@
 		DD7BC8965FC5EABE5EC84610 /* CodeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeSheet.swift; sourceTree = "<group>"; };
 		DF5C1CC8D1BEE7464719BBD2 /* ZipperUnzipTransitionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ZipperUnzipTransitionView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/ZipperUnzipTransitionView.swift; sourceTree = "<group>"; };
 		DFA37AC81384F066B478D2A3 /* PagecurlDrawerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PagecurlDrawerView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/PagecurlDrawerView.swift; sourceTree = "<group>"; };
-		DFD74B1E3D141B7F76EAD501 /* ChromaticVelocityView.metal */ = {isa = PBXFileReference; includeInIndex = 1; name = ChromaticVelocityView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/ChromaticVelocityView.metal; sourceTree = "<group>"; };
+		DFD74B1E3D141B7F76EAD501 /* ChromaticVelocityView.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; name = ChromaticVelocityView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/ChromaticVelocityView.metal; sourceTree = "<group>"; };
 		E0A26A73E32CA21847D50130 /* InspireCreativityAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = InspireCreativityAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E196A223AFD846500215A007 /* PermissionBellView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PermissionBellView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/PermissionBellView.swift; sourceTree = "<group>"; };
 		E2C5D267C1B8307996EC393C /* ParallaxDeckTabsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ParallaxDeckTabsView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/ParallaxDeckTabsView.swift; sourceTree = "<group>"; };
@@ -633,6 +638,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D82C815A2FE96A4800CD63AA /* FirebaseAnalytics in Frameworks */,
+				D82C815E2FE96A4800CD63AA /* FirebaseCrashlytics in Frameworks */,
+				D82C815C2FE96A4800CD63AA /* FirebaseAnalyticsCore in Frameworks */,
 				319E121B5FDDA09BBED857C8 /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -824,6 +832,7 @@
 				A0986D5160A18FEE81D8D7C3 /* Repositories */,
 				6DEE0CF483936F8E4216A987 /* Resources */,
 				12F1C9823B7D241C34392D7F /* Info.plist */,
+				D82C815F2FE96C0B00CD63AA /* GoogleService-Info.plist */,
 				07C7BBF7BEA8AE2FAE7CBF7C /* Store */,
 				CBC451507EFC0E1F6FF23208 /* PrivacyInfo.xcprivacy */,
 				FCDFAA623C062EC44FE48AC7 /* InspireCreativityApp.entitlements */,
@@ -1261,6 +1270,9 @@
 			name = InspireCreativityApp;
 			packageProductDependencies = (
 				FA9A8BB58F4DD4C3E0A71147 /* Supabase */,
+				D82C81592FE96A4800CD63AA /* FirebaseAnalytics */,
+				D82C815B2FE96A4800CD63AA /* FirebaseAnalyticsCore */,
+				D82C815D2FE96A4800CD63AA /* FirebaseCrashlytics */,
 			);
 			productName = InspireCreativityApp;
 			productReference = EF0182DF85A7CD0319333F24 /* InspireCreativityApp.app */;
@@ -1310,6 +1322,7 @@
 			mainGroup = 2B731CEFC6751AAE0EC69B98;
 			packageReferences = (
 				510C8809CD17B88FB302F445 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				D82C81582FE96A4800CD63AA /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			productRefGroup = B23D89B2D2DF3745A003AEB1 /* Products */;
 			projectDirPath = "";
@@ -1327,6 +1340,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				72AD48D1C32F4C49EF3D1216 /* Preview Assets.xcassets in Resources */,
+				D82C81602FE96C0B00CD63AA /* GoogleService-Info.plist in Resources */,
 				A74D3F0F546C24E1AD1BFE96 /* Assets.xcassets in Resources */,
 				A10646899BA311ACD73882D3 /* PrivacyInfo.xcprivacy in Resources */,
 			);
@@ -1865,9 +1879,32 @@
 				minimumVersion = 2.47.0;
 			};
 		};
+		D82C81582FE96A4800CD63AA /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.15.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		D82C81592FE96A4800CD63AA /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D82C81582FE96A4800CD63AA /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		D82C815B2FE96A4800CD63AA /* FirebaseAnalyticsCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D82C81582FE96A4800CD63AA /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsCore;
+		};
+		D82C815D2FE96A4800CD63AA /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D82C81582FE96A4800CD63AA /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
+		};
 		FA9A8BB58F4DD4C3E0A71147 /* Supabase */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 510C8809CD17B88FB302F445 /* XCRemoteSwiftPackageReference "supabase-swift" */;

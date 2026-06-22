@@ -46,6 +46,8 @@ final class AppContainer: ObservableObject {
             #endif
         }()
         self.analytics = analytics
+        let enabled = UserDefaults.standard.object(forKey: "analyticsEnabled") as? Bool ?? true
+        analytics.setCollectionEnabled(enabled)
 
         let store = StoreManager()
         store.analytics = analytics

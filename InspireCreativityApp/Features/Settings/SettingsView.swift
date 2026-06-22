@@ -12,8 +12,10 @@ struct SettingsView: View {
 
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var authStore: AuthStore
+    @EnvironmentObject private var container: AppContainer
     @ObservedObject var store: StoreManager
 
+    @AppStorage("analyticsEnabled") private var analyticsEnabled = true
     @State private var showAuthSheet = false
     @State private var showDeleteConfirm = false
     @State private var restoreMessage: String?
@@ -144,6 +146,26 @@ struct SettingsView: View {
             Divider().overlay(Theme.Palette.hairline)
             actionRow(icon: "envelope.fill", title: "Contact support") {
                 openURL(AppLinks.supportURL)
+            }
+            Divider().overlay(Theme.Palette.hairline)
+            Toggle(isOn: $analyticsEnabled) {
+                HStack(spacing: 12) {
+                    Image(systemName: "chart.bar.fill")
+                        .foregroundStyle(.white.opacity(0.8)).frame(width: 24)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Share usage analytics")
+                            .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+                        Text("Anonymous — helps improve the app")
+                            .font(.system(size: 12)).foregroundStyle(.white.opacity(0.55))
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 4)
+            }
+            .toggleStyle(.switch)
+            .tint(Theme.Palette.accent)
+            .onChange(of: analyticsEnabled) { _, on in
+                container.analytics.setCollectionEnabled(on)
             }
         }
     }

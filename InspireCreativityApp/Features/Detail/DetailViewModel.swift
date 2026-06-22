@@ -85,7 +85,10 @@ final class DetailViewModel: ObservableObject {
 
     func toggleFavorite() {
         favorites.toggle(item.id)
-        analytics.log(.favoriteToggled(id: item.id, on: isFavorited))
+        // Log the RESULTING state from the repository's synchronous source of
+        // truth. `isFavorited` is updated asynchronously via `idsPublisher`, so
+        // it still holds the stale pre-toggle value at this point.
+        analytics.log(.favoriteToggled(id: item.id, on: favorites.isFavorite(item.id)))
     }
 
     /// Logs a code-copy from the leaf `CodeSheet` via an injected closure, so

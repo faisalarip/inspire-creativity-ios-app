@@ -19,13 +19,31 @@ final class AnalyticsInstrumentationTests: XCTestCase {
     func testToggleFavoriteLogsEvent() {
         let spy = SpyAnalyticsTracker()
         let item = AnimationCatalogSeed.items[0]
+        // Start from a clean store so the item is NOT favorited initially.
+        let favorites = FavoritesRepository(defaults: Self.ephemeralDefaults())
+        XCTAssertFalse(favorites.isFavorite(item.id), "precondition: item starts unfavorited")
         let vm = DetailViewModel(animationId: item.id,
                                  repository: InMemoryAnimationRepository(),
-                                 favorites: FavoritesRepository(),
+                                 favorites: favorites,
                                  purchases: StoreManager(),
                                  analytics: spy)
+
+        // First toggle: unfavorited -> favorited, so the event must record on: true.
         vm.toggleFavorite()
-        XCTAssertTrue(spy.events.contains(.favoriteToggled(id: item.id, on: vm.isFavorited)),
-                      "toggleFavorite must log favorite_toggled with the resulting state")
+        XCTAssertEqual(spy.events.last, .favoriteToggled(id: item.id, on: true),
+                       "toggling an unfavorited item must log favorite_toggled with the resulting state on: true")
+
+        // Second toggle: favorited -> unfavorited, so the event must record on: false.
+        vm.toggleFavorite()
+        XCTAssertEqual(spy.events.last, .favoriteToggled(id: item.id, on: false),
+                       "toggling a favorited item must log favorite_toggled with the resulting state on: false")
+    }
+
+    /// Isolated, empty UserDefaults so favorites state is deterministic per test.
+    private static func ephemeralDefaults() -> UserDefaults {
+        let suite = "AnalyticsInstrumentationTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        return defaults
     }
 }

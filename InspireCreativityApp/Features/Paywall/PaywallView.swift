@@ -8,6 +8,7 @@ import SwiftUI
 struct PaywallView: View {
 
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var container: AppContainer
     @StateObject private var viewModel: PaywallViewModel
 
     init(viewModel: PaywallViewModel) {
@@ -28,6 +29,9 @@ struct PaywallView: View {
         .background(Theme.Palette.background.ignoresSafeArea())
         .onChange(of: viewModel.didComplete) { _, done in
             if done { router.pop() }
+        }
+        .onAppear {
+            container.analytics.log(.paywallViewed(source: router.selectedTab.id))
         }
     }
 

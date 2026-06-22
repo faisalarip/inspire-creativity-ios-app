@@ -45,6 +45,11 @@ enum AppRoute: Hashable {
 @MainActor
 final class AppRouter: ObservableObject {
 
+    /// Analytics backend. Defaults to a no-op so the router stays testable and
+    /// usable without a container; the live tracker is injected at startup
+    /// (RootView.onAppear) from `AppContainer.analytics`.
+    var analytics: AnalyticsTracking = NoOpAnalyticsTracker()
+
     @Published var selectedTab: AppTab = .discover
 
     /// Set when a category tile is tapped on Discover; BrowseView reads it (via
@@ -80,6 +85,18 @@ final class AppRouter: ObservableObject {
         case .browse:   browsePath.append(route)
         case .samples:   samplesPath.append(route)
         case .library:  libraryPath.append(route)
+        }
+        if let screen = screen(for: route) { analytics.track(screen: screen) }
+    }
+
+    /// Maps a pushed route to its logical analytics screen. Only the two
+    /// modal-ish destinations report screen views here; `.settings` is
+    /// intentionally unmapped (tab/root screens are tracked in RootView).
+    private func screen(for route: AppRoute) -> AnalyticsScreen? {
+        switch route {
+        case .detail:  return .detail
+        case .paywall: return .paywall
+        default:       return nil
         }
     }
 

@@ -43,6 +43,17 @@ struct RootView: View {
         .animation(.easeInOut(duration: 0.25), value: authStore.pendingVerificationEmail)
         .animation(.easeInOut(duration: 0.3), value: authStore.justSignedIn)
         .animation(.easeInOut(duration: 0.3), value: store.justPurchased)
+        .onAppear {
+            // Inject the live tracker once (the router is a @StateObject owned
+            // here, so the container can't reach it at init time), then log the
+            // initial screen. onChange below does NOT fire on first appear, so
+            // .discover is logged exactly once.
+            router.analytics = container.analytics
+            container.analytics.track(screen: .discover)
+        }
+        .onChange(of: router.selectedTab) { _, tab in
+            container.analytics.track(screen: AnalyticsScreen(rawValue: tab.id) ?? .discover)
+        }
     }
 
     private var signedInShell: some View {

@@ -39,6 +39,33 @@ final class AnalyticsInstrumentationTests: XCTestCase {
                        "toggling a favorited item must log favorite_toggled with the resulting state on: false")
     }
 
+    func testPushDetailTracksDetailScreen() {
+        let spy = SpyAnalyticsTracker()
+        let router = AppRouter()
+        router.analytics = spy
+        router.push(.detail(animationId: "x"))
+        XCTAssertEqual(spy.screens, [.detail],
+                       "pushing .detail must track the detail screen")
+    }
+
+    func testPushPaywallTracksPaywallScreen() {
+        let spy = SpyAnalyticsTracker()
+        let router = AppRouter()
+        router.analytics = spy
+        router.push(.paywall)
+        XCTAssertEqual(spy.screens, [.paywall],
+                       "pushing .paywall must track the paywall screen")
+    }
+
+    func testPushSettingsTracksNoScreen() {
+        let spy = SpyAnalyticsTracker()
+        let router = AppRouter()
+        router.analytics = spy
+        router.push(.settings)
+        XCTAssertTrue(spy.screens.isEmpty,
+                      ".settings is intentionally unmapped — no screen view on push")
+    }
+
     /// Isolated, empty UserDefaults so favorites state is deterministic per test.
     private static func ephemeralDefaults() -> UserDefaults {
         let suite = "AnalyticsInstrumentationTests.\(UUID().uuidString)"

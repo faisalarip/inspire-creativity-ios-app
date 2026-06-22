@@ -23,10 +23,17 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var totalCount: Int = 0
 
     private let repository: AnimationRepositoryProtocol
+    private let analytics: AnalyticsTracking
     private var cancellables: Set<AnyCancellable> = []
+    /// Last-logged values so we fire `category_selected` / `search` only when
+    /// the dimension actually changes (the sink fires on every debounced edit).
+    private var lastLoggedCategory: Category?? = nil
+    private var lastLoggedQueryLen: Int = -1
 
-    init(repository: AnimationRepositoryProtocol) {
+    init(repository: AnimationRepositoryProtocol,
+         analytics: AnalyticsTracking = NoOpAnalyticsTracker()) {
         self.repository = repository
+        self.analytics = analytics
         self.categories = repository.categories()
         self.totalCount = repository.all().count
         bind()
@@ -36,7 +43,17 @@ final class BrowseViewModel: ObservableObject {
         Publishers.CombineLatest3($selectedCategory, $sortOrder, $searchText)
             .debounce(for: .milliseconds(120), scheduler: DispatchQueue.main)
             .sink { [weak self] cat, sort, query in
-                self?.refresh(category: cat, sort: sort, query: query)
+                guard let self else { return }
+                self.refresh(category: cat, sort: sort, query: query)
+                if self.lastLoggedCategory != .some(cat) {
+                    self.lastLoggedCategory = .some(cat)
+                    self.analytics.log(.categorySelected(cat?.rawValue ?? "all"))
+                }
+                let len = query.trimmingCharacters(in: .whitespacesAndNewlines).count
+                if len > 0 && len != self.lastLoggedQueryLen {
+                    self.lastLoggedQueryLen = len
+                    self.analytics.log(.search(termLength: len))
+                }
             }
             .store(in: &cancellables)
 

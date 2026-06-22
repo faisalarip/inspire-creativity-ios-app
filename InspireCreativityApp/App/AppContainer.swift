@@ -21,6 +21,10 @@ final class AppContainer: ObservableObject {
     /// same instance behind the protocol.
     let store: StoreManager
     let authStore: AuthStore
+    /// Analytics backend, injected into the instrumented view-models and
+    /// `AuthStore`. DEBUG echoes to the console; release is a no-op for now
+    /// (swapped for the Firebase tracker in a later task).
+    let analytics: AnalyticsTracking
 
     /// Mockups shown in the Discover "Aurora in the wild" row and the
     /// TikTok-style Samples tab. Starts as the bundled 7-item fallback and
@@ -34,12 +38,22 @@ final class AppContainer: ObservableObject {
             : InMemoryAnimationRepository(),
         favoritesRepository: FavoritesRepositoryProtocol = FavoritesRepository()
     ) {
+        let analytics: AnalyticsTracking = {
+            #if DEBUG
+            return ConsoleAnalyticsTracker()
+            #else
+            return NoOpAnalyticsTracker()   // replaced by Firebase in a later task
+            #endif
+        }()
+        self.analytics = analytics
+
         let store = StoreManager()
+        store.analytics = analytics
         self.store = store
         self.purchaseRepository = store
         self.animationRepository = animationRepository
         self.favoritesRepository = favoritesRepository
-        self.authStore = AuthStore()
+        self.authStore = AuthStore(analytics: analytics)
 
         // Kick off the usage-mockups fetch alongside the animations fetch.
         Task { [weak self] in
@@ -90,7 +104,7 @@ final class AppContainer: ObservableObject {
     }
 
     func makeBrowseViewModel() -> BrowseViewModel {
-        BrowseViewModel(repository: animationRepository)
+        BrowseViewModel(repository: animationRepository, analytics: analytics)
     }
 
     func makeSearchViewModel() -> SearchViewModel {
@@ -110,7 +124,8 @@ final class AppContainer: ObservableObject {
             animationId: animationId,
             repository: animationRepository,
             favorites: favoritesRepository,
-            purchases: purchaseRepository
+            purchases: purchaseRepository,
+            analytics: analytics
         )
     }
 
@@ -741,6 +756,7 @@ final class AuthStore: ObservableObject {
 
     private static let defaultsKey = "enigma.auth.session"
     private let defaults: UserDefaults
+    private let analytics: AnalyticsTracking
 
     /// supabase-swift-backed engine for the two social flows. Lazily built so
     /// the SDK `SupabaseClient` is only constructed when a social button is
@@ -752,10 +768,12 @@ final class AuthStore: ObservableObject {
 
     init(
         defaults: UserDefaults = .standard,
-        socialAuth: @escaping () -> SocialAuthServicing = { SocialAuthService() }
+        socialAuth: @escaping () -> SocialAuthServicing = { SocialAuthService() },
+        analytics: AnalyticsTracking = NoOpAnalyticsTracker()
     ) {
         self.defaults = defaults
         self.socialAuth = socialAuth
+        self.analytics = analytics
         if let data = defaults.data(forKey: Self.defaultsKey) {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
@@ -823,6 +841,7 @@ final class AuthStore: ObservableObject {
             persist(session)
             pendingVerificationEmail = nil
             justSignedIn = true
+            analytics.log(.signIn(method: "email"))
         } catch let error as AuthError {
             lastError = error
         } catch {
@@ -844,6 +863,7 @@ final class AuthStore: ObservableObject {
             persist(session)
             pendingVerificationEmail = nil
             justSignedIn = true
+            analytics.log(.signIn(method: "apple"))
         } catch let error as AuthError {
             lastError = error
         } catch {
@@ -865,6 +885,7 @@ final class AuthStore: ObservableObject {
             persist(session)
             pendingVerificationEmail = nil
             justSignedIn = true
+            analytics.log(.signIn(method: "google"))
         } catch let error as AuthError {
             lastError = error
         } catch {

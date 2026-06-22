@@ -37,13 +37,15 @@ final class DetailViewModel: ObservableObject {
 
     private let favorites: FavoritesRepositoryProtocol
     private let purchases: PurchaseRepositoryProtocol
+    private let analytics: AnalyticsTracking
     private var cancellables: Set<AnyCancellable> = []
 
     init(
         animationId: String,
         repository: AnimationRepositoryProtocol,
         favorites: FavoritesRepositoryProtocol,
-        purchases: PurchaseRepositoryProtocol
+        purchases: PurchaseRepositoryProtocol,
+        analytics: AnalyticsTracking = NoOpAnalyticsTracker()
     ) {
         // Resolve the item once (fall back to featured for unknown ids), assign
         // stored props, then wire bindings unconditionally so the detail screen
@@ -52,10 +54,14 @@ final class DetailViewModel: ObservableObject {
         self.item = resolved
         self.favorites = favorites
         self.purchases = purchases
+        self.analytics = analytics
         self.isFavorited = favorites.isFavorite(resolved.id)
         self.isOwned = purchases.isOwned(resolved.id, freeOverride: resolved.isFree)
         self.hasPro = purchases.isPro
         bind()
+        analytics.log(.animationView(id: resolved.id,
+                                     category: resolved.category.rawValue,
+                                     isPro: resolved.isPro))
     }
 
     private func bind() {
@@ -79,5 +85,12 @@ final class DetailViewModel: ObservableObject {
 
     func toggleFavorite() {
         favorites.toggle(item.id)
+        analytics.log(.favoriteToggled(id: item.id, on: isFavorited))
+    }
+
+    /// Logs a code-copy from the leaf `CodeSheet` via an injected closure, so
+    /// the view itself never holds the analytics dependency or the item id.
+    func logCodeCopied() {
+        analytics.log(.codeCopied(id: item.id))
     }
 }

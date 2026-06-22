@@ -25,6 +25,9 @@ struct CodeSheet: View {
     /// Label for the unlock button in the locked overlay.
     var lockCTA: String = "Unlock to view full code"
     let onUnlock: () -> Void
+    /// Fired when the user copies the (unlocked) code. Lets the owning view
+    /// log analytics without this leaf knowing about the tracker or the item id.
+    var onCopy: () -> Void = {}
 
     @State private var copied = false
 
@@ -160,6 +163,7 @@ struct CodeSheet: View {
 
     private func copy() {
         UIPasteboard.general.string = source
+        onCopy()
         copied = true
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_400_000_000)

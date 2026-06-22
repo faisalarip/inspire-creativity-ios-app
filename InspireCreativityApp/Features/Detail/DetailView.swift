@@ -103,7 +103,8 @@ struct DetailView: View {
                             case .needsSignIn: showAuthSheet = true
                             case .granted: break
                             }
-                        }
+                        },
+                        onCopy: { viewModel.logCodeCopied() }
                     )
                 }
             }

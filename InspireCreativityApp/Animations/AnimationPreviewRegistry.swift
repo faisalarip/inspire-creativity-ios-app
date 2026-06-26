@@ -92,6 +92,14 @@ enum AnimationPreviewRegistry {
             view(for: id)
         }
     }
+
+    /// Whether `interactiveView(for:)` returns a genuinely finger-driven
+    /// component (a bespoke animation) rather than a self-driving loop. The
+    /// Detail screen uses this to surface a one-time "tap & drag" hint only
+    /// where interaction actually does something.
+    static func isInteractive(_ id: String) -> Bool {
+        BespokeAnimations.interactiveBuilders[id] != nil
+    }
 }
 
 // MARK: - Power management

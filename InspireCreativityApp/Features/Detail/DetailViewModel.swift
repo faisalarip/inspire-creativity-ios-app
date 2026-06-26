@@ -30,6 +30,19 @@ final class DetailViewModel: ObservableObject {
 
     let item: AnimationItem
     @Published private(set) var isFavorited: Bool
+
+    /// SwiftUI source for the code sheet, resolved on demand. Aurora catalog
+    /// items ship with an empty `swiftCode` (generation is deferred off the
+    /// launch path), so regenerate it the first time it's needed from the
+    /// item's descriptor. Computed once, then cached.
+    lazy var code: String = {
+        if !item.swiftCode.isEmpty { return item.swiftCode }
+        if let descriptor = AuroraDescriptors.byId[item.id]
+            ?? AnimationPreviewRegistry.runtimeDescriptors[item.id] {
+            return AuroraCodeGen.swiftCode(for: descriptor)
+        }
+        return item.swiftCode
+    }()
     @Published private(set) var isOwned: Bool
     /// True when the Pro entitlement is active (StoreKit-derived), regardless
     /// of the signed-in state. Feeds `CodeAccess.evaluate`.

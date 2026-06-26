@@ -21,6 +21,21 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var visibleItems: [AnimationItem] = []
     @Published private(set) var categories: [(category: Category, count: Int)] = []
     @Published private(set) var totalCount: Int = 0
+    /// Number of items matching the current filter/search, regardless of how
+    /// many are currently paged in (drives the "N results" label).
+    @Published private(set) var resultCount: Int = 0
+
+    /// How many cards to reveal per page. The grid renders a *live* animated
+    /// preview per card, so showing the whole ~300-item catalog at once spins
+    /// up hundreds of simultaneous animations and stalls the first frames.
+    /// Paging caps the live previews to roughly what's on screen.
+    private let pageSize = 30
+    /// Full filtered + sorted result; `visibleItems` is a prefix of this.
+    private var filtered: [AnimationItem] = []
+    private var page = 1
+
+    /// True while more matching items remain to be paged in.
+    var canLoadMore: Bool { visibleItems.count < filtered.count }
 
     private let repository: AnimationRepositoryProtocol
     private let analytics: AnalyticsTracking
@@ -89,12 +104,28 @@ final class BrowseViewModel: ObservableObject {
             // Curated order: featured first, then the repository's default
             // ranking. (The ranking signal is internal and never shown as a
             // user-facing metric.)
-            visibleItems = items.sorted {
+            filtered = items.sorted {
                 ($0.isFeatured ? 1 : 0, $0.downloads) > ($1.isFeatured ? 1 : 0, $1.downloads)
             }
         case .nameAsc:
-            visibleItems = items.sorted { $0.name < $1.name }
+            filtered = items.sorted { $0.name < $1.name }
         }
+        // Any change to category/sort/search is a fresh result set — reset to
+        // the first page so the grid scrolls from the top with a capped count.
+        page = 1
+        resultCount = filtered.count
+        applyPage()
+    }
+
+    /// Reveals the next page of results. No-op once everything is shown.
+    func loadMore() {
+        guard canLoadMore else { return }
+        page += 1
+        applyPage()
+    }
+
+    private func applyPage() {
+        visibleItems = Array(filtered.prefix(page * pageSize))
     }
 
     func toggleSort() {

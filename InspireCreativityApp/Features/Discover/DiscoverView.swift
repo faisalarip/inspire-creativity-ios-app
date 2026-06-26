@@ -48,12 +48,15 @@ struct DiscoverView: View {
                     .padding(.horizontal, Theme.Spacing.xl)
                 }
 
-                AuroraPackPromoCard {
-                    container.analytics.log(.auroraPromoTap)
-                    router.push(.paywall(source: "promo"))
+                // Pro upsell — only for users who haven't unlocked Pro yet.
+                if !viewModel.isPro {
+                    AuroraPackPromoCard {
+                        container.analytics.log(.auroraPromoTap)
+                        router.push(.paywall(source: "promo"))
+                    }
+                    .padding(.horizontal, Theme.Spacing.xl)
+                    .padding(.top, Theme.Spacing.xxxl)
                 }
-                .padding(.horizontal, Theme.Spacing.xl)
-                .padding(.top, Theme.Spacing.xxxl)
 
                 SectionHeader("Aurora in the wild", trailing: "See all") {
                     router.selectedTab = .browse

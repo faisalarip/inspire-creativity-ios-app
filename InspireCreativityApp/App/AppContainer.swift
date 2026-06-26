@@ -116,7 +116,7 @@ final class AppContainer: ObservableObject {
     // MARK: - View-model factories
 
     func makeDiscoverViewModel() -> DiscoverViewModel {
-        DiscoverViewModel(repository: animationRepository)
+        DiscoverViewModel(repository: animationRepository, purchases: purchaseRepository)
     }
 
     func makeBrowseViewModel() -> BrowseViewModel {

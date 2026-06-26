@@ -333,10 +333,13 @@ enum AnimationCatalogSeed {
             rating: rating,
             price: keepPro ? 10 : nil,
             description: "\(d.theme) · \(d.use). Animated mesh background tuned with the \(d.palette.count)-color palette.",
-            // Palette-true: each aurora item's code is generated from its own
-            // descriptor so the copied snippet matches the preview the buyer saw.
-            // (Previously all aurora items shared one hardcoded `Code.auroraMesh`.)
-            swiftCode: AuroraCodeGen.swiftCode(for: d)
+            // Deferred: generating all ~77 aurora snippets here ran on the main
+            // thread during app launch (AppContainer.init touches this seed),
+            // freezing the first frames. The snippet is only ever read when the
+            // user opens an item's code sheet, so `DetailViewModel.code`
+            // regenerates it on demand from the descriptor (`AuroraDescriptors.byId`).
+            // Palette-true is preserved — same descriptor, same output.
+            swiftCode: ""
         )
     }
 

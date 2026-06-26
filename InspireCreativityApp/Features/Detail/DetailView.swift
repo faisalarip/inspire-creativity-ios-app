@@ -19,6 +19,14 @@ struct DetailView: View {
     /// True while a finger is on the interactive preview, so the enclosing
     /// ScrollView stops scrolling and the preview's own gesture wins.
     @State private var previewInteracting = false
+    /// Drives the one-time "tap & drag to interact" hint shown over the preview
+    /// for genuinely interactive (bespoke) animations.
+    @State private var showInteractHint = false
+
+    /// Whether this animation's Detail preview responds to touch.
+    private var previewIsInteractive: Bool {
+        AnimationPreviewRegistry.isInteractive(viewModel.item.id)
+    }
 
     /// Three-way gate (see `CodeAccess`): the Pro entitlement unlocks code in
     /// any auth state, Pro items route to the paywall, and free items ask
@@ -75,6 +83,35 @@ struct DetailView: View {
                                     .onChanged { _ in previewInteracting = true }
                                     .onEnded { _ in previewInteracting = false }
                             )
+                            // One-time hint for interactive previews. Fades out
+                            // on its own and the moment the user starts touching.
+                            .overlay(alignment: .bottom) {
+                                if showInteractHint {
+                                    InteractHintToast()
+                                        .padding(.bottom, 14)
+                                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                                        .allowsHitTesting(false)
+                                }
+                            }
+                            .onAppear {
+                                guard previewIsInteractive else { return }
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    showInteractHint = true
+                                }
+                                // Auto-dismiss after a few seconds if untouched.
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                                    withAnimation(.easeOut(duration: 0.3)) {
+                                        showInteractHint = false
+                                    }
+                                }
+                            }
+                            .onChange(of: previewInteracting) { _, touching in
+                                if touching && showInteractHint {
+                                    withAnimation(.easeOut(duration: 0.25)) {
+                                        showInteractHint = false
+                                    }
+                                }
+                            }
 
                             meta
                                 .padding(.bottom, sheetHeight + 20)
@@ -89,7 +126,7 @@ struct DetailView: View {
                         height: sheetHeight,
                         containerHeight: h,
                         fileName: filename + ".swift",
-                        source: viewModel.item.swiftCode,
+                        source: viewModel.code,
                         locked: !canViewCode,
                         lockTitle: access == .needsSignIn
                             ? "Sign in to view the full code"
@@ -145,7 +182,7 @@ struct DetailView: View {
     /// view it, so sharing can't bypass the sign-in gate or the Pro paywall.
     private var shareText: String {
         if canViewCode {
-            return "\(viewModel.item.name) — a SwiftUI animation from InspireCreativity\n\n\(viewModel.item.swiftCode)"
+            return "\(viewModel.item.name) — a SwiftUI animation from InspireCreativity\n\n\(viewModel.code)"
         } else {
             return "Check out \"\(viewModel.item.name)\" — a hand-crafted SwiftUI animation in InspireCreativity."
         }
@@ -258,5 +295,25 @@ struct DetailView: View {
             }
             .buttonStyle(.plain)
         }
+    }
+}
+
+/// Transient hint shown over an interactive Detail preview, letting the user
+/// know the animation responds to touch (not just a passive loop).
+private struct InteractHintToast: View {
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "hand.tap.fill")
+                .font(.system(size: 13, weight: .semibold))
+            Text("Tap & drag to interact")
+                .font(.system(size: 13, weight: .semibold))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.15), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.3), radius: 10, y: 4)
+        .accessibilityLabel("This preview is interactive. Tap and drag to play with the animation.")
     }
 }

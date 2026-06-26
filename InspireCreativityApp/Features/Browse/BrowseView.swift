@@ -77,7 +77,7 @@ struct BrowseView: View {
                 }
 
                 HStack {
-                    Text("\(viewModel.visibleItems.count) results")
+                    Text("\(viewModel.resultCount) results")
                         .font(Theme.Typo.mono(13))
                         .foregroundStyle(.white.opacity(0.55))
                     Spacer()
@@ -106,6 +106,29 @@ struct BrowseView: View {
                     }
                 }
                 .padding(.horizontal, Theme.Spacing.xl)
+
+                // Reveal the next page as the user nears the end of the grid.
+                // A visible button is kept as an explicit, accessible fallback.
+                if viewModel.canLoadMore {
+                    Button {
+                        viewModel.loadMore()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("Load more")
+                                .font(.system(size: 14, weight: .semibold))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .foregroundStyle(.white.opacity(0.85))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.white.opacity(0.06), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, Theme.Spacing.xxl)
+                    .padding(.top, 16)
+                    .onAppear { viewModel.loadMore() }
+                }
 
                 Spacer().frame(height: 120)
             }

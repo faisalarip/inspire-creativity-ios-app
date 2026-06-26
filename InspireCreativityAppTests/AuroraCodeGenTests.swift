@@ -2,9 +2,10 @@ import XCTest
 @testable import InspireCreativityApp
 
 /// Locks in the v1.1 "palette-true code generation" invariants for aurora
-/// catalog items. Previously every aurora item shipped the byte-identical
-/// `Code.auroraMesh` sample; these tests guarantee each item now carries a
-/// self-contained, palette-true Swift snippet generated from its descriptor.
+/// catalog items. Aurora seed items intentionally ship an EMPTY `swiftCode`
+/// (generation is deferred off the launch path); the code sheet regenerates it
+/// on demand from the item's descriptor via `DetailViewModel.code`. These tests
+/// assert the user-facing guarantees on that RESOLVED code, not the seed field.
 final class AuroraCodeGenTests: XCTestCase {
 
     // The aurora entries actually shipped in the seed catalog.
@@ -12,29 +13,59 @@ final class AuroraCodeGenTests: XCTestCase {
         AnimationCatalogSeed.items.filter { $0.id.hasPrefix("au-") }
     }
 
-    // MARK: - Seed invariants
+    /// Mirrors `DetailViewModel.code`: aurora items defer codegen, so resolve
+    /// the snippet on demand from the descriptor the same way the app does.
+    private func resolvedCode(for item: AnimationItem) -> String {
+        if !item.swiftCode.isEmpty { return item.swiftCode }
+        if let descriptor = AuroraDescriptors.byId[item.id]
+            ?? AnimationPreviewRegistry.runtimeDescriptors[item.id] {
+            return AuroraCodeGen.swiftCode(for: descriptor)
+        }
+        return item.swiftCode
+    }
 
-    /// (a) Every aurora seed item has non-empty swiftCode.
-    func testEveryAuroraItemHasNonEmptySwiftCode() {
+    // MARK: - Seed invariants (on-demand codegen contract)
+
+    /// Aurora seed items ship EMPTY swiftCode by design, so generation stays off
+    /// the launch path. Re-baking it here would reintroduce the launch freeze.
+    func testAuroraSeedItemsShipEmptySwiftCodeByDesign() {
         XCTAssertFalse(auroraItems.isEmpty, "expected aurora items in the seed catalog")
         for item in auroraItems {
-            XCTAssertFalse(
-                item.swiftCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                "\(item.id) has empty swiftCode"
+            XCTAssertTrue(
+                item.swiftCode.isEmpty,
+                "\(item.id) bakes swiftCode into the seed; aurora codegen must stay deferred to DetailViewModel.code"
             )
         }
     }
 
-    /// (b) No two aurora items share identical swiftCode.
-    func testNoTwoAuroraItemsShareIdenticalSwiftCode() {
-        var seen: [String: String] = [:]   // swiftCode -> first id that used it
+    /// (a) Every aurora item has a descriptor and resolves on demand to
+    /// non-empty code — i.e. the code sheet is never empty.
+    func testEveryAuroraItemResolvesToNonEmptyCode() {
+        XCTAssertFalse(auroraItems.isEmpty, "expected aurora items in the seed catalog")
         for item in auroraItems {
-            if let prior = seen[item.swiftCode] {
-                XCTFail("\(item.id) shares identical swiftCode with \(prior)")
-            }
-            seen[item.swiftCode] = item.id
+            XCTAssertNotNil(
+                AuroraDescriptors.byId[item.id],
+                "\(item.id) has no descriptor — its code sheet would be empty"
+            )
+            XCTAssertFalse(
+                resolvedCode(for: item).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                "\(item.id) resolves to empty code"
+            )
         }
-        XCTAssertEqual(seen.count, auroraItems.count, "duplicate swiftCode detected")
+    }
+
+    /// (b) No two aurora items resolve to identical code (palette-true
+    /// uniqueness, preserved through on-demand generation).
+    func testNoTwoAuroraItemsResolveToIdenticalCode() {
+        var seen: [String: String] = [:]   // resolved code -> first id that used it
+        for item in auroraItems {
+            let code = resolvedCode(for: item)
+            if let prior = seen[code] {
+                XCTFail("\(item.id) resolves to identical code as \(prior)")
+            }
+            seen[code] = item.id
+        }
+        XCTAssertEqual(seen.count, auroraItems.count, "duplicate resolved code detected")
     }
 
     /// (c) Each item's generated code contains every one of its palette hex strings.
@@ -50,22 +81,24 @@ final class AuroraCodeGenTests: XCTestCase {
         }
     }
 
-    /// The seed items' swiftCode is the generated code (not a hardcoded sample),
-    /// so the palette-hex guarantee holds for what actually ships, too.
-    func testSeedItemSwiftCodeMatchesGeneratorAndContainsPalette() {
+    /// What the user actually copies (the resolved on-demand code) is the
+    /// generator output and contains every palette hex, for every descriptor
+    /// that ships as a seed item.
+    func testResolvedSeedCodeMatchesGeneratorAndContainsPalette() {
         let byId = AnimationCatalogSeed.items.reduce(into: [String: AnimationItem]()) { $0[$1.id] = $1 }
         for descriptor in AuroraDescriptors.all {
             guard let item = byId[descriptor.id] else {
                 XCTFail("descriptor \(descriptor.id) has no seed item")
                 continue
             }
+            let resolved = resolvedCode(for: item)
             XCTAssertEqual(
-                item.swiftCode,
+                resolved,
                 AuroraCodeGen.swiftCode(for: descriptor),
-                "\(descriptor.id) seed swiftCode is not the generated code"
+                "\(descriptor.id) resolved code is not the generated code"
             )
             for hex in descriptor.palette {
-                XCTAssertTrue(item.swiftCode.contains(hex), "\(descriptor.id) shipped code missing \(hex)")
+                XCTAssertTrue(resolved.contains(hex), "\(descriptor.id) resolved code missing \(hex)")
             }
         }
     }

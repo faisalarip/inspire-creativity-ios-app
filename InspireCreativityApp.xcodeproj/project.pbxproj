@@ -1697,6 +1697,7 @@
 				CODE_SIGN_ENTITLEMENTS = InspireCreativityApp/InspireCreativityApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				VERSIONING_SYSTEM = "apple-generic";
 				DEVELOPMENT_ASSET_PATHS = "\"InspireCreativityApp/Preview Content\"";
 				DEVELOPMENT_TEAM = 5VHRN5SF2P;
 				ENABLE_PREVIEWS = YES;
@@ -1783,6 +1784,7 @@
 				CODE_SIGN_ENTITLEMENTS = InspireCreativityApp/InspireCreativityApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				VERSIONING_SYSTEM = "apple-generic";
 				DEVELOPMENT_ASSET_PATHS = "\"InspireCreativityApp/Preview Content\"";
 				DEVELOPMENT_TEAM = 5VHRN5SF2P;
 				ENABLE_PREVIEWS = YES;

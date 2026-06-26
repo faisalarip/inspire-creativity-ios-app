@@ -16,11 +16,12 @@ DerivedData/
 !default.perspectivev3
 
 # Swift Package Manager
+# NOTE: Package.resolved is intentionally COMMITTED — Xcode Cloud does not do
+# automatic package resolution; it resolves dependencies from the committed
+# Package.resolved (see docs/ci/xcode-cloud-setup.md). Do not ignore it.
 .swiftpm/
 .build/
 Packages/
-Package.pins
-Package.resolved
 
 # CocoaPods / Carthage (none here, but in case)
 Pods/
@@ -28,6 +29,10 @@ Carthage/Build/
 
 # macOS
 .DS_Store
+
+# Secrets — never commit App Store Connect API keys (see docs/ci/xcode-cloud-setup.md)
+*.p8
+AuthKey_*.p8
 
 # Misc
 *.swp

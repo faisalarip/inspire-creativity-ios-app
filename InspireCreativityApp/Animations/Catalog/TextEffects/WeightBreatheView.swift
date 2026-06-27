@@ -1,6 +1,10 @@
 // catalog-id: tx-weight-breathe
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// Variable Weight Breathe
 ///
@@ -82,14 +86,19 @@ struct WeightBreatheView: View {
 
     // MARK: - Weight bridge (the heart of the effect)
 
-    /// Continuous weight via `UIFont.Weight(rawValue:)`. The raw axis is a true
-    /// `CGFloat` (light ≈ -0.4, regular 0, semibold 0.3, bold 0.4, black 0.62),
-    /// and intermediate values interpolate — this is the continuous swell/slim
-    /// that discrete `.bold` steps cannot produce.
+    /// Continuous weight via `UIFont.Weight(rawValue:)` on iOS or `NSFont.Weight(rawValue:)`
+    /// on macOS. The raw axis is a true `CGFloat` (light ≈ -0.4, regular 0, semibold 0.3,
+    /// bold 0.4, black 0.62), and intermediate values interpolate — this is the continuous
+    /// swell/slim that discrete `.bold` steps cannot produce.
     private func weightFont(size: CGFloat, raw: CGFloat) -> Font {
         let clamped = min(max(raw, -0.5), 0.85)
-        let uiFont = UIFont.systemFont(ofSize: size, weight: UIFont.Weight(rawValue: clamped))
-        return Font(uiFont)
+        #if canImport(UIKit)
+        let resolved = UIFont.systemFont(ofSize: size, weight: UIFont.Weight(rawValue: clamped))
+        return Font(resolved)
+        #elseif canImport(AppKit)
+        let resolved = NSFont.systemFont(ofSize: size, weight: NSFont.Weight(rawValue: clamped))
+        return Font(resolved as CTFont)
+        #endif
     }
 
     private func weightRaw(index: Int, time: Double) -> CGFloat {

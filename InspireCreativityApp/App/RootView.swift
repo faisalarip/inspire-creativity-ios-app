@@ -99,13 +99,13 @@ struct RootView: View {
                     switch route {
                     case .detail(let id):
                         DetailView(viewModel: container.makeDetailViewModel(animationId: id))
-                            .toolbar(.hidden, for: .navigationBar)
+                            .hiddenNavigationBar()
                     case .paywall(let source):
                         PaywallView(viewModel: container.makePaywallViewModel(source: source))
-                            .toolbar(.hidden, for: .navigationBar)
+                            .hiddenNavigationBar()
                     case .settings:
                         SettingsView(store: container.store)
-                            .toolbar(.hidden, for: .navigationBar)
+                            .hiddenNavigationBar()
                     }
                 }
         }

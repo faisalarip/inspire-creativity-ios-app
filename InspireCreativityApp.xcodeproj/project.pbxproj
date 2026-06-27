@@ -307,6 +307,7 @@
 		FD1E880A9061F4FECDA99866 /* BespokeSeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B33E8615462F6DB3135BDE3 /* BespokeSeed.swift */; };
 		FE0474A255E41C3079BBFDD0 /* DragElasticGridWarpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22DCD11BEBD9C32C40E4393C /* DragElasticGridWarpView.swift */; };
 		FE10942CCC07CB93FAEBA9CA /* SplitFlapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7059F20C7075324D67766B7 /* SplitFlapView.swift */; };
+		6466C5148E53A502FC435B27 /* View+HiddenNavigationBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7380D958E95FF84597477188 /* View+HiddenNavigationBar.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -622,6 +623,7 @@
 		FF2853BF9E6E4E83BF8A2A17 /* MosaicFlipView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MosaicFlipView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/MosaicFlipView.swift; sourceTree = "<group>"; };
 		FF74B906AB950A0C7FB9EB51 /* InfinityFlowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InfinityFlowView.swift; path = InspireCreativityApp/Animations/Catalog/Loaders/InfinityFlowView.swift; sourceTree = "<group>"; };
 		FFBC66BFB68C5E62DA0E9364 /* CubeRollView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CubeRollView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/CubeRollView.swift; sourceTree = "<group>"; };
+		7380D958E95FF84597477188 /* View+HiddenNavigationBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "View+HiddenNavigationBar.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -826,6 +828,7 @@
 				473A583C5C6C2C1CF47544C4 /* DesignSystem */,
 				9A0F55A11546BBEB3F7E83B8 /* Features */,
 				1D77BB28479B5D10307A06A5 /* Models */,
+				E6350A019A1EBE01364350EA /* Platform */,
 				4AF1268F1D51590ADE771989 /* Preview Content */,
 				A0986D5160A18FEE81D8D7C3 /* Repositories */,
 				6DEE0CF483936F8E4216A987 /* Resources */,
@@ -837,6 +840,14 @@
 				B0214FEE4B27192379D3FFCB /* Analytics */,
 			);
 			path = InspireCreativityApp;
+			sourceTree = "<group>";
+		};
+		E6350A019A1EBE01364350EA /* Platform */ = {
+			isa = PBXGroup;
+			children = (
+				7380D958E95FF84597477188 /* View+HiddenNavigationBar.swift */,
+			);
+			path = Platform;
 			sourceTree = "<group>";
 		};
 		5BC3E19DBFB9563FA772905F /* Backgrounds */ = {
@@ -1368,6 +1379,7 @@
 				5C7AE8FD57EEA3DE1C0E20F4 /* AppRouter.swift in Sources */,
 				0E7AE278E26BC029387ABD01 /* FloatingTabBar.swift in Sources */,
 				2F3CCB17876C5D4828C866E4 /* RootView.swift in Sources */,
+				6466C5148E53A502FC435B27 /* View+HiddenNavigationBar.swift in Sources */,
 				35EED92AB66D8DFE724BC198 /* InspireCreativityApp.swift in Sources */,
 				38F63E3A3CCC6F1CFB330B02 /* AnimationCard.swift in Sources */,
 				54C3BE92DD3EF6AB8DC4817C /* Avatar.swift in Sources */,

@@ -555,7 +555,7 @@ struct SamplesView: View {
         }
         // Hide the (otherwise-empty) navigation bar so the ~44pt reservation
         // doesn't push the header way below the status bar.
-        .toolbar(.hidden, for: .navigationBar)
+        .hiddenNavigationBar()
     }
 
     private var header: some View {

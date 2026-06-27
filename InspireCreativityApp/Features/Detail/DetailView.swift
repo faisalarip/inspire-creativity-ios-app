@@ -168,7 +168,7 @@ struct DetailView: View {
             .padding(.horizontal, 12)
             .padding(.top, 4)
         }
-        .toolbar(.hidden, for: .navigationBar)
+        .hiddenNavigationBar()
         .sheet(isPresented: $showAuthSheet) {
             AuthGateView()
                 .environmentObject(authStore)

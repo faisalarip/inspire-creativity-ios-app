@@ -1729,7 +1729,6 @@
 				CODE_SIGN_ENTITLEMENTS = InspireCreativityApp/InspireCreativityApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				VERSIONING_SYSTEM = "apple-generic";
 				DEVELOPMENT_ASSET_PATHS = "\"InspireCreativityApp/Preview Content\"";
 				DEVELOPMENT_TEAM = 5VHRN5SF2P;
 				ENABLE_PREVIEWS = YES;
@@ -1744,12 +1743,13 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3;
+				MARKETING_VERSION = 1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.inspirecreativity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
 		};
@@ -1816,7 +1816,6 @@
 				CODE_SIGN_ENTITLEMENTS = InspireCreativityApp/InspireCreativityApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				VERSIONING_SYSTEM = "apple-generic";
 				DEVELOPMENT_ASSET_PATHS = "\"InspireCreativityApp/Preview Content\"";
 				DEVELOPMENT_TEAM = 5VHRN5SF2P;
 				ENABLE_PREVIEWS = YES;
@@ -1831,12 +1830,13 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3;
+				MARKETING_VERSION = 1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.inspirecreativity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Debug;
 		};

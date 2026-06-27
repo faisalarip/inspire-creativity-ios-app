@@ -42,7 +42,9 @@ struct SearchView: View {
                 .foregroundStyle(.white.opacity(0.5))
             TextField("Search animations, authors, categories…", text: $viewModel.query)
                 .focused($fieldFocused)
+#if os(iOS)
                 .textInputAutocapitalization(.never)
+#endif
                 .autocorrectionDisabled()
                 .font(.system(size: 14))
                 .foregroundStyle(.white)

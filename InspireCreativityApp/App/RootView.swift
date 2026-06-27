@@ -10,6 +10,34 @@ import SwiftUI
 import AuthenticationServices
 import CryptoKit
 
+// MARK: - macOS shims for UIKit text-field types used in AuthField call sites
+// On macOS these types don't exist; the shims let call sites compile unmodified
+// while the actual modifiers (.keyboardType, .textContentType, .textInputAutocapitalization)
+// are gated under #if os(iOS) in AuthField.body.
+#if !os(iOS)
+struct UITextContentType: RawRepresentable, Hashable {
+    let rawValue: String
+    init(rawValue: String) { self.rawValue = rawValue }
+    static let emailAddress  = UITextContentType(rawValue: "emailAddress")
+    static let password      = UITextContentType(rawValue: "password")
+    static let newPassword   = UITextContentType(rawValue: "newPassword")
+    static let givenName     = UITextContentType(rawValue: "givenName")
+    static let familyName    = UITextContentType(rawValue: "familyName")
+}
+enum UIKeyboardType: Int {
+    case `default`, emailAddress, asciiCapable, numbersAndPunctuation,
+         URL, numberPad, phonePad, namePhonePad, decimalPad, twitter, webSearch, asciiCapableNumberPad
+}
+struct TextInputAutocapitalization: Equatable {
+    static let never    = TextInputAutocapitalization(id: 0)
+    static let words    = TextInputAutocapitalization(id: 1)
+    static let sentences = TextInputAutocapitalization(id: 2)
+    static let characters = TextInputAutocapitalization(id: 3)
+    private let id: Int
+    private init(id: Int) { self.id = id }
+}
+#endif
+
 struct RootView: View {
 
     @EnvironmentObject private var container: AppContainer
@@ -607,9 +635,25 @@ private struct AuthField: View {
     let placeholder: String
     @Binding var text: String
     let isSecure: Bool
+#if os(iOS)
     let contentType: UITextContentType?
     let keyboard: UIKeyboardType
     var autocapitalization: TextInputAutocapitalization = .never
+#endif
+
+    init(placeholder: String, text: Binding<String>, isSecure: Bool,
+         contentType: UITextContentType? = nil,
+         keyboard: UIKeyboardType = .default,
+         autocapitalization: TextInputAutocapitalization = .never) {
+        self.placeholder = placeholder
+        self._text = text
+        self.isSecure = isSecure
+#if os(iOS)
+        self.contentType = contentType
+        self.keyboard = keyboard
+        self.autocapitalization = autocapitalization
+#endif
+    }
 
     var body: some View {
         Group {
@@ -617,12 +661,16 @@ private struct AuthField: View {
                 SecureField("", text: $text, prompt: prompt)
             } else {
                 TextField("", text: $text, prompt: prompt)
+#if os(iOS)
                     .keyboardType(keyboard)
                     .textInputAutocapitalization(autocapitalization)
+#endif
                     .autocorrectionDisabled(true)
             }
         }
+#if os(iOS)
         .textContentType(contentType)
+#endif
         .foregroundStyle(.white)
         .font(.system(size: 15))
         .padding(14)

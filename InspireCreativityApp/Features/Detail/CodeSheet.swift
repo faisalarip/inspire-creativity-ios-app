@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import UIKit
 
 struct CodeSheet: View {
 
@@ -162,7 +161,7 @@ struct CodeSheet: View {
     }
 
     private func copy() {
-        UIPasteboard.general.string = source
+        Clipboard.copy(source)
         onCopy()
         copied = true
         Task { @MainActor in

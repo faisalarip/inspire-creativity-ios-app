@@ -308,6 +308,7 @@
 		FE0474A255E41C3079BBFDD0 /* DragElasticGridWarpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22DCD11BEBD9C32C40E4393C /* DragElasticGridWarpView.swift */; };
 		FE10942CCC07CB93FAEBA9CA /* SplitFlapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7059F20C7075324D67766B7 /* SplitFlapView.swift */; };
 		6466C5148E53A502FC435B27 /* View+HiddenNavigationBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7380D958E95FF84597477188 /* View+HiddenNavigationBar.swift */; };
+		B2C3D4E5F6A7B8C9D0E1F2A3 /* PlatformClipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E1F2 /* PlatformClipboard.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -624,6 +625,7 @@
 		FF74B906AB950A0C7FB9EB51 /* InfinityFlowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InfinityFlowView.swift; path = InspireCreativityApp/Animations/Catalog/Loaders/InfinityFlowView.swift; sourceTree = "<group>"; };
 		FFBC66BFB68C5E62DA0E9364 /* CubeRollView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CubeRollView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/CubeRollView.swift; sourceTree = "<group>"; };
 		7380D958E95FF84597477188 /* View+HiddenNavigationBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "View+HiddenNavigationBar.swift"; sourceTree = "<group>"; };
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* PlatformClipboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformClipboard.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -846,6 +848,7 @@
 			isa = PBXGroup;
 			children = (
 				7380D958E95FF84597477188 /* View+HiddenNavigationBar.swift */,
+				A1B2C3D4E5F6A7B8C9D0E1F2 /* PlatformClipboard.swift */,
 			);
 			path = Platform;
 			sourceTree = "<group>";
@@ -1380,6 +1383,7 @@
 				0E7AE278E26BC029387ABD01 /* FloatingTabBar.swift in Sources */,
 				2F3CCB17876C5D4828C866E4 /* RootView.swift in Sources */,
 				6466C5148E53A502FC435B27 /* View+HiddenNavigationBar.swift in Sources */,
+				B2C3D4E5F6A7B8C9D0E1F2A3 /* PlatformClipboard.swift in Sources */,
 				35EED92AB66D8DFE724BC198 /* InspireCreativityApp.swift in Sources */,
 				38F63E3A3CCC6F1CFB330B02 /* AnimationCard.swift in Sources */,
 				54C3BE92DD3EF6AB8DC4817C /* Avatar.swift in Sources */,

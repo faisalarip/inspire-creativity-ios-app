@@ -64,7 +64,7 @@ struct MacAppView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(minWidth: 1120, maxWidth: .infinity, minHeight: 720, maxHeight: .infinity)
         .background(Color(hex: "#0a0a0c").ignoresSafeArea())
         .preferredColorScheme(.dark)
         .tint(Theme.Palette.accent)

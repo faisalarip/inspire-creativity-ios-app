@@ -47,6 +47,7 @@ struct InspireCreativityApp: App {
         }
         #if os(macOS)
         .windowStyle(.hiddenTitleBar)
+        .defaultSize(width: 1440, height: 900)
         #endif
     }
 }

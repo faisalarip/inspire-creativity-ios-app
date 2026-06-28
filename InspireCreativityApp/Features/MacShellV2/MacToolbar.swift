@@ -13,6 +13,47 @@
 #if os(macOS)
 import SwiftUI
 
+// MARK: - MacMark
+
+/// Three accent diamonds staggered diagonally up-right with increasing opacity,
+/// matching the `MacMark` brand component in the Claude Design reference.
+struct MacMark: View {
+    var size: CGFloat = 20
+
+    var body: some View {
+        let unit = size / 3.4
+        let cr = unit * 0.28
+        ZStack(alignment: .topLeading) {
+            // Diamond A — bottom-left, lowest opacity
+            RoundedRectangle(cornerRadius: cr, style: .continuous)
+                .fill(Theme.Palette.accent)
+                .frame(width: unit, height: unit)
+                .rotationEffect(.degrees(45))
+                .offset(x: 0, y: size * 0.32)
+                .opacity(0.45)
+
+            // Diamond B — middle
+            RoundedRectangle(cornerRadius: cr, style: .continuous)
+                .fill(Theme.Palette.accent)
+                .frame(width: unit, height: unit)
+                .rotationEffect(.degrees(45))
+                .offset(x: size * 0.28, y: size * 0.16)
+                .opacity(0.72)
+
+            // Diamond C — top-right, full opacity
+            RoundedRectangle(cornerRadius: cr, style: .continuous)
+                .fill(Theme.Palette.accent)
+                .frame(width: unit, height: unit)
+                .rotationEffect(.degrees(45))
+                .offset(x: size * 0.56, y: 0)
+                .opacity(1.0)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+// MARK: - MacToolbar
+
 struct MacToolbar: View {
 
     @Binding var query: String
@@ -57,8 +98,8 @@ struct MacToolbar: View {
 
     private var brand: some View {
         HStack(spacing: 8) {
-            // Small accent diamond mark.
-            mark
+            // Three-diamond cascade brand mark.
+            MacMark(size: 20)
             HStack(spacing: 0) {
                 Text("Inspire")
                     .foregroundStyle(.white)
@@ -68,25 +109,6 @@ struct MacToolbar: View {
             .font(.system(size: 15, weight: .heavy))
             .tracking(-0.3)
         }
-    }
-
-    private var mark: some View {
-        RoundedRectangle(cornerRadius: 4, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [Theme.Palette.accent, Color(hex: "#FB7185")],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .frame(width: 18, height: 18)
-            .rotationEffect(.degrees(45))
-            .overlay(
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.15), lineWidth: 0.5)
-                    .rotationEffect(.degrees(45))
-            )
-            .frame(width: 20, height: 20)
     }
 
     // MARK: - Search field

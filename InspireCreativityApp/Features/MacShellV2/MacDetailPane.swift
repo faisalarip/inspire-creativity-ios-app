@@ -30,36 +30,6 @@ struct MacDetailPane: View {
     @State private var showAuth = false
     @State private var showPaywall = false
 
-    // MARK: Init — takes the animation id so Task 6 can apply .id(animId)
-    // and force SwiftUI to recreate the pane on each selection change.
-
-    init(animId: String, onClose: @escaping () -> Void) {
-        // StateObject must be initialised in init, before body is evaluated.
-        // The container environment object is not yet available here — we
-        // create a temporary AppContainer solely to satisfy the initialiser;
-        // the real VM is built via makeDetailViewModel inside onAppear when
-        // the environment is live. However, SwiftUI's @StateObject lifecycle
-        // means the wrappedValue closure is called only once at creation —
-        // after the view is inserted into the hierarchy — so we cannot call
-        // container.makeDetailViewModel here without the environment.
-        //
-        // The standard workaround: store the id, inject it via a factory
-        // wrapper, and let the @StateObject hold a DetailViewModelBox that
-        // lazily creates the real vm. Here we use a simpler approach that is
-        // idiomatic for this codebase: pass the DetailViewModel directly (the
-        // caller constructs it) or use a ViewModel wrapper.
-        //
-        // Since the plan says "init from container.makeDetailViewModel(animationId:)"
-        // and "caller applies .id(animId)", we follow MacDetailView's pattern —
-        // the caller passes an already-built DetailViewModel. We diverge from
-        // the plan's @StateObject+init wording to match the codebase pattern.
-        _viewModel = StateObject(wrappedValue:
-            AppContainer().makeDetailViewModel(animationId: animId)
-        )
-        self.onClose = onClose
-    }
-
-    // Alternative convenience init used by Task 6 via factory:
     init(viewModel: DetailViewModel, onClose: @escaping () -> Void) {
         _viewModel = StateObject(wrappedValue: viewModel)
         self.onClose = onClose

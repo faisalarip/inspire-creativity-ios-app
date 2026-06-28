@@ -39,6 +39,7 @@ struct MacRootView: View {
                 ContentUnavailableView("Select an animation", systemImage: "sparkles")
             }
         }
+        .task { await container.store.syncOnFirstMacLaunchIfNeeded() }
         .preferredColorScheme(.dark)
         .onChange(of: search) { _, q in browse.searchText = q }
         .onChange(of: selection) { _, _ in selectedItemID = nil }

@@ -119,6 +119,19 @@ final class StoreManager: ObservableObject, PurchaseRepositoryProtocol {
         await refreshEntitlements()
     }
 
+    #if os(macOS)
+    /// On the FIRST macOS launch, force an AppStore.sync() so a Universal-Purchase
+    /// entitlement bought on another platform is recognized (refreshEntitlements()
+    /// alone can return empty on a cold Mac install). Runs once, guarded by a flag.
+    func syncOnFirstMacLaunchIfNeeded() async {
+        let key = "macDidInitialStoreSync"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        try? await AppStore.sync()
+        await refreshEntitlements()
+        UserDefaults.standard.set(true, forKey: key)
+    }
+    #endif
+
     // MARK: - Entitlements
 
     /// Recomputes `isPro` from the set of currently-valid entitlements. This is

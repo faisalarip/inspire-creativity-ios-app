@@ -73,6 +73,19 @@ enum AnalyticsConsent {
         return analyticsEnabled
     }
 
+    // MARK: - Toggle helper
+
+    /// The consent decision a Settings analytics-toggle change implies.
+    ///
+    /// - EEA/UK: toggling ON maps to `.granted`; toggling OFF maps to `.denied`.
+    ///   Returning a non-nil value tells the caller to persist and apply the
+    ///   new decision (GDPR Art. 7(3) withdrawal must be as easy as granting).
+    /// - Non-EEA: returns `nil` — the toggle drives `analyticsEnabled` only;
+    ///   no consent decision is recorded.
+    static func decisionForToggle(regionCode: String?, on: Bool) -> Decision? {
+        isEEAOrUK(regionCode: regionCode) ? (on ? .granted : .denied) : nil
+    }
+
     // MARK: - Persistence
 
     /// Default UserDefaults key for the stored decision.

@@ -166,9 +166,13 @@ struct SettingsView: View {
             .toggleStyle(.switch)
             .tint(Theme.Palette.accent)
             .onChange(of: analyticsEnabled) { _, on in
-                // Route through the consent gate so EEA/UK users who have
-                // denied (or not yet decided) are never silently re-enabled.
                 let region = Locale.current.region?.identifier
+                // For EEA/UK users the toggle maps to an explicit consent
+                // grant/withdraw (GDPR Art. 7(3)). Persist the new decision
+                // first, then re-read it so collectionAllowed sees the update.
+                if let newDecision = AnalyticsConsent.decisionForToggle(regionCode: region, on: on) {
+                    AnalyticsConsent.storeDecision(newDecision)
+                }
                 let decision = AnalyticsConsent.storedDecision()
                 container.analytics.setCollectionEnabled(
                     AnalyticsConsent.collectionAllowed(

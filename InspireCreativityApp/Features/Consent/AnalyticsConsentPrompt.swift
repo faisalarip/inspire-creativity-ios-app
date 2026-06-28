@@ -51,7 +51,7 @@ struct AnalyticsConsentPrompt: View {
                 Button {
                     onDecision(.denied)
                 } label: {
-                    Text("Not now")
+                    Text("Don't allow")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(.white.opacity(0.55))
                         .frame(maxWidth: .infinity)

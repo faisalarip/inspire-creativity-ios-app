@@ -168,6 +168,52 @@ final class AnalyticsConsentTests: XCTestCase {
             regionCode: nil, decision: nil, analyticsEnabled: false))
     }
 
+    // MARK: - decisionForToggle
+
+    func test_decisionForToggle_EEA_on_returnsGranted() {
+        XCTAssertEqual(AnalyticsConsent.decisionForToggle(regionCode: "DE", on: true), .granted)
+    }
+
+    func test_decisionForToggle_EEA_off_returnsDenied() {
+        XCTAssertEqual(AnalyticsConsent.decisionForToggle(regionCode: "DE", on: false), .denied)
+    }
+
+    func test_decisionForToggle_GB_on_returnsGranted() {
+        XCTAssertEqual(AnalyticsConsent.decisionForToggle(regionCode: "GB", on: true), .granted)
+    }
+
+    func test_decisionForToggle_GB_off_returnsDenied() {
+        XCTAssertEqual(AnalyticsConsent.decisionForToggle(regionCode: "GB", on: false), .denied)
+    }
+
+    func test_decisionForToggle_nonEEA_US_returnsNil() {
+        XCTAssertNil(AnalyticsConsent.decisionForToggle(regionCode: "US", on: true))
+        XCTAssertNil(AnalyticsConsent.decisionForToggle(regionCode: "US", on: false))
+    }
+
+    func test_decisionForToggle_nilRegion_returnsNil() {
+        XCTAssertNil(AnalyticsConsent.decisionForToggle(regionCode: nil, on: true))
+        XCTAssertNil(AnalyticsConsent.decisionForToggle(regionCode: nil, on: false))
+    }
+
+    // MARK: - EEA withdrawal end-to-end
+
+    /// After an EEA user withdraws consent via the toggle (decision stored as .denied),
+    /// collectionAllowed must return false even when analyticsEnabled is true.
+    func test_eeaWithdrawal_collectionNotAllowed_whenDecisionDenied_andAnalyticsEnabled() {
+        // Simulate: user previously granted, now withdraws by toggling OFF.
+        // decisionForToggle returns .denied for EEA; caller stores it.
+        let region = "FR"
+        let withdrawDecision = AnalyticsConsent.decisionForToggle(regionCode: region, on: false)
+        XCTAssertEqual(withdrawDecision, .denied, "Toggling OFF for EEA must map to .denied")
+
+        // After storing .denied, collectionAllowed must be false regardless of analyticsEnabled.
+        XCTAssertFalse(
+            AnalyticsConsent.collectionAllowed(regionCode: region, decision: .denied, analyticsEnabled: true),
+            "Collection must stop after EEA withdrawal even with analyticsEnabled=true"
+        )
+    }
+
     // MARK: - Decision Codable / raw value
 
     func test_decision_rawValues() {

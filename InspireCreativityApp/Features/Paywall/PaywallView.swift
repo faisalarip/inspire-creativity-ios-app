@@ -7,7 +7,7 @@ import SwiftUI
 
 struct PaywallView: View {
 
-    @EnvironmentObject private var router: AppRouter
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var container: AppContainer
     @StateObject private var viewModel: PaywallViewModel
 
@@ -28,7 +28,7 @@ struct PaywallView: View {
         }
         .background(Theme.Palette.background.ignoresSafeArea())
         .onChange(of: viewModel.didComplete) { _, done in
-            if done { router.pop() }
+            if done { dismiss() }
         }
         .onAppear {
             container.analytics.log(.paywallViewed(source: viewModel.source))
@@ -74,7 +74,7 @@ struct PaywallView: View {
             .ignoresSafeArea(edges: .top)
 
             HStack {
-                IconButton("xmark") { router.pop() }
+                IconButton("xmark") { dismiss() }
                 Spacer()
                 Button {
                     Task { await viewModel.restore() }

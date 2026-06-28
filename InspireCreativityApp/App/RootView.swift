@@ -136,7 +136,8 @@ struct RootView: View {
                         PaywallView(viewModel: container.makePaywallViewModel(source: source))
                             .hiddenNavigationBar()
                     case .settings:
-                        SettingsView(store: container.store)
+                        SettingsView(store: container.store,
+                                     onGoPro: { router.push(.paywall(source: "settings")) })
                             .hiddenNavigationBar()
                     }
                 }

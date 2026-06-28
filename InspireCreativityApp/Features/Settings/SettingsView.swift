@@ -10,10 +10,11 @@ import SwiftUI
 
 struct SettingsView: View {
 
-    @EnvironmentObject private var router: AppRouter
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var authStore: AuthStore
     @EnvironmentObject private var container: AppContainer
     @ObservedObject var store: StoreManager
+    let onGoPro: () -> Void
 
     @AppStorage("analyticsEnabled") private var analyticsEnabled = true
     @State private var showAuthSheet = false
@@ -50,7 +51,7 @@ struct SettingsView: View {
             }
 
             HStack {
-                IconButton("chevron.left") { router.pop() }
+                IconButton("chevron.left") { dismiss() }
                 Spacer()
             }
             .padding(.horizontal, 12)
@@ -107,7 +108,7 @@ struct SettingsView: View {
                 }
                 Spacer()
                 if !store.isPro {
-                    Button { router.push(.paywall(source: "settings")) } label: {
+                    Button { onGoPro() } label: {
                         Text("Go Pro")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(.white)

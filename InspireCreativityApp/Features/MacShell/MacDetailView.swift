@@ -11,9 +11,12 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct MacDetailView: View {
+    @EnvironmentObject private var container: AppContainer
     @EnvironmentObject private var authStore: AuthStore
     @StateObject private var viewModel: DetailViewModel
     @State private var showExporter = false
+    @State private var showAuth = false
+    @State private var showPaywall = false
 
     init(viewModel: DetailViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -80,9 +83,25 @@ struct MacDetailView: View {
             ) { _ in }
         }
         .navigationTitle(viewModel.item.name)
+        .sheet(isPresented: $showAuth) {
+            AuthGateView()
+                .environmentObject(container)
+                .environmentObject(authStore)
+                .environmentObject(container.store)
+                .frame(minWidth: 480, minHeight: 620)
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView(viewModel: container.makePaywallViewModel(source: "detail"))
+                .environmentObject(container)
+                .environmentObject(container.store)
+                .frame(minWidth: 520, minHeight: 640)
+        }
+        .onChange(of: authStore.isAuthenticated) { _, isAuth in
+            if isAuth { showAuth = false }
+        }
     }
 
-    // MARK: - Locked panel (inline; wiring to paywall/auth arrives in Task 10)
+    // MARK: - Locked panel — tappable CTA that presents auth or paywall sheet
 
     @ViewBuilder
     private var lockedPanel: some View {
@@ -90,9 +109,17 @@ struct MacDetailView: View {
             Image(systemName: "lock.fill")
                 .font(.system(size: 40))
                 .foregroundStyle(.secondary)
-            Text(access == .needsPro ? "Unlock with Pro" : "Sign in to view the code")
-                .font(.headline)
-                .foregroundStyle(.primary)
+            Button {
+                if access == .needsSignIn {
+                    showAuth = true
+                } else {
+                    showPaywall = true
+                }
+            } label: {
+                Text(access == .needsPro ? "Unlock with Pro" : "Sign in to view the code")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

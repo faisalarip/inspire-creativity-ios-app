@@ -57,6 +57,34 @@ the scripts from the pushed git tree, not your local working copy.
 > `InspireCreativityApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved`.
 > It is no longer git-ignored; make sure it is tracked and pushed.
 
+## 1b. macOS Archive action (Universal Purchase)
+
+The same app target is multiplatform (`#if os(macOS)`), so macOS ships as a
+**second platform on the same app record** (Universal Purchase) — NOT a separate
+app, App ID, or scheme. To make Xcode Cloud produce the Mac build automatically,
+add a macOS **Archive** action to the **same `Release` workflow** (App Store
+Connect ▸ Xcode Cloud ▸ workflow ▸ Edit ▸ add Action):
+
+- **Archive** — scheme `InspireCreativityApp`, **Platform: macOS**, Deployment
+  Preparation: *TestFlight (and App Store)*. This runs alongside the iOS Archive;
+  one workflow run then yields both an iOS and a macOS build.
+- **Post-Action:** TestFlight (the macOS build appears under the app's macOS
+  TestFlight; Universal Purchase shares the single IAP).
+- **Signing:** Managed by Xcode Cloud — it provisions the macOS Distribution
+  cert/profile automatically against the existing App ID. (Manual signing would
+  need a Mac App Distribution cert + Mac App Store profile for `com.inspirecreativity`.)
+
+**No `ci_scripts/` changes were needed for macOS** (verified): `ci_post_clone`
+and `ci_post_xcodebuild` are platform-agnostic markers, and `ci_pre_xcodebuild`'s
+`agvtool new-version -all "$CI_BUILD_NUMBER"` stamps the shared target identically
+for either platform. The macOS target also builds clean in **Release/WMO** (the
+config Archive uses) — checked with
+`-Xfrontend -warn-long-expression-type-checking=300`, no type-check timeouts.
+
+> The macOS platform add is **permanent once App Review approves it** — dry-run
+> the add-platform flow on a non-production record first if unsure
+> (see `docs/macos-submission-checklist.md`).
+
 ## 2. Generate an App Store Connect API key (for the status poller)
 
 App Store Connect ▸ **Users and Access** ▸ **Integrations** ▸ **App Store

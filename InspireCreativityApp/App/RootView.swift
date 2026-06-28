@@ -985,7 +985,12 @@ private struct SocialAuthSection: View {
                 handleAppleCompletion(result)
             }
             .signInWithAppleButtonStyle(.black)
-            .frame(height: 50)
+            #if os(macOS)
+            .controlSize(.large)
+            .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44)
+            #else
+            .frame(maxWidth: .infinity, minHeight: 50, maxHeight: 50)
+            #endif
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
@@ -1013,7 +1018,11 @@ private struct SocialAuthSection: View {
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
+                #if os(macOS)
+                .frame(height: 44)
+                #else
                 .frame(height: 50)
+                #endif
                 .background(
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(Color.white.opacity(0.07))

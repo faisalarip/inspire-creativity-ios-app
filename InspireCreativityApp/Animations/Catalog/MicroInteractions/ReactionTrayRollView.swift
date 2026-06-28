@@ -288,39 +288,37 @@ private struct ReactionTrayRollView_TrayRow: View {
     }
 
     private var trayPill: some View {
-        let padX = metrics.itemSize * 0.62
-        let pillW = metrics.rowWidth + metrics.itemSize + padX
-        let pillH = metrics.itemSize * 1.45
-        let lift = metrics.itemSize * 0.18
+        // Sub-expressions hoisted into typed lets so the modifier chain
+        // type-checks within the optimizer's solver budget (Release archive).
+        let padX: CGFloat = metrics.itemSize * 0.62
+        let pillW: CGFloat = metrics.rowWidth + metrics.itemSize + padX
+        let pillH: CGFloat = metrics.itemSize * 1.45
+        let lift: CGFloat = metrics.itemSize * 0.18
+        let shadowOpacity: Double = 0.35 * openAmount
+        let scaleX: CGFloat = 0.6 + 0.4 * CGFloat(openAmount)
+        let scaleY: CGFloat = 0.5 + 0.5 * CGFloat(openAmount)
+        let posX: CGFloat = metrics.size.width / 2
+        let posY: CGFloat = metrics.rowBaselineY - metrics.itemSize * 0.30 - lift * CGFloat(openAmount)
+        let fill = LinearGradient(
+            colors: [
+                Color(red: 0.22, green: 0.20, blue: 0.30).opacity(0.96),
+                Color(red: 0.15, green: 0.13, blue: 0.21).opacity(0.96)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        let border = Capsule().stroke(
+            Color(red: 0.46, green: 0.44, blue: 0.60).opacity(0.45),
+            lineWidth: 1
+        )
         return Capsule()
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.22, green: 0.20, blue: 0.30).opacity(0.96),
-                        Color(red: 0.15, green: 0.13, blue: 0.21).opacity(0.96)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .overlay(
-                Capsule().stroke(
-                    Color(red: 0.46, green: 0.44, blue: 0.60).opacity(0.45),
-                    lineWidth: 1
-                )
-            )
-            .shadow(color: Color.black.opacity(0.35 * openAmount), radius: 10, y: 5)
+            .fill(fill)
+            .overlay(border)
+            .shadow(color: Color.black.opacity(shadowOpacity), radius: 10, y: 5)
             .frame(width: pillW, height: pillH)
-            .scaleEffect(
-                x: 0.6 + 0.4 * CGFloat(openAmount),
-                y: 0.5 + 0.5 * CGFloat(openAmount),
-                anchor: .bottom
-            )
+            .scaleEffect(x: scaleX, y: scaleY, anchor: .bottom)
             .opacity(openAmount)
-            .position(
-                x: metrics.size.width / 2,
-                y: metrics.rowBaselineY - metrics.itemSize * 0.30 - lift * CGFloat(openAmount)
-            )
+            .position(x: posX, y: posY)
     }
 
     private func emojiItem(_ index: Int) -> some View {

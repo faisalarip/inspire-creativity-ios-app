@@ -158,7 +158,10 @@ private struct SplitFlapView_FlapTile: View {
 
     // Deterministic pseudo-random glyph from a seed (stable across frames).
     private func glyph(step: Int) -> Character {
-        var h = UInt64(bitPattern: Int64(cycleIndex &* 92821 &+ tileIndex &* 6151 &+ step &* 2654435761))
+        // Hoisted into a typed let so the wrapping-integer terms + the large
+        // literal type-check cheaply (the inline form was a slow expression).
+        let mixed: Int = cycleIndex &* 92821 &+ tileIndex &* 6151 &+ step &* 2654435761
+        var h = UInt64(bitPattern: Int64(mixed))
         h ^= h >> 33
         h = h &* 0xff51afd7ed558ccd
         h ^= h >> 33

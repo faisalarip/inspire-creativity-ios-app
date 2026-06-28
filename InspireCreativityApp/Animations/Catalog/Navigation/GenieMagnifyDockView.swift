@@ -255,26 +255,28 @@ private struct GenieMagnifyDockView_DockRow: View {
 
     private var tray: some View {
         // A frosted dock tray pinned to the floor.
+        // Sub-expressions hoisted into typed lets so the modifier chain
+        // type-checks well within the optimizer's solver budget (Release archive).
         let trayHeight: CGFloat = metrics.iconSize * 1.5
-        let trayWidth: CGFloat = metrics.rowWidth + metrics.iconSize * 0.9
-        return RoundedRectangle(cornerRadius: trayHeight * 0.32, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.16, green: 0.18, blue: 0.22).opacity(0.92),
-                        Color(red: 0.10, green: 0.11, blue: 0.14).opacity(0.92)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: trayHeight * 0.32, style: .continuous)
-                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
-            )
-            .frame(width: max(trayWidth, 0), height: trayHeight)
-            .position(x: metrics.size.width / 2,
-                      y: metrics.floorY - trayHeight / 2 + metrics.iconSize * 0.18)
+        let trayWidth: CGFloat = max(metrics.rowWidth + metrics.iconSize * 0.9, 0)
+        let corner: CGFloat = trayHeight * 0.32
+        let posX: CGFloat = metrics.size.width / 2
+        let posY: CGFloat = metrics.floorY - trayHeight / 2 + metrics.iconSize * 0.18
+        let fill = LinearGradient(
+            colors: [
+                Color(red: 0.16, green: 0.18, blue: 0.22).opacity(0.92),
+                Color(red: 0.10, green: 0.11, blue: 0.14).opacity(0.92)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        let border = RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .stroke(Color.white.opacity(0.10), lineWidth: 1)
+        return RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .fill(fill)
+            .overlay(border)
+            .frame(width: trayWidth, height: trayHeight)
+            .position(x: posX, y: posY)
             .shadow(color: Color.black.opacity(0.35), radius: 10, y: 6)
     }
 

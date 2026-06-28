@@ -252,23 +252,26 @@ struct ParametricAuroraPreview: View {
         GeometryReader { geo in
             ZStack {
                 ForEach(0..<colors.count, id: \.self) { i in
-                    let phase = t + Double(i) * 0.25
+                    let phase: Double = t + Double(i) * 0.25
                     let c = colors[i % colors.count]
+                    // Angles typed as Double so `.pi` resolves with no CGFloat
+                    // conversion search; then convert once to CGFloat.
+                    let angleX: Double = phase * .pi * 2 + Double(i)
+                    let angleY: Double = phase * .pi * 2 * 0.85 + Double(i) * 1.3
+                    let d: CGFloat = geo.size.width * scale
+                    let endR: CGFloat = geo.size.width * 0.55
+                    let ox: CGFloat = CGFloat(cos(angleX)) * geo.size.width * 0.25
+                    let oy: CGFloat = CGFloat(sin(angleY)) * geo.size.height * 0.3
+                    let grad = RadialGradient(
+                        colors: [c.opacity(0.85), c.opacity(0)],
+                        center: .center,
+                        startRadius: 2,
+                        endRadius: endR
+                    )
                     Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [c.opacity(0.85), c.opacity(0)],
-                                center: .center,
-                                startRadius: 2,
-                                endRadius: geo.size.width * 0.55
-                            )
-                        )
-                        .frame(width: geo.size.width * scale,
-                               height: geo.size.width * scale)
-                        .offset(
-                            x: cos(phase * .pi * 2 + Double(i)) * geo.size.width * 0.25,
-                            y: sin(phase * .pi * 2 * 0.85 + Double(i) * 1.3) * geo.size.height * 0.3
-                        )
+                        .fill(grad)
+                        .frame(width: d, height: d)
+                        .offset(x: ox, y: oy)
                         .blendMode(.screen)
                 }
             }
@@ -322,21 +325,25 @@ struct ParametricAuroraPreview: View {
             ZStack {
                 ForEach(0..<colors.count, id: \.self) { i in
                     let c = colors[i % colors.count]
-                    let phase = t + Double(i) * 0.18
+                    let phase: Double = t + Double(i) * 0.18
+                    // Angles typed as Double so `.pi` resolves with no CGFloat
+                    // conversion search; then convert once to CGFloat.
+                    let angleX: Double = phase * .pi * 2
+                    let angleY: Double = phase * .pi * 2 * 0.7
+                    let w: CGFloat = geo.size.width * 1.5
+                    let h: CGFloat = geo.size.height * 0.18
+                    let rowOffset: CGFloat = (CGFloat(i) - CGFloat(colors.count - 1) / 2) * geo.size.height * 0.22
+                    let ox: CGFloat = CGFloat(cos(angleX)) * 30
+                    let oy: CGFloat = rowOffset + CGFloat(sin(angleY)) * 8
+                    let grad = LinearGradient(
+                        colors: [c.opacity(0), c.opacity(0.85), c.opacity(0)],
+                        startPoint: .leading, endPoint: .trailing
+                    )
                     Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [c.opacity(0), c.opacity(0.85), c.opacity(0)],
-                                startPoint: .leading, endPoint: .trailing
-                            )
-                        )
-                        .frame(width: geo.size.width * 1.5, height: geo.size.height * 0.18)
+                        .fill(grad)
+                        .frame(width: w, height: h)
                         .rotationEffect(.degrees(-14))
-                        .offset(
-                            x: cos(phase * .pi * 2) * 30,
-                            y: (Double(i) - Double(colors.count - 1) / 2) * geo.size.height * 0.22
-                                + sin(phase * .pi * 2 * 0.7) * 8
-                        )
+                        .offset(x: ox, y: oy)
                         .blur(radius: 18)
                         .blendMode(.screen)
                 }

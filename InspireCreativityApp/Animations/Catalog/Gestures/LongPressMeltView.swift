@@ -239,13 +239,20 @@ struct LongPressMeltView: View {
     private func label(metrics: Metrics, level: CGFloat) -> some View {
         let r = metrics.bodyRect
         // Label drips with the body and fades as goo takes over.
+        // Arithmetic hoisted into typed lets so the chain type-checks within
+        // the optimizer's solver budget (Release archive timed out otherwise).
+        let kern: CGFloat = metrics.fontSize * 0.08
+        let scaleY: CGFloat = 1 + level * 0.18
+        let posX: CGFloat = r.midX
+        let posY: CGFloat = r.midY + metrics.maxSag * level * 0.35
+        let labelOpacity: Double = 0.95 - Double(level) * 0.7
         return Text("HOLD")
             .font(.system(size: metrics.fontSize, weight: .heavy, design: .rounded))
-            .kerning(metrics.fontSize * 0.08)
+            .kerning(kern)
             .foregroundStyle(Color.white.opacity(0.92))
-            .scaleEffect(y: 1 + level * 0.18, anchor: .top)
-            .position(x: r.midX, y: r.midY + metrics.maxSag * level * 0.35)
-            .opacity(0.95 - Double(level) * 0.7)
+            .scaleEffect(y: scaleY, anchor: .top)
+            .position(x: posX, y: posY)
+            .opacity(labelOpacity)
             .allowsHitTesting(false)
     }
 

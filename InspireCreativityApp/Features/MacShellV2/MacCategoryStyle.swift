@@ -41,7 +41,7 @@ enum MacCategoryStyle {
         case .loaders:           return "circle.dotted"
         case .buttons:           return "capsule"
         case .microInteractions: return "sparkle"
-        case .transitions:       return "arrow.left.arrow.right"
+        case .transitions:       return "rectangle.righthalf.inset.filled.arrow.right"
         case .navigation:        return "square.grid.2x2"
         case .gestures:          return "hand.draw"
         case .onboarding:        return "person.crop.circle"

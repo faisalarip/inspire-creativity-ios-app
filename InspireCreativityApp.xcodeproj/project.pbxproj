@@ -141,7 +141,7 @@
 		69E238A391B29432CD3F91DD /* MosaicFlipView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF2853BF9E6E4E83BF8A2A17 /* MosaicFlipView.swift */; };
 		6AE197E8B9FCF5F3DDAE3066 /* OdometerBlurView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F0C0CD12FCFF74DCCCAC96D /* OdometerBlurView.swift */; };
 		6BA99AAE0D6353B52BBA3560 /* AnalyticsEventTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F616686062A43B60CDB2E3A /* AnalyticsEventTests.swift */; };
-		972D7EF3315C43849A5065BA /* MacSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7D07E1D7F214367B1B74950 /* MacSidebar.swift */; };
+		972D7EF3315C43849A5065BA /* MacSidebarSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7D07E1D7F214367B1B74950 /* MacSidebarSection.swift */; };
 		AA738E6F81E241D9A26C51E3 /* MacRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 327942F2E4B74EAF97689D1F /* MacRootView.swift */; };
 		E2ABD6DADF194A70BA9C6053 /* MacCatalogList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29C3067889234BC2B3627CEA /* MacCatalogList.swift */; };
 		9897066023AC47D09035F385 /* MacDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAD7FAD0F594814A9054333 /* MacDetailView.swift */; };
@@ -149,6 +149,7 @@
 		D98ED524C535470785053C77 /* MacAnimCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35416AE14FA740A5A6059DE7 /* MacAnimCard.swift */; };
 		D9316BA0D28A45EC89D9A016 /* MacCategoryGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37B17C1A4FB14000B84557F8 /* MacCategoryGridView.swift */; };
 		C2EF11B0D827470BA0110533 /* MacSearchResults.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97D8E389BB9467EB58E9A27 /* MacSearchResults.swift */; };
+		5255F2F403254E219DCCE626 /* MacSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22F5FCF1BE834C5E9DA1541D /* MacSidebar.swift */; };
 		9183F068DA52458584660860 /* MacSidebarSectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545E784C49A94C9F8F84CDC8 /* MacSidebarSectionTests.swift */; };
 		6C2F7BDB68B188632AD59293 /* SocialAuthSessionMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6231D97F09CFF8978A45474D /* SocialAuthSessionMappingTests.swift */; };
 		6C4C5E175E1E8192CDF909B4 /* PinchOrigamiCraneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5508EADC3186622FC645AED /* PinchOrigamiCraneView.swift */; };
@@ -459,7 +460,7 @@
 		03E80AE579424D14BE373728 /* AnalyticsConsentTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AnalyticsConsentTests.swift; sourceTree = "<group>"; };
 		EB0A42C5FF3B41C1839B645D /* AnalyticsConsent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsConsent.swift; sourceTree = "<group>"; };
 		C590609122B848F894D7CF3D /* AnalyticsConsentPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsConsentPrompt.swift; sourceTree = "<group>"; };
-		C7D07E1D7F214367B1B74950 /* MacSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSidebar.swift; sourceTree = "<group>"; };
+		C7D07E1D7F214367B1B74950 /* MacSidebarSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSidebarSection.swift; sourceTree = "<group>"; };
 		327942F2E4B74EAF97689D1F /* MacRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacRootView.swift; sourceTree = "<group>"; };
 		29C3067889234BC2B3627CEA /* MacCatalogList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCatalogList.swift; sourceTree = "<group>"; };
 		CBAD7FAD0F594814A9054333 /* MacDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacDetailView.swift; sourceTree = "<group>"; };
@@ -467,6 +468,7 @@
 		35416AE14FA740A5A6059DE7 /* MacAnimCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacAnimCard.swift; sourceTree = "<group>"; };
 		37B17C1A4FB14000B84557F8 /* MacCategoryGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCategoryGridView.swift; sourceTree = "<group>"; };
 		E97D8E389BB9467EB58E9A27 /* MacSearchResults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSearchResults.swift; sourceTree = "<group>"; };
+		22F5FCF1BE834C5E9DA1541D /* MacSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSidebar.swift; sourceTree = "<group>"; };
 		60427FCF3F39BB5B051FFD71 /* OdometerDotsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OdometerDotsView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/OdometerDotsView.swift; sourceTree = "<group>"; };
 		61FBE8A746A8D24927A79EA6 /* MagneticPoetryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticPoetryView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/MagneticPoetryView.swift; sourceTree = "<group>"; };
 		621B6409DE398398BC15BF22 /* IrisShutterView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = IrisShutterView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/IrisShutterView.swift; sourceTree = "<group>"; };
@@ -1132,7 +1134,7 @@
 		976EEA7A982F4B7F9F5ADCAC /* MacShell */ = {
 			isa = PBXGroup;
 			children = (
-				C7D07E1D7F214367B1B74950 /* MacSidebar.swift */,
+				C7D07E1D7F214367B1B74950 /* MacSidebarSection.swift */,
 				327942F2E4B74EAF97689D1F /* MacRootView.swift */,
 				29C3067889234BC2B3627CEA /* MacCatalogList.swift */,
 				CBAD7FAD0F594814A9054333 /* MacDetailView.swift */,
@@ -1147,6 +1149,7 @@
 				35416AE14FA740A5A6059DE7 /* MacAnimCard.swift */,
 				37B17C1A4FB14000B84557F8 /* MacCategoryGridView.swift */,
 				E97D8E389BB9467EB58E9A27 /* MacSearchResults.swift */,
+				22F5FCF1BE834C5E9DA1541D /* MacSidebar.swift */,
 			);
 			path = MacShellV2;
 			sourceTree = "<group>";
@@ -1494,7 +1497,7 @@
 				C36942BFEBF6B277FC6D887A /* SearchViewModel.swift in Sources */,
 				4B786DD6D4D428A25C0BF27B /* AnimationItem.swift in Sources */,
 				6990A989E3A20FABDC45F8D8 /* Category.swift in Sources */,
-				972D7EF3315C43849A5065BA /* MacSidebar.swift in Sources */,
+				972D7EF3315C43849A5065BA /* MacSidebarSection.swift in Sources */,
 				AA738E6F81E241D9A26C51E3 /* MacRootView.swift in Sources */,
 				E2ABD6DADF194A70BA9C6053 /* MacCatalogList.swift in Sources */,
 				9897066023AC47D09035F385 /* MacDetailView.swift in Sources */,
@@ -1502,6 +1505,7 @@
 				D98ED524C535470785053C77 /* MacAnimCard.swift in Sources */,
 				D9316BA0D28A45EC89D9A016 /* MacCategoryGridView.swift in Sources */,
 				C2EF11B0D827470BA0110533 /* MacSearchResults.swift in Sources */,
+				5255F2F403254E219DCCE626 /* MacSidebar.swift in Sources */,
 				21F01ED577ECC58C2A0D7A13 /* Difficulty.swift in Sources */,
 				72A11C8AFCACA9E76949CF4A /* AnimationCatalogSeed.swift in Sources */,
 				5C4F2E7BD1D4FF17E7F762E4 /* AnimationRepository.swift in Sources */,

@@ -23,6 +23,7 @@
 		12AF4D651C2422C1C026DB33 /* CodeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD7BC8965FC5EABE5EC84610 /* CodeSheet.swift */; };
 		153F6D4214F633A67C5752B4 /* MercuryPourView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343DE53FF962645126281CA9 /* MercuryPourView.swift */; };
 		1694795BF036EC17478E97E1 /* DetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 093CDD403EB3D71EF6C506E9 /* DetailView.swift */; };
+		B5B1D875229546F7810DB327 /* InteractHintToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = F102DC731BBA4B33ACF52874 /* InteractHintToast.swift */; };
 		182E170EF6F7A3FB10078D74 /* SectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1209EED7FE0D81CEF5AAE20B /* SectionHeader.swift */; };
 		19FEA535E60E1693F73177F3 /* MuteMorphView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8933304484F9F75442E694F8 /* MuteMorphView.swift */; };
 		1B82D24D5432F8745F7F6C85 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58278D049C482CFBB9500259 /* LibraryView.swift */; };
@@ -348,6 +349,7 @@
 		0804B204F0E72E433A500305 /* SwipeStampImpressView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SwipeStampImpressView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/SwipeStampImpressView.swift; sourceTree = "<group>"; };
 		08E92BDF1B56F57B16A5969C /* JellyWobbleView.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; name = JellyWobbleView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/JellyWobbleView.metal; sourceTree = "<group>"; };
 		093CDD403EB3D71EF6C506E9 /* DetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailView.swift; sourceTree = "<group>"; };
+		F102DC731BBA4B33ACF52874 /* InteractHintToast.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractHintToast.swift; sourceTree = "<group>"; };
 		0A6703F807C783B2C426ADB6 /* HexColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HexColor.swift; sourceTree = "<group>"; };
 		0AEA8E26388833F35CA554A4 /* PinchCollapseGridView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PinchCollapseGridView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/PinchCollapseGridView.swift; sourceTree = "<group>"; };
 		0D963BA9E43E798515A542B5 /* DiscoverViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverViewModel.swift; sourceTree = "<group>"; };
@@ -1041,6 +1043,7 @@
 			children = (
 				DD7BC8965FC5EABE5EC84610 /* CodeSheet.swift */,
 				093CDD403EB3D71EF6C506E9 /* DetailView.swift */,
+				F102DC731BBA4B33ACF52874 /* InteractHintToast.swift */,
 				411F3E0F2A3ADCCC3E07957A /* DetailViewModel.swift */,
 				935D098AF14DDA0F49C9DC8B /* SwiftCodeView.swift */,
 			);
@@ -1471,6 +1474,7 @@
 				0343B6FD8D6D943EE4598BE7 /* BrowseViewModel.swift in Sources */,
 				12AF4D651C2422C1C026DB33 /* CodeSheet.swift in Sources */,
 				1694795BF036EC17478E97E1 /* DetailView.swift in Sources */,
+				B5B1D875229546F7810DB327 /* InteractHintToast.swift in Sources */,
 				3773A8858A77E31B48690156 /* DetailViewModel.swift in Sources */,
 				D9228AAF0A58561B817A2656 /* SwiftCodeView.swift in Sources */,
 				7A57DC411B958841D94C22F2 /* AuroraPackPromoCard.swift in Sources */,

@@ -29,6 +29,7 @@ struct MacDetailPane: View {
     @State private var showExporter = false
     @State private var showAuth = false
     @State private var showPaywall = false
+    @State private var showInteractHint = false
 
     init(viewModel: DetailViewModel, onClose: @escaping () -> Void) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -108,8 +109,29 @@ struct MacDetailPane: View {
                 .foregroundStyle(.white.opacity(0.55))
                 .padding(.bottom, 28).padding(.trailing, 28)
         }
+        .overlay(alignment: .bottom) {
+            if showInteractHint {
+                InteractHintToast()
+                    .padding(.bottom, 14)
+                    .allowsHitTesting(false)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .onTapGesture {
+            withAnimation(.easeOut(duration: 0.25)) {
+                showInteractHint = false
+            }
             replay += 1
+        }
+        .task(id: viewModel.item.id) {
+            guard AnimationPreviewRegistry.isInteractive(viewModel.item.id) else { return }
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                showInteractHint = true
+            }
+            try? await Task.sleep(for: .seconds(3.5))
+            withAnimation(.easeOut(duration: 0.3)) {
+                showInteractHint = false
+            }
         }
     }
 

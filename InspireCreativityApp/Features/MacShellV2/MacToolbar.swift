@@ -172,16 +172,10 @@ struct MacToolbar: View {
         Button(action: onProfile) {
             ZStack {
                 Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Theme.Palette.accent, Color(hex: "#FB7185")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                Text("YO")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white)
+                    .fill(Color.white.opacity(0.9))
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(Color(white: 0.18))
             }
             .frame(width: 30, height: 30)
         }

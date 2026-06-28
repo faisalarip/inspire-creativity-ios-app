@@ -21,9 +21,11 @@ struct MacCatalogList: View {
             LazyVGrid(columns: columns, spacing: 14) {
                 ForEach(items) { item in
                     AnimationCard(item) { selectedItemID = item.id }
-                        .overlay(selectedItemID == item.id
-                                 ? RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.Palette.accent, lineWidth: 2)
-                                 : nil)
+                        .overlay {
+                            if selectedItemID == item.id {
+                                RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.Palette.accent, lineWidth: 2)
+                            }
+                        }
                 }
             }
             .padding(16)

@@ -47,21 +47,29 @@ struct MacRootView: View {
     }
 
     private var visibleItems: [AnimationItem] {
+        let base: [AnimationItem]
         switch selection {
         case .discover:
-            return container.animationRepository.all()
+            base = container.animationRepository.all()
         case .category(let cat):
-            return container.animationRepository.items(in: cat)
+            base = container.animationRepository.items(in: cat)
         case .owned, .favorites, .recent:
             let all = container.animationRepository.all()
             switch selection {
             case .owned:
-                return all.filter { $0.isFree || container.store.isPro }
+                base = all.filter { $0.isFree || container.store.isPro }
             case .favorites:
-                return all.filter { container.favoritesRepository.isFavorite($0.id) }
+                base = all.filter { container.favoritesRepository.isFavorite($0.id) }
             default:
-                return Array(all.prefix(3))
+                base = Array(all.prefix(3))
             }
+        }
+        let q = search.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return base }
+        return base.filter {
+            $0.name.lowercased().contains(q) ||
+            $0.category.rawValue.lowercased().contains(q) ||
+            $0.author.lowercased().contains(q)
         }
     }
 }

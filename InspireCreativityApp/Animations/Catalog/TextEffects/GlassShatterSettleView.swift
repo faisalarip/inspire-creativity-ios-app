@@ -20,14 +20,14 @@ struct GlassShatterSettleView: View {
     @State private var assembled = false
 
     var body: some View {
-        if #available(iOS 18.0, *) {
+        if #available(iOS 18.0, macOS 15.0, *) {
             modern
         } else {
             fallback
         }
     }
 
-    @available(iOS 18.0, *)
+    @available(iOS 18.0, macOS 15.0, *)
     @ViewBuilder private var modern: some View {
         if demo {
             TimelineView(.animation) { ctx in
@@ -46,7 +46,7 @@ struct GlassShatterSettleView: View {
         withAnimation(.spring(response: 0.75, dampingFraction: 0.6)) { assembled = true }
     }
 
-    @available(iOS 18.0, *)
+    @available(iOS 18.0, macOS 15.0, *)
     private func shatterText(progress: CGFloat) -> some View {
         ZStack {
             Color(red: 0.04, green: 0.05, blue: 0.09)
@@ -84,7 +84,7 @@ struct GlassShatterSettleView: View {
     }
 }
 
-@available(iOS 18.0, *)
+@available(iOS 18.0, macOS 15.0, *)
 struct ShatterTextRenderer: TextRenderer {
     var progress: CGFloat
     var animatableData: CGFloat {

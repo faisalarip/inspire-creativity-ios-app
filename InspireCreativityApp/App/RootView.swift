@@ -10,10 +10,14 @@ import SwiftUI
 import AuthenticationServices
 import CryptoKit
 
-// MARK: - macOS shims for UIKit text-field types used in AuthField call sites
-// On macOS these types don't exist; the shims let call sites compile unmodified
-// while the actual modifiers (.keyboardType, .textContentType, .textInputAutocapitalization)
-// are gated under #if os(iOS) in AuthField.body.
+// MARK: - macOS shims for text-field types used in AuthField call sites
+// On macOS none of these types exist (the SwiftUI `TextInputAutocapitalization`
+// type AND the `.textInputAutocapitalization(_:)` modifier are iOS/tvOS/watchOS
+// only — verified absent from the macOS SwiftUI .swiftinterface). The shims let
+// the AuthField initializer signature and its call sites compile unmodified on
+// macOS, while the actual modifiers (.keyboardType, .textContentType,
+// .textInputAutocapitalization) are gated under #if os(iOS) in AuthField.body
+// so they are never invoked on macOS. Nothing to shadow → no SDK conflict.
 #if !os(iOS)
 struct UITextContentType: RawRepresentable, Hashable {
     let rawValue: String

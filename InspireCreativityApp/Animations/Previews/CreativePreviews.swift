@@ -13,7 +13,7 @@ struct AuroraMeshPreview: View {
     @State private var t: CGFloat = 0
     var body: some View {
         ZStack {
-            if #available(iOS 18, *) {
+            if #available(iOS 18, macOS 15, *) {
                 AuroraMesh18(time: t)
             } else {
                 AuroraGradientFallback()
@@ -31,7 +31,7 @@ struct AuroraMeshPreview: View {
     }
 }
 
-@available(iOS 18, *)
+@available(iOS 18, macOS 15, *)
 private struct AuroraMesh18: View {
     let time: CGFloat
     var body: some View {

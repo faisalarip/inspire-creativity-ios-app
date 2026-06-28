@@ -415,8 +415,10 @@ private struct OtpCascadeView_OtpCascadeInteractive: View {
     // the OS keyboard so the boxes are driven by genuine input.
     private var hiddenField: some View {
         TextField("", text: $entry)
+            #if os(iOS)
             .keyboardType(.numberPad)
             .textContentType(.oneTimeCode)
+            #endif
             .focused($focused)
             .foregroundStyle(.clear)
             .tint(.clear)

@@ -96,7 +96,7 @@ private struct ConfettiText: View {
     var body: some View {
         let font = Font.system(size: fontSize, weight: .heavy, design: .rounded)
         Group {
-            if #available(iOS 18.0, *) {
+            if #available(iOS 18.0, macOS 15.0, *) {
                 Text(word)
                     .font(font)
                     .foregroundStyle(.white)
@@ -130,7 +130,7 @@ private func glyphTint(_ index: Int) -> Color {
 
 // MARK: - iOS 18 TextRenderer (true per-glyph slices)
 
-@available(iOS 18.0, *)
+@available(iOS 18.0, macOS 15.0, *)
 private struct ConfettiGlyphRenderer: TextRenderer {
     var progress: Double
     var fling: CGSize

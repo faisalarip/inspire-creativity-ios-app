@@ -212,14 +212,14 @@ private struct ElasticRopeView_ElasticRopeStage: View {
 
     @ViewBuilder
     private func ropeContent(state: TouchState) -> some View {
-        if #available(iOS 18.0, *) {
+        if #available(iOS 18.0, macOS 15.0, *) {
             renderedText(state: state)
         } else {
             fallbackText(state: state)
         }
     }
 
-    @available(iOS 18.0, *)
+    @available(iOS 18.0, macOS 15.0, *)
     @ViewBuilder
     private func renderedText(state: TouchState) -> some View {
         let renderer = ElasticRopeView_ElasticRopeRenderer(
@@ -318,7 +318,7 @@ private struct ElasticRopeView_ElasticRopeStage: View {
 
 // MARK: - iOS 18 TextRenderer
 
-@available(iOS 18.0, *)
+@available(iOS 18.0, macOS 15.0, *)
 private struct ElasticRopeView_ElasticRopeRenderer: TextRenderer {
     let touchFraction: CGFloat
     let touchY: CGFloat

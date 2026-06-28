@@ -8,10 +8,12 @@
 
 #if os(macOS)
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct MacDetailView: View {
     @EnvironmentObject private var authStore: AuthStore
     @StateObject private var viewModel: DetailViewModel
+    @State private var showExporter = false
 
     init(viewModel: DetailViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -37,9 +39,32 @@ struct MacDetailView: View {
             // ── Right: code pane ──────────────────────────────────────────
             Group {
                 if canViewCode {
-                    ScrollView {
-                        SwiftCodeView(source: viewModel.code)
-                            .padding(12)
+                    VStack(spacing: 0) {
+                        HStack(spacing: 10) {
+                            Button {
+                                Clipboard.copy(viewModel.code)
+                            } label: {
+                                Label("Copy", systemImage: "doc.on.doc")
+                            }
+                            Button {
+                                Clipboard.copy(SwiftSource.bodyWithoutImports(viewModel.code))
+                            } label: {
+                                Label("Copy w/o imports", systemImage: "doc.on.clipboard")
+                            }
+                            Button {
+                                showExporter = true
+                            } label: {
+                                Label("Save .swift", systemImage: "square.and.arrow.down")
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12).padding(.top, 10)
+                        .buttonStyle(.bordered)
+
+                        ScrollView {
+                            SwiftCodeView(source: viewModel.code)
+                                .padding(12)
+                        }
                     }
                 } else {
                     lockedPanel
@@ -47,6 +72,12 @@ struct MacDetailView: View {
             }
             .frame(minWidth: 360)
             .background(Theme.Palette.background)
+            .fileExporter(
+                isPresented: $showExporter,
+                document: SwiftFileDocument(text: viewModel.code),
+                contentType: .swiftSource,
+                defaultFilename: SwiftSnippet.fileName(for: viewModel.item.name)
+            ) { _ in }
         }
         .navigationTitle(viewModel.item.name)
     }

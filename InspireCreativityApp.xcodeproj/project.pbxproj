@@ -80,6 +80,8 @@
 		427D018BDD1C619262F4249A /* ShatterReformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3449310CC5054890B09E6758 /* ShatterReformView.swift */; };
 		43A8D8F7A396C908F18C13B4 /* RibbonDropBookmarkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41838756A1D3F69CE82A834B /* RibbonDropBookmarkView.swift */; };
 		4431CAFA5D4C67684A73BC9D /* AuroraCodeGen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C5F461F15679801F8B87BA1 /* AuroraCodeGen.swift */; };
+		C1392663B9114BE7A7EEEFA4 /* CodeExport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3505EDE7580343BFB8E4E8F6 /* CodeExport.swift */; };
+		977AA520187C4EBE8F59601D /* SwiftSnippetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D26FBA883B384A29B45157C0 /* SwiftSnippetTests.swift */; };
 		457F3B1B239B80AF88BC534C /* ChromaticVelocityView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 249BBC358A73314402E7942E /* ChromaticVelocityView.swift */; };
 		4581C06B1AF5D381035C85F6 /* BubbleWrapPopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0230972310E91968E26ABD5E /* BubbleWrapPopView.swift */; };
 		4584158E695ECF9209E9027C /* ZipperUnzipTransitionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF5C1CC8D1BEE7464719BBD2 /* ZipperUnzipTransitionView.swift */; };
@@ -375,6 +377,8 @@
 		27F16917E50A8D186325AF0C /* ReactionTrayRollView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ReactionTrayRollView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/ReactionTrayRollView.swift; sourceTree = "<group>"; };
 		285ECCB3C202B1CDD1639600 /* PaywallViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallViewModel.swift; sourceTree = "<group>"; };
 		2C5F461F15679801F8B87BA1 /* AuroraCodeGen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuroraCodeGen.swift; sourceTree = "<group>"; };
+		3505EDE7580343BFB8E4E8F6 /* CodeExport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeExport.swift; sourceTree = "<group>"; };
+		D26FBA883B384A29B45157C0 /* SwiftSnippetTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SwiftSnippetTests.swift; sourceTree = "<group>"; };
 		2CE4F0C7112E7E24D6033AB2 /* AuthSessionCodableTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthSessionCodableTests.swift; sourceTree = "<group>"; };
 		2E0DBF56F5E78A0BAF0F9AB2 /* OrigamiHeroView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OrigamiHeroView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/OrigamiHeroView.swift; sourceTree = "<group>"; };
 		2F3CE0F2A56FD2F10E6DBCC3 /* KnitBraidView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = KnitBraidView.swift; path = InspireCreativityApp/Animations/Catalog/Loaders/KnitBraidView.swift; sourceTree = "<group>"; };
@@ -978,6 +982,7 @@
 				361E22506EB084BF5ED5B712 /* MockURLProtocol.swift */,
 				5F616686062A43B60CDB2E3A /* AnalyticsEventTests.swift */,
 				545E784C49A94C9F8F84CDC8 /* MacSidebarSectionTests.swift */,
+				D26FBA883B384A29B45157C0 /* SwiftSnippetTests.swift */,
 				ABB426C1785E79C801B2D344 /* Support */,
 				9E24CEB5B9C0085B5F438E59 /* AnalyticsInstrumentationTests.swift */,
 			);
@@ -1263,6 +1268,7 @@
 				26702578B81927296AEEE09B /* Previews */,
 				3AC5A43E55628209613E297E /* AnimationPreviewRegistry.swift */,
 				2C5F461F15679801F8B87BA1 /* AuroraCodeGen.swift */,
+				3505EDE7580343BFB8E4E8F6 /* CodeExport.swift */,
 				FDA68BFBE324AE9AB3F629B5 /* Catalog */,
 			);
 			path = Animations;
@@ -1396,6 +1402,7 @@
 			files = (
 				90677EED8BEACF9DB9D25769 /* AnimationPreviewRegistry.swift in Sources */,
 				4431CAFA5D4C67684A73BC9D /* AuroraCodeGen.swift in Sources */,
+				C1392663B9114BE7A7EEEFA4 /* CodeExport.swift in Sources */,
 				B7DB0BD3C7E915732C924B0D /* AdvancedPreviews.swift in Sources */,
 				3D182AA758147979C31C574E /* AuroraPreviews.swift in Sources */,
 				D2972E9D5510B9B3BAC823ED /* CorePreviews.swift in Sources */,
@@ -1698,6 +1705,7 @@
 				126192DAB8E3A2A077F07F52 /* MockURLProtocol.swift in Sources */,
 				6BA99AAE0D6353B52BBA3560 /* AnalyticsEventTests.swift in Sources */,
 				9183F068DA52458584660860 /* MacSidebarSectionTests.swift in Sources */,
+				977AA520187C4EBE8F59601D /* SwiftSnippetTests.swift in Sources */,
 				653169BFC343B2220C62F0CE /* SpyAnalyticsTracker.swift in Sources */,
 				2D25A738DC145E8F505E8C4D /* AnalyticsInstrumentationTests.swift in Sources */,
 			);

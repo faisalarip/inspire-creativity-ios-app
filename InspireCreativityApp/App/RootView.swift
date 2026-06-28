@@ -808,7 +808,7 @@ private struct CongratsView: View {
         VStack(spacing: 14) {
             HStack(spacing: 5) {
                 Image(systemName: "sparkles").font(.system(size: 10))
-                Text("50 FREE ANIMATIONS")
+                Text("FREE TO START")
                     .font(.system(size: 11, weight: .heavy))
                     .tracking(0.5)
             }
@@ -826,7 +826,7 @@ private struct CongratsView: View {
                 .font(.system(size: 30, weight: .heavy))
                 .foregroundStyle(.white)
 
-            Text("Enjoy 50 animations on us — including a set of gorgeous aurora backgrounds. Browse, preview, and copy the SwiftUI source straight into Xcode.")
+            Text("Enjoy a curated set of free animations on us — including gorgeous aurora backgrounds. Browse, preview, and copy the SwiftUI source straight into Xcode.")
                 .font(.system(size: 15))
                 .foregroundStyle(.white.opacity(0.65))
                 .multilineTextAlignment(.center)
@@ -916,7 +916,7 @@ private struct PurchaseCongratsView: View {
                 .font(.system(size: 30, weight: .heavy))
                 .foregroundStyle(.white)
 
-            Text("You just unlocked the full library — all 100+ animations are yours forever. Tap any one to copy its production-ready SwiftUI straight into Xcode.")
+            Text("You just unlocked the full library — every animation is yours forever. Tap any one to copy its production-ready SwiftUI straight into Xcode.")
                 .font(.system(size: 15))
                 .foregroundStyle(.white.opacity(0.65))
                 .multilineTextAlignment(.center)

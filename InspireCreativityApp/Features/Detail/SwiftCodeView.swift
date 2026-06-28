@@ -28,6 +28,7 @@ struct SwiftCodeView: View {
                 }
             }
         }
+        .textSelection(.enabled)
     }
 
     /// Minimal token coloring. Stops at `//` comments and `"…"` strings.

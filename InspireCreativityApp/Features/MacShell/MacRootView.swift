@@ -30,13 +30,9 @@ struct MacRootView: View {
             MacCatalogList(items: visibleItems, selectedItemID: $selectedItemID, search: $search)
                 .navigationSplitViewColumnWidth(min: 320, ideal: 420)
         } detail: {
-            if let id = selectedItemID, let item = container.animationRepository.find(id: id) {
-                VStack(spacing: 12) {
-                    Text(item.name).font(.title)
-                    Text("Preview + code pane arrives in the next step.").foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .id(id)
+            if let id = selectedItemID {
+                MacDetailView(viewModel: container.makeDetailViewModel(animationId: id))
+                    .id(id)
             } else {
                 ContentUnavailableView("Select an animation", systemImage: "sparkles")
             }

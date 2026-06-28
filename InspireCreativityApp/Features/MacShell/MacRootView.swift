@@ -15,6 +15,8 @@ struct MacRootView: View {
     @State private var selection: MacSidebarSection = .discover
     @State private var selectedItemID: AnimationItem.ID?
     @State private var search = ""
+    @State private var showSettings = false
+    @State private var showPaywall = false
 
     init(container: AppContainer) {
         _browse = StateObject(wrappedValue: container.makeBrowseViewModel())
@@ -40,6 +42,25 @@ struct MacRootView: View {
         .preferredColorScheme(.dark)
         .onChange(of: search) { _, q in browse.searchText = q }
         .onChange(of: selection) { _, _ in selectedItemID = nil }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showSettings = true } label: { Image(systemName: "person.crop.circle") }
+                    .help("Account & Settings")
+            }
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView(store: container.store, onGoPro: { showSettings = false; showPaywall = true })
+                .environmentObject(container)
+                .environmentObject(container.authStore)
+                .environmentObject(container.store)
+                .frame(minWidth: 520, minHeight: 600)
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView(viewModel: container.makePaywallViewModel(source: "settings"))
+                .environmentObject(container)
+                .environmentObject(container.store)
+                .frame(minWidth: 520, minHeight: 640)
+        }
     }
 
     private var orderedCategories: [Category] {

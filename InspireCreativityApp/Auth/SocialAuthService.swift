@@ -15,6 +15,30 @@
 import Foundation
 import Supabase
 
+#if os(macOS)
+import AppKit
+import AuthenticationServices
+
+// MARK: ─────────────────────────────────────────────────────────────
+// MARK: macOS key-window anchor for ASWebAuthenticationSession
+// MARK: ─────────────────────────────────────────────────────────────
+
+/// Provides the app's key window as the presentation anchor for
+/// `ASWebAuthenticationSession` on macOS.
+///
+/// supabase-swift's `DefaultPresentationContextProvider` falls back to a bare,
+/// detached `ASPresentationAnchor()` which may not present reliably in a
+/// sandboxed Mac app. This provider hands the session the actual key window so
+/// the web-auth sheet appears attached to the running app.
+final class MacWebAuthAnchorProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        NSApplication.shared.keyWindow
+            ?? NSApplication.shared.windows.first
+            ?? ASPresentationAnchor()
+    }
+}
+#endif
+
 // MARK: ─────────────────────────────────────────────────────────────
 // MARK: In-memory SDK session storage
 // MARK: ─────────────────────────────────────────────────────────────
@@ -114,6 +138,12 @@ final class SocialAuthService: SocialAuthServicing {
 
     private let client: SupabaseClient
 
+    #if os(macOS)
+    /// Retained for the lifetime of the service so the anchor is still alive
+    /// when `ASWebAuthenticationSession` calls back into it mid-flow.
+    private let macAnchorProvider = MacWebAuthAnchorProvider()
+    #endif
+
     /// - Parameter client: injectable for tests. Defaults to a client wired to
     ///   `SupabaseConfig` with in-memory session storage.
     ///
@@ -162,7 +192,16 @@ final class SocialAuthService: SocialAuthServicing {
     func signInWithGoogle() async throws -> AuthSession {
         let session = try await client.auth.signInWithOAuth(
             provider: .google,
-            redirectTo: Self.googleRedirectURL
+            redirectTo: Self.googleRedirectURL,
+            configure: { webAuthSession in
+                #if os(macOS)
+                // Supply the app's key window as the presentation anchor so the
+                // web-auth sheet appears attached to the running app window.
+                // The SDK's default falls back to a bare ASPresentationAnchor()
+                // which may not present reliably in a sandboxed Mac app.
+                webAuthSession.presentationContextProvider = self.macAnchorProvider
+                #endif
+            }
         )
         return Self.convert(session)
     }

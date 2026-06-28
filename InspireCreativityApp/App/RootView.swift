@@ -808,7 +808,7 @@ private struct CongratsView: View {
         VStack(spacing: 14) {
             HStack(spacing: 5) {
                 Image(systemName: "sparkles").font(.system(size: 10))
-                Text("20 FREE ANIMATIONS")
+                Text("50 FREE ANIMATIONS")
                     .font(.system(size: 11, weight: .heavy))
                     .tracking(0.5)
             }
@@ -826,7 +826,7 @@ private struct CongratsView: View {
                 .font(.system(size: 30, weight: .heavy))
                 .foregroundStyle(.white)
 
-            Text("Enjoy 20 animations on us — including a set of gorgeous aurora backgrounds. Browse, preview, and copy the SwiftUI source straight into Xcode.")
+            Text("Enjoy 50 animations on us — including a set of gorgeous aurora backgrounds. Browse, preview, and copy the SwiftUI source straight into Xcode.")
                 .font(.system(size: 15))
                 .foregroundStyle(.white.opacity(0.65))
                 .multilineTextAlignment(.center)

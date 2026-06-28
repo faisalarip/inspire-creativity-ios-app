@@ -41,6 +41,7 @@ struct MacRootView: View {
         }
         .task { await container.store.syncOnFirstMacLaunchIfNeeded() }
         .preferredColorScheme(.dark)
+        .analyticsConsentGate()
         .onChange(of: search) { _, q in browse.searchText = q }
         .onChange(of: selection) { _, _ in selectedItemID = nil }
         .toolbar {

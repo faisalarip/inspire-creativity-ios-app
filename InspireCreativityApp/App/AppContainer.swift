@@ -44,7 +44,15 @@ final class AppContainer: ObservableObject {
         let analytics: AnalyticsTracking = AppContainer.makeAnalyticsTracker()
         self.analytics = analytics
         let enabled = UserDefaults.standard.object(forKey: "analyticsEnabled") as? Bool ?? true
-        analytics.setCollectionEnabled(enabled)
+        let region = Locale.current.region?.identifier
+        let decision = AnalyticsConsent.storedDecision()
+        analytics.setCollectionEnabled(
+            AnalyticsConsent.collectionAllowed(
+                regionCode: region,
+                decision: decision,
+                analyticsEnabled: enabled
+            )
+        )
 
         let store = StoreManager()
         self.store = store

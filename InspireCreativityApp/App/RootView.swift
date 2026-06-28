@@ -75,6 +75,7 @@ struct RootView: View {
         .animation(.easeInOut(duration: 0.25), value: authStore.pendingVerificationEmail)
         .animation(.easeInOut(duration: 0.3), value: authStore.justSignedIn)
         .animation(.easeInOut(duration: 0.3), value: store.justPurchased)
+        .analyticsConsentGate()
         .onAppear {
             // Inject the live tracker once (the router is a @StateObject owned
             // here, so the container can't reach it at init time), then log the

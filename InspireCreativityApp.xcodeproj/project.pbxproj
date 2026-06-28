@@ -147,6 +147,8 @@
 		9897066023AC47D09035F385 /* MacDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAD7FAD0F594814A9054333 /* MacDetailView.swift */; };
 		9646C20F563D4B84831FAA3B /* MacCategoryStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44EA53536E214560B36D7DA3 /* MacCategoryStyle.swift */; };
 		D98ED524C535470785053C77 /* MacAnimCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35416AE14FA740A5A6059DE7 /* MacAnimCard.swift */; };
+		D9316BA0D28A45EC89D9A016 /* MacCategoryGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37B17C1A4FB14000B84557F8 /* MacCategoryGridView.swift */; };
+		C2EF11B0D827470BA0110533 /* MacSearchResults.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97D8E389BB9467EB58E9A27 /* MacSearchResults.swift */; };
 		9183F068DA52458584660860 /* MacSidebarSectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545E784C49A94C9F8F84CDC8 /* MacSidebarSectionTests.swift */; };
 		6C2F7BDB68B188632AD59293 /* SocialAuthSessionMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6231D97F09CFF8978A45474D /* SocialAuthSessionMappingTests.swift */; };
 		6C4C5E175E1E8192CDF909B4 /* PinchOrigamiCraneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5508EADC3186622FC645AED /* PinchOrigamiCraneView.swift */; };
@@ -463,6 +465,8 @@
 		CBAD7FAD0F594814A9054333 /* MacDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacDetailView.swift; sourceTree = "<group>"; };
 		44EA53536E214560B36D7DA3 /* MacCategoryStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCategoryStyle.swift; sourceTree = "<group>"; };
 		35416AE14FA740A5A6059DE7 /* MacAnimCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacAnimCard.swift; sourceTree = "<group>"; };
+		37B17C1A4FB14000B84557F8 /* MacCategoryGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCategoryGridView.swift; sourceTree = "<group>"; };
+		E97D8E389BB9467EB58E9A27 /* MacSearchResults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSearchResults.swift; sourceTree = "<group>"; };
 		60427FCF3F39BB5B051FFD71 /* OdometerDotsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OdometerDotsView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/OdometerDotsView.swift; sourceTree = "<group>"; };
 		61FBE8A746A8D24927A79EA6 /* MagneticPoetryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticPoetryView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/MagneticPoetryView.swift; sourceTree = "<group>"; };
 		621B6409DE398398BC15BF22 /* IrisShutterView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = IrisShutterView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/IrisShutterView.swift; sourceTree = "<group>"; };
@@ -1141,6 +1145,8 @@
 			children = (
 				44EA53536E214560B36D7DA3 /* MacCategoryStyle.swift */,
 				35416AE14FA740A5A6059DE7 /* MacAnimCard.swift */,
+				37B17C1A4FB14000B84557F8 /* MacCategoryGridView.swift */,
+				E97D8E389BB9467EB58E9A27 /* MacSearchResults.swift */,
 			);
 			path = MacShellV2;
 			sourceTree = "<group>";
@@ -1494,6 +1500,8 @@
 				9897066023AC47D09035F385 /* MacDetailView.swift in Sources */,
 				9646C20F563D4B84831FAA3B /* MacCategoryStyle.swift in Sources */,
 				D98ED524C535470785053C77 /* MacAnimCard.swift in Sources */,
+				D9316BA0D28A45EC89D9A016 /* MacCategoryGridView.swift in Sources */,
+				C2EF11B0D827470BA0110533 /* MacSearchResults.swift in Sources */,
 				21F01ED577ECC58C2A0D7A13 /* Difficulty.swift in Sources */,
 				72A11C8AFCACA9E76949CF4A /* AnimationCatalogSeed.swift in Sources */,
 				5C4F2E7BD1D4FF17E7F762E4 /* AnimationRepository.swift in Sources */,

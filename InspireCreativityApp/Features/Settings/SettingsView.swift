@@ -34,6 +34,7 @@ struct SettingsView: View {
                         .foregroundStyle(.white)
                         .padding(.top, 8)
 
+                    if store.isPro { ProStatusView(store: store) }
                     accountSection
                     purchasesSection
                     aboutSection

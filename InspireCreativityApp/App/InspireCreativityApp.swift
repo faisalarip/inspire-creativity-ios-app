@@ -30,13 +30,11 @@ struct InspireCreativityApp: App {
     var body: some Scene {
         WindowGroup {
             #if os(macOS)
-            // Temporary macOS placeholder scene so the macOS slice links and
-            // runs before the real Mac shell exists. Replaced in a later phase.
-            Text("InspireCreativity for Mac — shell coming next")
-                .frame(minWidth: 900, minHeight: 600)
+            MacRootView(container: container)
                 .environmentObject(container)
                 .environmentObject(container.authStore)
                 .environmentObject(container.store)
+                .tint(Theme.Palette.accent)
                 .preferredColorScheme(.dark)
             #else
             RootView()

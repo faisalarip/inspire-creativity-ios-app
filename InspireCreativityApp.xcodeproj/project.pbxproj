@@ -145,6 +145,8 @@
 		AA738E6F81E241D9A26C51E3 /* MacRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 327942F2E4B74EAF97689D1F /* MacRootView.swift */; };
 		E2ABD6DADF194A70BA9C6053 /* MacCatalogList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29C3067889234BC2B3627CEA /* MacCatalogList.swift */; };
 		9897066023AC47D09035F385 /* MacDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBAD7FAD0F594814A9054333 /* MacDetailView.swift */; };
+		9646C20F563D4B84831FAA3B /* MacCategoryStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 44EA53536E214560B36D7DA3 /* MacCategoryStyle.swift */; };
+		D98ED524C535470785053C77 /* MacAnimCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35416AE14FA740A5A6059DE7 /* MacAnimCard.swift */; };
 		9183F068DA52458584660860 /* MacSidebarSectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545E784C49A94C9F8F84CDC8 /* MacSidebarSectionTests.swift */; };
 		6C2F7BDB68B188632AD59293 /* SocialAuthSessionMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6231D97F09CFF8978A45474D /* SocialAuthSessionMappingTests.swift */; };
 		6C4C5E175E1E8192CDF909B4 /* PinchOrigamiCraneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5508EADC3186622FC645AED /* PinchOrigamiCraneView.swift */; };
@@ -459,6 +461,8 @@
 		327942F2E4B74EAF97689D1F /* MacRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacRootView.swift; sourceTree = "<group>"; };
 		29C3067889234BC2B3627CEA /* MacCatalogList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCatalogList.swift; sourceTree = "<group>"; };
 		CBAD7FAD0F594814A9054333 /* MacDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacDetailView.swift; sourceTree = "<group>"; };
+		44EA53536E214560B36D7DA3 /* MacCategoryStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCategoryStyle.swift; sourceTree = "<group>"; };
+		35416AE14FA740A5A6059DE7 /* MacAnimCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacAnimCard.swift; sourceTree = "<group>"; };
 		60427FCF3F39BB5B051FFD71 /* OdometerDotsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OdometerDotsView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/OdometerDotsView.swift; sourceTree = "<group>"; };
 		61FBE8A746A8D24927A79EA6 /* MagneticPoetryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticPoetryView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/MagneticPoetryView.swift; sourceTree = "<group>"; };
 		621B6409DE398398BC15BF22 /* IrisShutterView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = IrisShutterView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/IrisShutterView.swift; sourceTree = "<group>"; };
@@ -1111,6 +1115,7 @@
 				1F20AD2F7BD05DCEFDE668A8 /* Discover */,
 				3FD126225A9DB668A71395EA /* Library */,
 				976EEA7A982F4B7F9F5ADCAC /* MacShell */,
+				8BFA4F03563C4EF58FF1A26E /* MacShellV2 */,
 				B3BCF361748B3E62BFE1DDB0 /* Paywall */,
 				522FB4EDB1F24278AF68BB6A /* Pro */,
 				9025D2F618D0FCA3D0770722 /* Search */,
@@ -1129,6 +1134,15 @@
 				CBAD7FAD0F594814A9054333 /* MacDetailView.swift */,
 			);
 			path = MacShell;
+			sourceTree = "<group>";
+		};
+		8BFA4F03563C4EF58FF1A26E /* MacShellV2 */ = {
+			isa = PBXGroup;
+			children = (
+				44EA53536E214560B36D7DA3 /* MacCategoryStyle.swift */,
+				35416AE14FA740A5A6059DE7 /* MacAnimCard.swift */,
+			);
+			path = MacShellV2;
 			sourceTree = "<group>";
 		};
 		21CFBE5536F444559427B486 /* Consent */ = {
@@ -1478,6 +1492,8 @@
 				AA738E6F81E241D9A26C51E3 /* MacRootView.swift in Sources */,
 				E2ABD6DADF194A70BA9C6053 /* MacCatalogList.swift in Sources */,
 				9897066023AC47D09035F385 /* MacDetailView.swift in Sources */,
+				9646C20F563D4B84831FAA3B /* MacCategoryStyle.swift in Sources */,
+				D98ED524C535470785053C77 /* MacAnimCard.swift in Sources */,
 				21F01ED577ECC58C2A0D7A13 /* Difficulty.swift in Sources */,
 				72A11C8AFCACA9E76949CF4A /* AnimationCatalogSeed.swift in Sources */,
 				5C4F2E7BD1D4FF17E7F762E4 /* AnimationRepository.swift in Sources */,

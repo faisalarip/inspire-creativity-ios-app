@@ -80,7 +80,7 @@ private struct AnalyticsConsentGateModifier: ViewModifier {
                 AnalyticsConsentPrompt { decision in
                     let region = Locale.current.region?.identifier
                     AnalyticsConsent.storeDecision(decision)
-                    let enabled = UserDefaults.standard.object(forKey: "analyticsEnabled") as? Bool ?? true
+                    let enabled = UserDefaults.standard.object(forKey: AnalyticsConsent.analyticsEnabledKey) as? Bool ?? true
                     container.analytics.setCollectionEnabled(
                         AnalyticsConsent.collectionAllowed(
                             regionCode: region,
@@ -91,7 +91,10 @@ private struct AnalyticsConsentGateModifier: ViewModifier {
                     showPrompt = false
                 }
                 .presentationDetents([.height(420)])
-                .presentationDragIndicator(.visible)
+                .presentationDragIndicator(.hidden)
+                // Require an explicit tap — drag-to-dismiss would leave the decision
+                // in the undecided state, causing the prompt to re-appear next launch.
+                .interactiveDismissDisabled(true)
             }
     }
 

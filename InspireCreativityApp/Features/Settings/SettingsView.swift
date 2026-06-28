@@ -16,7 +16,7 @@ struct SettingsView: View {
     @ObservedObject var store: StoreManager
     let onGoPro: () -> Void
 
-    @AppStorage("analyticsEnabled") private var analyticsEnabled = true
+    @AppStorage(AnalyticsConsent.analyticsEnabledKey) private var analyticsEnabled = true
     @State private var showAuthSheet = false
     @State private var showDeleteConfirm = false
     @State private var restoreMessage: String?
@@ -166,7 +166,17 @@ struct SettingsView: View {
             .toggleStyle(.switch)
             .tint(Theme.Palette.accent)
             .onChange(of: analyticsEnabled) { _, on in
-                container.analytics.setCollectionEnabled(on)
+                // Route through the consent gate so EEA/UK users who have
+                // denied (or not yet decided) are never silently re-enabled.
+                let region = Locale.current.region?.identifier
+                let decision = AnalyticsConsent.storedDecision()
+                container.analytics.setCollectionEnabled(
+                    AnalyticsConsent.collectionAllowed(
+                        regionCode: region,
+                        decision: decision,
+                        analyticsEnabled: on
+                    )
+                )
             }
         }
     }

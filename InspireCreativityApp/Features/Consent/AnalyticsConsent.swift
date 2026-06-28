@@ -52,9 +52,16 @@ enum AnalyticsConsent {
     /// Determines whether analytics collection should be active.
     ///
     /// - EEA/UK: only `decision == .granted` enables collection.
-    ///   `analyticsEnabled` is ignored until the user has decided;
-    ///   denied/undecided → false.
-    /// - Non-EEA: returns `analyticsEnabled` unchanged (existing behavior).
+    ///   `analyticsEnabled` is intentionally ignored for EEA/UK users —
+    ///   consent is the exclusive gate (GDPR Art. 7). This means:
+    ///   - `.granted` → collection ON regardless of `analyticsEnabled`.
+    ///   - `.denied` or nil → collection OFF regardless of `analyticsEnabled`.
+    ///   Consequence: the Settings analytics toggle has no effect for EEA/UK
+    ///   users who have already made a decision. Future work: wire the toggle
+    ///   to update the stored `Decision` for EEA users, or hide/disable it.
+    ///
+    /// - Non-EEA: returns `analyticsEnabled` unchanged — byte-for-byte the
+    ///   same behavior as before the consent gate was introduced.
     static func collectionAllowed(
         regionCode: String?,
         decision: Decision?,
@@ -70,6 +77,11 @@ enum AnalyticsConsent {
 
     /// Default UserDefaults key for the stored decision.
     static let defaultKey = "analyticsConsentDecision"
+
+    /// UserDefaults key for the global analytics-enabled toggle (mirrors SettingsView @AppStorage).
+    /// Centralised here so AppContainer, SettingsView, and the consent modifier all read
+    /// the same key string without risk of drift.
+    static let analyticsEnabledKey = "analyticsEnabled"
 
     /// Reads the stored decision from `defaults` using `key`.
     /// Returns nil when no decision has been recorded.

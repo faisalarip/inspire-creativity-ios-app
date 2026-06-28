@@ -156,7 +156,7 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Share usage analytics")
                             .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
-                        Text("Anonymous — helps improve the app")
+                        Text("Usage stats only — not linked to you")
                             .font(.system(size: 12)).foregroundStyle(.white.opacity(0.55))
                     }
                     Spacer()

@@ -34,10 +34,18 @@ devices.
 Favorites and basic preferences are stored locally on your device using
 `UserDefaults`. This data stays on your device and is not transmitted to us.
 
+**Usage analytics.**
+The app uses **Firebase Analytics (Google Analytics 4)** to collect pseudonymous usage
+data — interaction events, a resettable app-instance/device identifier, IP-derived coarse
+location, and purchase events. This data is **not** used for cross-app tracking or
+advertising, and is **not** linked to your personal identity. You can disable collection
+at any time in **Settings → Share usage analytics**. Users in the EEA and UK are asked
+for explicit opt-in consent on first launch before any analytics data is sent.
+
 ## What we do NOT do
 
 - We do **not** track you across other apps or websites.
-- We do **not** use third-party advertising or analytics SDKs.
+- We do **not** use third-party advertising SDKs.
 - We do **not** sell or rent your personal information to anyone.
 
 ## How we use your information

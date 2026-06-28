@@ -24,9 +24,9 @@ final class AppContainer: ObservableObject {
     /// same instance behind the protocol.
     let store: StoreManager
     let authStore: AuthStore
-    /// Analytics backend, injected into the instrumented view-models and
-    /// `AuthStore`. DEBUG echoes to the console; release is a no-op for now
-    /// (swapped for the Firebase tracker in a later task).
+    /// Analytics backend (Firebase Analytics / GA4), injected into the
+    /// instrumented view-models and `AuthStore`. Falls back to the console
+    /// echo (DEBUG) or a no-op (release) on slices that lack the package.
     let analytics: AnalyticsTracking
 
     /// Mockups shown in the Discover "Aurora in the wild" row and the
@@ -67,11 +67,11 @@ final class AppContainer: ObservableObject {
         }
     }
 
-    /// Selects the analytics backend. Returns the Firebase-backed tracker once
-    /// the FirebaseAnalytics package + GoogleService-Info.plist are present and
-    /// `FirebaseApp.configure()` has run (so `FirebaseApp.app()` is non-nil).
-    /// Until then the `#if canImport` branch compiles out and the app falls
-    /// back to the console echo (DEBUG) or a no-op (release).
+    /// Selects the analytics backend. Returns `FirebaseAnalyticsTracker` when
+    /// Firebase is integrated and `FirebaseApp.configure()` has run (normal
+    /// production path). The `#if canImport` guard keeps the app buildable on
+    /// config-less slices; those fall back to the console echo (DEBUG) or a
+    /// no-op (release).
     private static func makeAnalyticsTracker() -> AnalyticsTracking {
         #if canImport(FirebaseAnalytics) && canImport(FirebaseCore)
         if FirebaseApp.app() != nil {

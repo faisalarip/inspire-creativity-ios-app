@@ -46,12 +46,12 @@ In **App Store Connect → your app → App Privacy**, declare the data the anal
 collects. These mirror `PrivacyInfo.xcprivacy` (all **not used for tracking**, **not
 linked to the user's identity**):
 
-| Data type            | Linked to identity | Used for tracking | Purpose   |
-|----------------------|--------------------|-------------------|-----------|
-| Product Interaction  | No                 | No                | Analytics |
-| Identifiers (Device ID) | No              | No                | Analytics |
-| Usage Data           | No                 | No                | Analytics |
-| Diagnostics          | No                 | No                | Analytics |
+| Data type               | Linked to identity | Used for tracking | Purpose   |
+|-------------------------|--------------------|-------------------|-----------|
+| Product Interaction     | No                 | No                | Analytics |
+| Identifiers (Device ID) | No                 | No                | Analytics |
+| Coarse Location         | No                 | No                | Analytics |
+| Purchase History        | No                 | No                | Analytics |
 
 Notes:
 - The app does **not** use App Tracking Transparency (ATT). `NSPrivacyTracking` is `false`

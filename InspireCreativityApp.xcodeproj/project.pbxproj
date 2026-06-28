@@ -151,6 +151,7 @@
 		C2EF11B0D827470BA0110533 /* MacSearchResults.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97D8E389BB9467EB58E9A27 /* MacSearchResults.swift */; };
 		5255F2F403254E219DCCE626 /* MacSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22F5FCF1BE834C5E9DA1541D /* MacSidebar.swift */; };
 		12FB76A5241346DFB07692E3 /* MacDiscoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12AE463809B14C738A717ECA /* MacDiscoverView.swift */; };
+		06BC6568DE9946F7B31D51CB /* MacDetailPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90E8048D2C1440EDAAE0548E /* MacDetailPane.swift */; };
 		9183F068DA52458584660860 /* MacSidebarSectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545E784C49A94C9F8F84CDC8 /* MacSidebarSectionTests.swift */; };
 		6C2F7BDB68B188632AD59293 /* SocialAuthSessionMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6231D97F09CFF8978A45474D /* SocialAuthSessionMappingTests.swift */; };
 		6C4C5E175E1E8192CDF909B4 /* PinchOrigamiCraneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5508EADC3186622FC645AED /* PinchOrigamiCraneView.swift */; };
@@ -471,6 +472,7 @@
 		E97D8E389BB9467EB58E9A27 /* MacSearchResults.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSearchResults.swift; sourceTree = "<group>"; };
 		22F5FCF1BE834C5E9DA1541D /* MacSidebar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSidebar.swift; sourceTree = "<group>"; };
 		12AE463809B14C738A717ECA /* MacDiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacDiscoverView.swift; sourceTree = "<group>"; };
+		90E8048D2C1440EDAAE0548E /* MacDetailPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacDetailPane.swift; sourceTree = "<group>"; };
 		60427FCF3F39BB5B051FFD71 /* OdometerDotsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OdometerDotsView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/OdometerDotsView.swift; sourceTree = "<group>"; };
 		61FBE8A746A8D24927A79EA6 /* MagneticPoetryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticPoetryView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/MagneticPoetryView.swift; sourceTree = "<group>"; };
 		621B6409DE398398BC15BF22 /* IrisShutterView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = IrisShutterView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/IrisShutterView.swift; sourceTree = "<group>"; };
@@ -1153,6 +1155,7 @@
 				E97D8E389BB9467EB58E9A27 /* MacSearchResults.swift */,
 				22F5FCF1BE834C5E9DA1541D /* MacSidebar.swift */,
 				12AE463809B14C738A717ECA /* MacDiscoverView.swift */,
+				90E8048D2C1440EDAAE0548E /* MacDetailPane.swift */,
 			);
 			path = MacShellV2;
 			sourceTree = "<group>";
@@ -1510,6 +1513,7 @@
 				C2EF11B0D827470BA0110533 /* MacSearchResults.swift in Sources */,
 				5255F2F403254E219DCCE626 /* MacSidebar.swift in Sources */,
 				12FB76A5241346DFB07692E3 /* MacDiscoverView.swift in Sources */,
+				06BC6568DE9946F7B31D51CB /* MacDetailPane.swift in Sources */,
 				21F01ED577ECC58C2A0D7A13 /* Difficulty.swift in Sources */,
 				72A11C8AFCACA9E76949CF4A /* AnimationCatalogSeed.swift in Sources */,
 				5C4F2E7BD1D4FF17E7F762E4 /* AnimationRepository.swift in Sources */,

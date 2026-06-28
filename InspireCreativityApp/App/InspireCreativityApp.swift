@@ -30,7 +30,7 @@ struct InspireCreativityApp: App {
     var body: some Scene {
         WindowGroup {
             #if os(macOS)
-            MacRootView(container: container)
+            MacAppView()
                 .environmentObject(container)
                 .environmentObject(container.authStore)
                 .environmentObject(container.store)
@@ -45,5 +45,8 @@ struct InspireCreativityApp: App {
                 .preferredColorScheme(.dark)
             #endif
         }
+        #if os(macOS)
+        .windowStyle(.hiddenTitleBar)
+        #endif
     }
 }

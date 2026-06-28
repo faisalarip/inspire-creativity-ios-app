@@ -18,6 +18,9 @@ struct MacDiscoverView: View {
     let selectedID: String?
     let onOpen: (String) -> Void
     let onNav: (MacNav) -> Void
+    /// Stable featured id chosen once by the root shell so the hero does not
+    /// re-roll across redraws (`repository.featured()` is random per call).
+    var featuredID: String? = nil
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -39,6 +42,7 @@ struct MacDiscoverView: View {
     private var heroSection: some View {
         HeroSection(
             container: container,
+            featuredID: featuredID,
             onOpen: onOpen
         )
         .padding(.top, 24)
@@ -106,12 +110,16 @@ struct MacDiscoverView: View {
 private struct HeroSection: View {
 
     let container: AppContainer
+    /// When provided, the hero pins to this id so it stays stable across
+    /// redraws; otherwise it falls back to the random `featured()`.
+    var featuredID: String? = nil
     let onOpen: (String) -> Void
 
     @State private var hover = false
 
     var body: some View {
-        let featured = container.animationRepository.featured()
+        let featured = featuredID.flatMap { container.animationRepository.find(id: $0) }
+            ?? container.animationRepository.featured()
         Button {
             onOpen(featured.id)
         } label: {

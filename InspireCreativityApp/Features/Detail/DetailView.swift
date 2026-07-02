@@ -135,6 +135,7 @@ struct DetailView: View {
                             ? "Sign in"
                             : "Unlock to view full code",
                         onUnlock: {
+                            viewModel.logCodeUnlockAttempt(access)
                             switch access {
                             case .needsPro: router.push(.paywall(source: "detail"))
                             case .needsSignIn: showAuthSheet = true

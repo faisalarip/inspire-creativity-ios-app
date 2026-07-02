@@ -51,6 +51,7 @@ final class DetailViewModel: ObservableObject {
     private let favorites: FavoritesRepositoryProtocol
     private let purchases: PurchaseRepositoryProtocol
     private let analytics: AnalyticsTracking
+    private let journeyMetrics: JourneyMetrics
     private var cancellables: Set<AnyCancellable> = []
 
     init(
@@ -58,7 +59,8 @@ final class DetailViewModel: ObservableObject {
         repository: AnimationRepositoryProtocol,
         favorites: FavoritesRepositoryProtocol,
         purchases: PurchaseRepositoryProtocol,
-        analytics: AnalyticsTracking = NoOpAnalyticsTracker()
+        analytics: AnalyticsTracking = NoOpAnalyticsTracker(),
+        journeyMetrics: JourneyMetrics = JourneyMetrics()
     ) {
         // Resolve the item once (fall back to featured for unknown ids), assign
         // stored props, then wire bindings unconditionally so the detail screen
@@ -68,6 +70,7 @@ final class DetailViewModel: ObservableObject {
         self.favorites = favorites
         self.purchases = purchases
         self.analytics = analytics
+        self.journeyMetrics = journeyMetrics
         self.isFavorited = favorites.isFavorite(resolved.id)
         self.isOwned = purchases.isOwned(resolved.id, freeOverride: resolved.isFree)
         self.hasPro = purchases.isPro
@@ -75,6 +78,7 @@ final class DetailViewModel: ObservableObject {
         analytics.log(.animationView(id: resolved.id,
                                      category: resolved.category.rawValue,
                                      isPro: resolved.isPro))
+        journeyMetrics.recordAnimationView()
     }
 
     private func bind() {
@@ -102,11 +106,28 @@ final class DetailViewModel: ObservableObject {
         // truth. `isFavorited` is updated asynchronously via `idsPublisher`, so
         // it still holds the stale pre-toggle value at this point.
         analytics.log(.favoriteToggled(id: item.id, on: favorites.isFavorite(item.id)))
+        if favorites.isFavorite(item.id) { journeyMetrics.recordFavorite() }
     }
 
     /// Logs a code-copy from the leaf `CodeSheet` via an injected closure, so
     /// the view itself never holds the analytics dependency or the item id.
     func logCodeCopied() {
         analytics.log(.codeCopied(id: item.id))
+    }
+
+    /// Logs the code-unlock intent from the leaf view's CTA. Granted access
+    /// never reaches the lock CTA, so it is intentionally a no-op.
+    func logCodeUnlockAttempt(_ access: CodeAccess) {
+        let result: String
+        switch access {
+        case .needsPro:    result = "needs_pro"
+        case .needsSignIn: result = "needs_sign_in"
+        case .granted:     return
+        }
+        analytics.log(.codeUnlockAttempt(result: result,
+                                         animationID: item.id,
+                                         category: item.category.rawValue,
+                                         isPro: item.isPro))
+        journeyMetrics.recordCodeUnlockAttempt(result: access)
     }
 }

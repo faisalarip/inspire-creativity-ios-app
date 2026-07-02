@@ -94,6 +94,33 @@ final class AnalyticsInstrumentationTests: XCTestCase {
                        "the first genuine category change must log category_selected exactly once")
     }
 
+    func testCodeUnlockAttemptLogsNeedsPro() {
+        let spy = SpyAnalyticsTracker()
+        // Pick a Pro item so the gate is needs_pro when signed out & not Pro.
+        let proItem = AnimationCatalogSeed.items.first { $0.isPro }!
+        let vm = DetailViewModel(animationId: proItem.id,
+                                 repository: InMemoryAnimationRepository(),
+                                 favorites: FavoritesRepository(),
+                                 purchases: StoreManager(),
+                                 analytics: spy)
+        vm.logCodeUnlockAttempt(.needsPro)
+        XCTAssertTrue(spy.events.contains {
+            if case let .codeUnlockAttempt(result, _, _, _) = $0 { return result == "needs_pro" } else { return false }
+        }, "unlock attempt on a Pro item must log code_unlock_attempt result=needs_pro")
+    }
+
+    func testCodeUnlockAttemptGrantedLogsNothing() {
+        let spy = SpyAnalyticsTracker()
+        let vm = DetailViewModel(animationId: AnimationCatalogSeed.items[0].id,
+                                 repository: InMemoryAnimationRepository(),
+                                 favorites: FavoritesRepository(),
+                                 purchases: StoreManager(),
+                                 analytics: spy)
+        let before = spy.events.count
+        vm.logCodeUnlockAttempt(.granted)
+        XCTAssertEqual(spy.events.count, before, "granted access must not log an unlock attempt")
+    }
+
     /// Filters a spy's events down to `category_selected` only (search events
     /// also flow through the same sink).
     private func categoryEvents(in spy: SpyAnalyticsTracker) -> [AnalyticsEvent] {

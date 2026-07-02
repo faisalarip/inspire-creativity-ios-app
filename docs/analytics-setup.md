@@ -89,3 +89,38 @@ Settings → **Share usage analytics** toggles `Analytics.setAnalyticsCollection
 via `AnalyticsTracking.setCollectionEnabled(_:)`. The preference is persisted in
 `UserDefaults` (`analyticsEnabled`, default `true`) and re-applied at launch in
 `AppContainer.init`.
+
+## Purchase-journey attribution (GA4)
+
+New events: `code_unlock_attempt`, `purchase_initiated`, `purchase_cancelled`,
+`purchase_failed`, `paywall_dismissed`, `restore_completed`; enriched
+`purchase_completed` (params `hit_pro_lock`, `animations_viewed_bucket`,
+`time_to_purchase_bucket`, `signed_in`).
+New user properties: `is_pro`, `signed_in`, `platform`, `engagement_level`,
+`animations_viewed_bucket`.
+
+### Register custom dimensions (Admin → Custom definitions)
+- Event-scoped: `result`, `category`, `is_pro`, `reason`, `source`,
+  `seconds_bucket`, `hit_pro_lock`, `animations_viewed_bucket`,
+  `time_to_purchase_bucket`. (Do NOT register `animation_id` — high cardinality;
+  it stays a queryable param / BigQuery field.)
+- User-scoped: `is_pro`, `signed_in`, `platform`, `engagement_level`,
+  `animations_viewed_bucket`.
+
+### Mark the conversion
+- Admin → Events → mark `purchase_completed` as a **Key Event**.
+
+### Explorations to build
+1. Funnel: `animation_view` → `code_unlock_attempt` (result=needs_pro) →
+   `paywall_viewed` → `purchase_initiated` → `purchase_completed`.
+2. Path exploration backward from `purchase_completed`.
+3. Segment comparison: buyers × `engagement_level`.
+4. Conversion rate by paywall `source`.
+
+### Optional
+- Enable the free BigQuery export (Admin → BigQuery links) for raw SQL path analysis.
+
+### Verify (DebugView)
+Run a debug build, exercise browse → Pro lock → paywall → cancel → buy, and
+confirm each event, its params, the 5 user properties, and the enriched
+`purchase_completed` appear. Toggle analytics off and confirm nothing is sent.

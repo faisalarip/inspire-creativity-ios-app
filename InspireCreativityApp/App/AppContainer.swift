@@ -8,6 +8,7 @@
 //
 
 import Foundation
+import Combine
 #if canImport(FirebaseCore)
 import FirebaseCore
 #endif
@@ -28,6 +29,11 @@ final class AppContainer: ObservableObject {
     /// instrumented view-models and `AuthStore`. Falls back to the console
     /// echo (DEBUG) or a no-op (release) on slices that lack the package.
     let analytics: AnalyticsTracking
+    /// Device-local journey counters shared across the browse/detail/paywall
+    /// view-models so a single set of counters feeds both the GA4 user
+    /// properties (below) and the purchase-attribution snapshot.
+    let journeyMetrics: JourneyMetrics
+    private var analyticsCancellables = Set<AnyCancellable>()
 
     /// Mockups shown in the Discover "Aurora in the wild" row and the
     /// TikTok-style Samples tab. Starts as the bundled 7-item fallback and
@@ -60,6 +66,38 @@ final class AppContainer: ObservableObject {
         self.animationRepository = animationRepository
         self.favoritesRepository = favoritesRepository
         self.authStore = AuthStore(analytics: analytics)
+
+        let journeyMetrics = JourneyMetrics()
+        self.journeyMetrics = journeyMetrics
+
+        // Set the 5 GA4 user properties once at launch (device-scoped, no
+        // setUserID — values are non-PII strings only).
+        #if os(macOS)
+        analytics.set(.platform("macos"))
+        #else
+        analytics.set(.platform("ios"))
+        #endif
+        analytics.set(.isPro(store.isPro))
+        analytics.set(.signedIn(authStore.isAuthenticated))
+        analytics.set(.engagementLevel(journeyMetrics.engagementLevel))
+        analytics.set(.animationsViewedBucket(journeyMetrics.animationsViewedBucket))
+
+        // ...and keep them fresh reactively as entitlement / auth / journey
+        // state changes over the life of the app.
+        store.isProPublisher
+            .sink { [analytics] isPro in analytics.set(.isPro(isPro)) }
+            .store(in: &analyticsCancellables)
+
+        authStore.$session
+            .sink { [analytics] session in analytics.set(.signedIn(session != nil)) }
+            .store(in: &analyticsCancellables)
+
+        journeyMetrics.didChange
+            .sink { [analytics, journeyMetrics] in
+                analytics.set(.engagementLevel(journeyMetrics.engagementLevel))
+                analytics.set(.animationsViewedBucket(journeyMetrics.animationsViewedBucket))
+            }
+            .store(in: &analyticsCancellables)
 
         // Kick off the usage-mockups fetch alongside the animations fetch.
         Task { [weak self] in
@@ -128,7 +166,7 @@ final class AppContainer: ObservableObject {
     }
 
     func makeBrowseViewModel() -> BrowseViewModel {
-        BrowseViewModel(repository: animationRepository, analytics: analytics)
+        BrowseViewModel(repository: animationRepository, analytics: analytics, journeyMetrics: journeyMetrics)
     }
 
     func makeSearchViewModel() -> SearchViewModel {
@@ -149,12 +187,15 @@ final class AppContainer: ObservableObject {
             repository: animationRepository,
             favorites: favoritesRepository,
             purchases: purchaseRepository,
-            analytics: analytics
+            analytics: analytics,
+            journeyMetrics: journeyMetrics
         )
     }
 
     func makePaywallViewModel(source: String) -> PaywallViewModel {
-        PaywallViewModel(store: store, analytics: analytics, source: source)
+        PaywallViewModel(store: store, analytics: analytics, source: source,
+                         journeyMetrics: journeyMetrics,
+                         signedIn: { [authStore] in authStore.isAuthenticated })
     }
 }
 

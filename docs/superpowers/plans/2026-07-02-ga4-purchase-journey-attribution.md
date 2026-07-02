@@ -687,12 +687,12 @@ func testSearchRecordsJourneySearch() {
     let settled = expectation(description: "debounce settled")
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { settled.fulfill() }
     wait(for: [settled], timeout: 1.0)
-    XCTAssertGreaterThanOrEqual(metrics.animationsViewedBucket.isEmpty ? 0 : 1, 0) // metrics instance is live
-    XCTAssertTrue(d.integer(forKey: "journey.searchesCount") >= 1, "a search must record a journey search")
+    XCTAssertGreaterThanOrEqual(d.integer(forKey: "journey.searchesCount"), 1,
+                                "a debounced search must record a journey search")
 }
 ```
 
-> Note: the search field name is `searchText` per `BrowseViewModel`. If the property differs, set whatever the existing `search`-logging pipeline observes (confirm against `BrowseViewModel.swift:72` and its input `@Published`).
+> Confirmed: `BrowseViewModel` has `@Published var searchText: String = ""` (line 19); the search log fires at line 72 inside a 120ms-debounced CombineLatest3 sink — the 0.3s test wait covers it.
 
 - [ ] **Step 2: Run test to verify it fails**
 

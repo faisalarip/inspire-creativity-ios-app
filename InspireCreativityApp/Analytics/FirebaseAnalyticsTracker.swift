@@ -28,5 +28,9 @@ struct FirebaseAnalyticsTracker: AnalyticsTracking {
     func setCollectionEnabled(_ on: Bool) {
         Analytics.setAnalyticsCollectionEnabled(on)
     }
+
+    func set(_ property: AnalyticsUserProperty) {
+        Analytics.setUserProperty(property.value, forName: property.name)
+    }
 }
 #endif

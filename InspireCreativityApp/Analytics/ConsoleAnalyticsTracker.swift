@@ -17,4 +17,8 @@ struct ConsoleAnalyticsTracker: AnalyticsTracking {
     func setCollectionEnabled(_ on: Bool) {
         print("[analytics] collection_enabled=\(on)")
     }
+
+    func set(_ property: AnalyticsUserProperty) {
+        print("[analytics] user_property \(property.name)=\(property.value ?? "nil")")
+    }
 }

@@ -60,6 +60,12 @@ struct MacDetailPane: View {
         .frame(width: 460)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Color(hex: "#111115"))
+        .onAppear {
+            // The Mac 3-pane shell shows this pane directly (no `AppRouter`
+            // push), so — unlike iOS, where `AppRouter.push(.detail)` tracks
+            // the screen — the view has to self-report here for GA4 parity.
+            container.analytics.track(screen: .detail)
+        }
         .fileExporter(
             isPresented: $showExporter,
             document: SwiftFileDocument(text: viewModel.code),
@@ -78,6 +84,10 @@ struct MacDetailPane: View {
                 .environmentObject(container)
                 .environmentObject(container.store)
                 .frame(minWidth: 520, minHeight: 640)
+                // Same rationale as the detail `.onAppear` above: this sheet
+                // bypasses `AppRouter`, so it never gets the `.paywall`
+                // screen_view that `AppRouter.push(.paywall)` gives iOS.
+                .onAppear { container.analytics.track(screen: .paywall) }
         }
         .onChange(of: authStore.isAuthenticated) { _, isAuth in
             if isAuth { showAuth = false }
@@ -183,6 +193,7 @@ struct MacDetailPane: View {
             }
         } else {
             LockedCodePanel(access: access) {
+                viewModel.logCodeUnlockAttempt(access)
                 if access == .needsSignIn { showAuth = true }
                 else { showPaywall = true }
             }

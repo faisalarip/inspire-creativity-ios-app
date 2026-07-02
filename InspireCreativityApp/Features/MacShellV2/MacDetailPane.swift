@@ -65,6 +65,11 @@ struct MacDetailPane: View {
             // push), so — unlike iOS, where `AppRouter.push(.detail)` tracks
             // the screen — the view has to self-report here for GA4 parity.
             container.analytics.track(screen: .detail)
+            // Fires the animation_view log + journey metrics exactly once per
+            // real presentation (guarded inside the VM), not on every eager
+            // reconstruction of the view model in MacAppView.body — see
+            // DetailViewModel.markViewed().
+            viewModel.markViewed()
         }
         .fileExporter(
             isPresented: $showExporter,

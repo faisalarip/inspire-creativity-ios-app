@@ -170,6 +170,12 @@ struct DetailView: View {
             .padding(.top, 4)
         }
         .hiddenNavigationBar()
+        .onAppear {
+            // Fires the animation_view log + journey metrics exactly once per
+            // real presentation of this screen (guarded inside the VM), rather
+            // than on init — see DetailViewModel.markViewed().
+            viewModel.markViewed()
+        }
         .sheet(isPresented: $showAuthSheet) {
             AuthGateView()
                 .environmentObject(authStore)

@@ -11,7 +11,9 @@ final class AnalyticsInstrumentationTests: XCTestCase {
                                  favorites: FavoritesRepository(),
                                  purchases: StoreManager(),
                                  analytics: spy)
-        _ = vm
+        // animation_view now logs from the view's .onAppear (via markViewed())
+        // rather than init, so a real presentation is simulated before asserting.
+        vm.markViewed()
         XCTAssertTrue(spy.events.contains { if case .animationView = $0 { return true } else { return false } },
                       "opening Detail must log animation_view")
     }

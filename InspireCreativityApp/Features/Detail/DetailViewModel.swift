@@ -53,6 +53,10 @@ final class DetailViewModel: ObservableObject {
     private let analytics: AnalyticsTracking
     private let journeyMetrics: JourneyMetrics
     private var cancellables: Set<AnyCancellable> = []
+    /// Guards `markViewed()` so the view event fires once per real
+    /// presentation, not once per view-model instance that happens to be
+    /// constructed. See `markViewed()` for why this can't live in `init`.
+    private var hasLoggedView = false
 
     init(
         animationId: String,
@@ -75,10 +79,6 @@ final class DetailViewModel: ObservableObject {
         self.isOwned = purchases.isOwned(resolved.id, freeOverride: resolved.isFree)
         self.hasPro = purchases.isPro
         bind()
-        analytics.log(.animationView(id: resolved.id,
-                                     category: resolved.category.rawValue,
-                                     isPro: resolved.isPro))
-        journeyMetrics.recordAnimationView()
     }
 
     private func bind() {
@@ -98,6 +98,17 @@ final class DetailViewModel: ObservableObject {
         purchases.isProPublisher
             .receive(on: DispatchQueue.main)
             .assign(to: &$hasPro)
+    }
+
+    /// Logs the animation view + records it for journey metrics, exactly once per
+    /// view-model instance. Called from the view's .onAppear rather than init so it
+    /// fires once per real presentation — not on every parent re-render that eagerly
+    /// reconstructs a throwaway view model (see MacAppView).
+    func markViewed() {
+        guard !hasLoggedView else { return }
+        hasLoggedView = true
+        analytics.log(.animationView(id: item.id, category: item.category.rawValue, isPro: item.isPro))
+        journeyMetrics.recordAnimationView()
     }
 
     func toggleFavorite() {

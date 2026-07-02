@@ -65,4 +65,42 @@ final class AnalyticsEventTests: XCTestCase {
         XCTAssertNotEqual(AnalyticsEvent.favoriteToggled(id: "a", on: true),
                           AnalyticsEvent.favoriteToggled(id: "a", on: false))
     }
+
+    func testNewFunnelEventsAreGA4Valid() {
+        let events: [AnalyticsEvent] = [
+            .codeUnlockAttempt(result: "needs_pro", animationID: "ges-x", category: "Gestures", isPro: true),
+            .purchaseInitiated(productID: "pro.lifetime", source: "detail"),
+            .purchaseCancelled(productID: "pro.lifetime", source: "detail", reason: "user_cancelled"),
+            .purchaseFailed(productID: "pro.lifetime", source: "detail", reason: "verification_failed"),
+            .paywallDismissed(source: "detail", secondsBucket: "5_15s"),
+            .restoreCompleted(source: "settings")
+        ]
+        for event in events {
+            let name = event.name
+            XCTAssertLessThanOrEqual(name.count, 40, "\(name) too long")
+            XCTAssertEqual(name, name.lowercased(), "\(name) must be snake_case")
+            XCTAssertTrue(name.allSatisfy { $0.isLowercase || $0.isNumber || $0 == "_" }, "\(name) invalid chars")
+            XCTAssertFalse(["ga_", "firebase_", "google_"].contains { name.hasPrefix($0) }, "\(name) reserved prefix")
+            for (key, value) in event.parameters {
+                XCTAssertLessThanOrEqual(key.count, 40, "param \(key) too long")
+                if let s = value as? String { XCTAssertLessThanOrEqual(s.count, 100, "param \(key) value too long") }
+            }
+        }
+    }
+
+    func testCodeUnlockAttemptParameters() {
+        let p = AnalyticsEvent.codeUnlockAttempt(result: "needs_pro", animationID: "ges-x", category: "Gestures", isPro: true).parameters
+        XCTAssertEqual(p["result"] as? String, "needs_pro")
+        XCTAssertEqual(p["animation_id"] as? String, "ges-x")
+        XCTAssertEqual(p["category"] as? String, "Gestures")
+        XCTAssertEqual(p["is_pro"] as? Bool, true)
+    }
+
+    func testPurchaseFunnelEventNames() {
+        XCTAssertEqual(AnalyticsEvent.purchaseInitiated(productID: "p", source: "s").name, "purchase_initiated")
+        XCTAssertEqual(AnalyticsEvent.purchaseCancelled(productID: "p", source: "s", reason: "pending").name, "purchase_cancelled")
+        XCTAssertEqual(AnalyticsEvent.purchaseFailed(productID: "p", source: "s", reason: "error").name, "purchase_failed")
+        XCTAssertEqual(AnalyticsEvent.paywallDismissed(source: "s", secondsBucket: "lt_5s").name, "paywall_dismissed")
+        XCTAssertEqual(AnalyticsEvent.restoreCompleted(source: "s").name, "restore_completed")
+    }
 }

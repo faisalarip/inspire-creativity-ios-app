@@ -9,6 +9,14 @@
 
 import Foundation
 
+/// Journey context snapshotted at purchase time. Non-PII, all bucketed.
+struct PurchaseContext: Equatable {
+    let hitProLock: Bool
+    let animationsViewedBucket: String
+    let timeToPurchaseBucket: String
+    let signedIn: Bool
+}
+
 enum AnalyticsEvent: Equatable {
     case animationView(id: String, category: String, isPro: Bool)
     case codeCopied(id: String)
@@ -19,6 +27,12 @@ enum AnalyticsEvent: Equatable {
     case purchaseCompleted(productID: String, source: String)
     case signIn(method: String)
     case auroraPromoTap
+    case codeUnlockAttempt(result: String, animationID: String, category: String, isPro: Bool)
+    case purchaseInitiated(productID: String, source: String)
+    case purchaseCancelled(productID: String, source: String, reason: String)
+    case purchaseFailed(productID: String, source: String, reason: String)
+    case paywallDismissed(source: String, secondsBucket: String)
+    case restoreCompleted(source: String)
 
     var name: String {
         switch self {
@@ -31,6 +45,12 @@ enum AnalyticsEvent: Equatable {
         case .purchaseCompleted: return "purchase_completed"
         case .signIn:            return "sign_in"
         case .auroraPromoTap:    return "aurora_promo_tap"
+        case .codeUnlockAttempt:  return "code_unlock_attempt"
+        case .purchaseInitiated:  return "purchase_initiated"
+        case .purchaseCancelled:  return "purchase_cancelled"
+        case .purchaseFailed:     return "purchase_failed"
+        case .paywallDismissed:   return "paywall_dismissed"
+        case .restoreCompleted:   return "restore_completed"
         }
     }
 
@@ -54,6 +74,18 @@ enum AnalyticsEvent: Equatable {
             return ["method": method]
         case .auroraPromoTap:
             return [:]
+        case let .codeUnlockAttempt(result, id, category, isPro):
+            return ["result": result, "animation_id": id, "category": category, "is_pro": isPro]
+        case let .purchaseInitiated(productID, source):
+            return ["product_id": productID, "source": source]
+        case let .purchaseCancelled(productID, source, reason):
+            return ["product_id": productID, "source": source, "reason": reason]
+        case let .purchaseFailed(productID, source, reason):
+            return ["product_id": productID, "source": source, "reason": reason]
+        case let .paywallDismissed(source, secondsBucket):
+            return ["source": source, "seconds_bucket": secondsBucket]
+        case let .restoreCompleted(source):
+            return ["source": source]
         }
     }
 }

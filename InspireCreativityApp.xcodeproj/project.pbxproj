@@ -143,7 +143,9 @@
 		6990A989E3A20FABDC45F8D8 /* Category.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15A62872F90BFBCAADA5DCCF /* Category.swift */; };
 		69E238A391B29432CD3F91DD /* MosaicFlipView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF2853BF9E6E4E83BF8A2A17 /* MosaicFlipView.swift */; };
 		6AE197E8B9FCF5F3DDAE3066 /* OdometerBlurView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F0C0CD12FCFF74DCCCAC96D /* OdometerBlurView.swift */; };
+		3179476D601BBD1AACA971D7 /* JourneyMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4BA762432A34C18DC8A4D4B /* JourneyMetrics.swift */; };
 		6BA99AAE0D6353B52BBA3560 /* AnalyticsEventTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F616686062A43B60CDB2E3A /* AnalyticsEventTests.swift */; };
+		A34D85DFBD4D2F9BF0FB79BA /* JourneyMetricsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85A409624078BA78D230418E /* JourneyMetricsTests.swift */; };
 		6C2F7BDB68B188632AD59293 /* SocialAuthSessionMappingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6231D97F09CFF8978A45474D /* SocialAuthSessionMappingTests.swift */; };
 		6C4C5E175E1E8192CDF909B4 /* PinchOrigamiCraneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5508EADC3186622FC645AED /* PinchOrigamiCraneView.swift */; };
 		6C83DE6CB723F31A4F7B9D0D /* PressurePopView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90C8162659B999F400EE42D4 /* PressurePopView.swift */; };
@@ -442,6 +444,7 @@
 		4BBEA1F18DD88B0C7CE0BC19 /* GenieMagnifyDockView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GenieMagnifyDockView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/GenieMagnifyDockView.swift; sourceTree = "<group>"; };
 		4BDD550F2814FD66CB8ED787 /* FloatingTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingTabBar.swift; sourceTree = "<group>"; };
 		4C543B2055C8D4EA6A6FBBA7 /* AnalyticsTracking.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AnalyticsTracking.swift; path = InspireCreativityApp/Analytics/AnalyticsTracking.swift; sourceTree = "<group>"; };
+		E4BA762432A34C18DC8A4D4B /* JourneyMetrics.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = JourneyMetrics.swift; path = InspireCreativityApp/Analytics/JourneyMetrics.swift; sourceTree = "<group>"; };
 		4C791FC1F46858D0B6C8A6D0 /* LiquidFlaskFillView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = LiquidFlaskFillView.swift; path = InspireCreativityApp/Animations/Catalog/Loaders/LiquidFlaskFillView.swift; sourceTree = "<group>"; };
 		4D51A15D5903C2700C34023B /* MagneticCursorFerrofluidView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticCursorFerrofluidView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/MagneticCursorFerrofluidView.swift; sourceTree = "<group>"; };
 		4D8B1914434FDF83762DBEB8 /* NavHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavHeader.swift; sourceTree = "<group>"; };
@@ -464,6 +467,7 @@
 		5F1D6355086CAD815EBCC81E /* MetaballMergeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MetaballMergeView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/MetaballMergeView.swift; sourceTree = "<group>"; };
 		5F396DCAE73BF48FD8FF5110 /* ScrubberWaveView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ScrubberWaveView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/ScrubberWaveView.swift; sourceTree = "<group>"; };
 		5F616686062A43B60CDB2E3A /* AnalyticsEventTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AnalyticsEventTests.swift; sourceTree = "<group>"; };
+		85A409624078BA78D230418E /* JourneyMetricsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = JourneyMetricsTests.swift; sourceTree = "<group>"; };
 		60427FCF3F39BB5B051FFD71 /* OdometerDotsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OdometerDotsView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/OdometerDotsView.swift; sourceTree = "<group>"; };
 		61FBE8A746A8D24927A79EA6 /* MagneticPoetryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticPoetryView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/MagneticPoetryView.swift; sourceTree = "<group>"; };
 		621B6409DE398398BC15BF22 /* IrisShutterView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = IrisShutterView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/IrisShutterView.swift; sourceTree = "<group>"; };
@@ -1011,6 +1015,7 @@
 				6231D97F09CFF8978A45474D /* SocialAuthSessionMappingTests.swift */,
 				361E22506EB084BF5ED5B712 /* MockURLProtocol.swift */,
 				5F616686062A43B60CDB2E3A /* AnalyticsEventTests.swift */,
+				85A409624078BA78D230418E /* JourneyMetricsTests.swift */,
 				D26FBA883B384A29B45157C0 /* SwiftSnippetTests.swift */,
 				ABB426C1785E79C801B2D344 /* Support */,
 				9E24CEB5B9C0085B5F438E59 /* AnalyticsInstrumentationTests.swift */,
@@ -1209,6 +1214,7 @@
 				B746E39F8EFEEFAA7999BCB0 /* ConsoleAnalyticsTracker.swift */,
 				DC2A613E2B44A9D25EBB659F /* FirebaseAnalyticsTracker.swift */,
 				24C9A2CC29F4FBCE7D67A1E3 /* AnalyticsUserProperty.swift */,
+				E4BA762432A34C18DC8A4D4B /* JourneyMetrics.swift */,
 			);
 			name = Analytics;
 			sourceTree = SOURCE_ROOT;
@@ -1746,6 +1752,7 @@
 				96BAF625A4ED4F03AE501E79 /* AnalyticsConsent.swift in Sources */,
 				DF9E77D66C824AE48D83AE85 /* AnalyticsConsentPrompt.swift in Sources */,
 				4D85E96AF52FA888966776B4 /* AnalyticsUserProperty.swift in Sources */,
+				3179476D601BBD1AACA971D7 /* JourneyMetrics.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1763,6 +1770,7 @@
 				6C2F7BDB68B188632AD59293 /* SocialAuthSessionMappingTests.swift in Sources */,
 				126192DAB8E3A2A077F07F52 /* MockURLProtocol.swift in Sources */,
 				6BA99AAE0D6353B52BBA3560 /* AnalyticsEventTests.swift in Sources */,
+				A34D85DFBD4D2F9BF0FB79BA /* JourneyMetricsTests.swift in Sources */,
 				977AA520187C4EBE8F59601D /* SwiftSnippetTests.swift in Sources */,
 				653169BFC343B2220C62F0CE /* SpyAnalyticsTracker.swift in Sources */,
 				2D25A738DC145E8F505E8C4D /* AnalyticsInstrumentationTests.swift in Sources */,

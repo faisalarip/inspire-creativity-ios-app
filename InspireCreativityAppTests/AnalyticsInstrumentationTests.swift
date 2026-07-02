@@ -121,6 +121,20 @@ final class AnalyticsInstrumentationTests: XCTestCase {
         XCTAssertEqual(spy.events.count, before, "granted access must not log an unlock attempt")
     }
 
+    func testSearchRecordsJourneySearch() {
+        let d = UserDefaults(suiteName: "BrowseSearch.\(UUID().uuidString)")!
+        let metrics = JourneyMetrics(defaults: d)
+        let vm = BrowseViewModel(repository: InMemoryAnimationRepository(),
+                                 analytics: SpyAnalyticsTracker(),
+                                 journeyMetrics: metrics)
+        vm.searchText = "spinner"
+        let settled = expectation(description: "debounce settled")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { settled.fulfill() }
+        wait(for: [settled], timeout: 1.0)
+        XCTAssertGreaterThanOrEqual(d.integer(forKey: "journey.searchesCount"), 1,
+                                    "a debounced search must record a journey search")
+    }
+
     /// Filters a spy's events down to `category_selected` only (search events
     /// also flow through the same sink).
     private func categoryEvents(in spy: SpyAnalyticsTracker) -> [AnalyticsEvent] {

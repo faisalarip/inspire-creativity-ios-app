@@ -39,6 +39,7 @@ final class BrowseViewModel: ObservableObject {
 
     private let repository: AnimationRepositoryProtocol
     private let analytics: AnalyticsTracking
+    private let journeyMetrics: JourneyMetrics
     private var cancellables: Set<AnyCancellable> = []
     /// Last-logged values so we fire `category_selected` / `search` only when
     /// the dimension actually changes (the sink fires on every debounced edit).
@@ -48,9 +49,11 @@ final class BrowseViewModel: ObservableObject {
     private var lastLoggedQueryLen: Int = -1
 
     init(repository: AnimationRepositoryProtocol,
-         analytics: AnalyticsTracking = NoOpAnalyticsTracker()) {
+         analytics: AnalyticsTracking = NoOpAnalyticsTracker(),
+         journeyMetrics: JourneyMetrics = JourneyMetrics()) {
         self.repository = repository
         self.analytics = analytics
+        self.journeyMetrics = journeyMetrics
         self.categories = repository.categories()
         self.totalCount = repository.all().count
         bind()
@@ -70,6 +73,7 @@ final class BrowseViewModel: ObservableObject {
                 if len > 0 && len != self.lastLoggedQueryLen {
                     self.lastLoggedQueryLen = len
                     self.analytics.log(.search(termLength: len))
+                    self.journeyMetrics.recordSearch()
                 }
             }
             .store(in: &cancellables)

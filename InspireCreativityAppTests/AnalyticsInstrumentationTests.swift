@@ -135,6 +135,31 @@ final class AnalyticsInstrumentationTests: XCTestCase {
                                     "a debounced search must record a journey search")
     }
 
+    func testPaywallDismissWithoutPurchaseLogsDismissed() {
+        let spy = SpyAnalyticsTracker()
+        var t = Date(timeIntervalSince1970: 0)
+        let vm = PaywallViewModel(store: StoreManager(), analytics: spy, source: "detail",
+                                  journeyMetrics: JourneyMetrics(defaults: UserDefaults(suiteName: "pw.\(UUID().uuidString)")!),
+                                  signedIn: { false }, now: { t })
+        vm.markAppeared()
+        t = Date(timeIntervalSince1970: 8)          // 8s dwell
+        vm.logDismissedIfNeeded()
+        XCTAssertEqual(spy.events.last, .paywallDismissed(source: "detail", secondsBucket: "5_15s"),
+                       "closing the paywall without buying must log paywall_dismissed with a dwell bucket")
+    }
+
+    func testPaywallDismissAfterCompletionLogsNothing() {
+        let spy = SpyAnalyticsTracker()
+        let vm = PaywallViewModel(store: StoreManager(), analytics: spy, source: "detail",
+                                  journeyMetrics: JourneyMetrics(defaults: UserDefaults(suiteName: "pw.\(UUID().uuidString)")!),
+                                  signedIn: { false }, now: { Date() })
+        vm.markAppeared()
+        vm.markCompletedForTesting()                // simulates a successful purchase
+        vm.logDismissedIfNeeded()
+        XCTAssertFalse(spy.events.contains { if case .paywallDismissed = $0 { return true } else { return false } },
+                       "a completed purchase must not also log paywall_dismissed")
+    }
+
     /// Filters a spy's events down to `category_selected` only (search events
     /// also flow through the same sink).
     private func categoryEvents(in spy: SpyAnalyticsTracker) -> [AnalyticsEvent] {

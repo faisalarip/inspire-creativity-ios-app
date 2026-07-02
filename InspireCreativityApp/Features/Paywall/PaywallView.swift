@@ -32,6 +32,10 @@ struct PaywallView: View {
         }
         .onAppear {
             container.analytics.log(.paywallViewed(source: viewModel.source))
+            viewModel.markAppeared()
+        }
+        .onDisappear {
+            viewModel.logDismissedIfNeeded()
         }
     }
 

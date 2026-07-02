@@ -28,7 +28,7 @@ final class StoreManager: ObservableObject, PurchaseRepositoryProtocol {
 
     enum PurchaseOutcome { case success, pending, cancelled }
 
-    enum StoreError: LocalizedError {
+    enum StoreError: LocalizedError, Equatable {
         case failedVerification
         case productsUnavailable
         var errorDescription: String? {

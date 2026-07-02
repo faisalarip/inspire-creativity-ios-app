@@ -24,7 +24,7 @@ enum AnalyticsEvent: Equatable {
     case search(termLength: Int)
     case categorySelected(String)
     case paywallViewed(source: String)
-    case purchaseCompleted(productID: String, source: String)
+    case purchaseCompleted(productID: String, source: String, context: PurchaseContext)
     case signIn(method: String)
     case auroraPromoTap
     case codeUnlockAttempt(result: String, animationID: String, category: String, isPro: Bool)
@@ -68,8 +68,12 @@ enum AnalyticsEvent: Equatable {
             return ["category": category]
         case let .paywallViewed(source):
             return ["source": source]
-        case let .purchaseCompleted(productID, source):
-            return ["product_id": productID, "source": source]
+        case let .purchaseCompleted(productID, source, context):
+            return ["product_id": productID, "source": source,
+                    "hit_pro_lock": context.hitProLock,
+                    "animations_viewed_bucket": context.animationsViewedBucket,
+                    "time_to_purchase_bucket": context.timeToPurchaseBucket,
+                    "signed_in": context.signedIn]
         case let .signIn(method):
             return ["method": method]
         case .auroraPromoTap:

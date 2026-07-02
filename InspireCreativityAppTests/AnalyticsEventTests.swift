@@ -13,7 +13,9 @@ final class AnalyticsEventTests: XCTestCase {
             .search(termLength: 4),
             .categorySelected("Gestures"),
             .paywallViewed(source: "detail"),
-            .purchaseCompleted(productID: "pro.lifetime", source: "detail"),
+            .purchaseCompleted(productID: "pro.lifetime", source: "detail",
+                               context: PurchaseContext(hitProLock: true, animationsViewedBucket: "4_10",
+                                                        timeToPurchaseBucket: "1_24h", signedIn: false)),
             .signIn(method: "apple"),
             .auroraPromoTap
         ]
@@ -49,14 +51,18 @@ final class AnalyticsEventTests: XCTestCase {
     func testPurchaseCompletedCarriesProductAndSource() {
         let event = AnalyticsEvent.purchaseCompleted(
             productID: "com.faisalarip.InspireCreativityApp.pro.lifetime",
-            source: "settings"
+            source: "settings",
+            context: PurchaseContext(hitProLock: true, animationsViewedBucket: "4_10",
+                                     timeToPurchaseBucket: "1_24h", signedIn: false)
         )
         XCTAssertEqual(event.name, "purchase_completed")
         let params = event.parameters
-        XCTAssertEqual(params["product_id"] as? String,
-                       "com.faisalarip.InspireCreativityApp.pro.lifetime")
-        XCTAssertEqual(params["source"] as? String, "settings",
-                       "purchase_completed must record where the IAP originated, matching paywall_viewed's taxonomy")
+        XCTAssertEqual(params["product_id"] as? String, "com.faisalarip.InspireCreativityApp.pro.lifetime")
+        XCTAssertEqual(params["source"] as? String, "settings")
+        XCTAssertEqual(params["hit_pro_lock"] as? Bool, true)
+        XCTAssertEqual(params["animations_viewed_bucket"] as? String, "4_10")
+        XCTAssertEqual(params["time_to_purchase_bucket"] as? String, "1_24h")
+        XCTAssertEqual(params["signed_in"] as? Bool, false)
     }
 
     func testEventEquatable() {

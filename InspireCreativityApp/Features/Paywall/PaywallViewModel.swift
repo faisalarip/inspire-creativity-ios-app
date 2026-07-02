@@ -58,10 +58,21 @@ final class PaywallViewModel: ObservableObject {
     /// so GA4 attributes the IAP to the same feature that surfaced the paywall.
     let source: String
 
-    init(store: StoreManager, analytics: AnalyticsTracking, source: String) {
+    private let journeyMetrics: JourneyMetrics
+    private let signedIn: () -> Bool
+    private let now: () -> Date
+    private var appearedAt: Date?
+
+    init(store: StoreManager, analytics: AnalyticsTracking, source: String,
+         journeyMetrics: JourneyMetrics = JourneyMetrics(),
+         signedIn: @escaping () -> Bool = { false },
+         now: @escaping () -> Date = { Date() }) {
         self.store = store
         self.analytics = analytics
         self.source = source
+        self.journeyMetrics = journeyMetrics
+        self.signedIn = signedIn
+        self.now = now
     }
 
     var isLoadingProducts: Bool { store.isLoadingProducts }
@@ -99,19 +110,24 @@ final class PaywallViewModel: ObservableObject {
             errorMessage = StoreManager.StoreError.productsUnavailable.errorDescription
             return
         }
+        analytics.log(.purchaseInitiated(productID: product.id, source: source))
         isPurchasing = true
         defer { isPurchasing = false }
         do {
             switch try await store.purchase(product) {
             case .success:
-                analytics.log(.purchaseCompleted(productID: product.id, source: source))
+                analytics.log(.purchaseCompleted(productID: product.id, source: source,
+                                                 context: journeyMetrics.snapshotForPurchase(signedIn: signedIn())))
                 didComplete = true
             case .pending:
+                analytics.log(.purchaseCancelled(productID: product.id, source: source, reason: "pending"))
                 errorMessage = "Your purchase is pending approval. You'll get access once it's approved."
             case .cancelled:
-                break
+                analytics.log(.purchaseCancelled(productID: product.id, source: source, reason: "user_cancelled"))
             }
         } catch {
+            let reason = (error as? StoreManager.StoreError) == .failedVerification ? "verification_failed" : "error"
+            analytics.log(.purchaseFailed(productID: product.id, source: source, reason: reason))
             errorMessage = (error as? LocalizedError)?.errorDescription ?? "Purchase failed. Please try again."
         }
     }
@@ -123,6 +139,7 @@ final class PaywallViewModel: ObservableObject {
         do {
             try await store.restore()
             if store.isPro {
+                analytics.log(.restoreCompleted(source: source))
                 didComplete = true
             } else {
                 errorMessage = "No previous purchases were found for your Apple ID."
@@ -131,4 +148,17 @@ final class PaywallViewModel: ObservableObject {
             errorMessage = "Couldn't restore purchases. Please try again."
         }
     }
+
+    func markAppeared() { appearedAt = now() }
+
+    func logDismissedIfNeeded() {
+        guard !didComplete, let appearedAt else { return }
+        let bucket = JourneyMetrics.secondsBucket(now().timeIntervalSince(appearedAt))
+        analytics.log(.paywallDismissed(source: source, secondsBucket: bucket))
+    }
+
+    #if DEBUG
+    /// Test hook: simulate a completed purchase without StoreKit.
+    func markCompletedForTesting() { didComplete = true }
+    #endif
 }

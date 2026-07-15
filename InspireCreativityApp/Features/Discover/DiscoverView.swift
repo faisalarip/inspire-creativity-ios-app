@@ -10,6 +10,7 @@ struct DiscoverView: View {
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var container: AppContainer
     @StateObject private var viewModel: DiscoverViewModel
+    @State private var showPriming = false
 
     init(viewModel: DiscoverViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -18,90 +19,53 @@ struct DiscoverView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                // Compact title — no large-title block, no bell action.
-                Text("Discover")
-                    .font(.system(size: 28, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, Theme.Spacing.xxl)
-                    .padding(.top, 8)
-                    .padding(.bottom, 8)
+                header
 
-                Text("\(viewModel.totalCount) hand-crafted SwiftUI animations. Tap any one to preview and copy.")
-                    .font(.system(size: 15))
-                    .foregroundStyle(.white.opacity(0.55))
-                    .padding(.horizontal, Theme.Spacing.xxl)
-                    .padding(.bottom, Theme.Spacing.xl)
-                    .lineLimit(2)
-
-                SectionHeader("Trending this week", trailing: "See all") {
-                    router.selectedTab = .browse
-                }
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 12) {
-                        ForEach(viewModel.trending) { item in
-                            AnimationCard(item, size: .small) {
-                                router.push(.detail(animationId: item.id))
+                if let pick = viewModel.dailyPick {
+                    DailyPickCard(
+                        item: pick,
+                        resetLabel: viewModel.dailyResetLabel,
+                        copied: viewModel.dailyCopied,
+                        onOpen: { router.push(.detail(animationId: pick.id)) },
+                        onCopy: {
+                            if viewModel.copyDailyPick() == .needsDetail {
+                                router.push(.detail(animationId: pick.id))
                             }
                         }
-                    }
+                    )
                     .padding(.horizontal, Theme.Spacing.xl)
+                    .padding(.top, 18)
                 }
 
-                // Pro upsell — only for users who haven't unlocked Pro yet.
-                if !viewModel.isPro {
-                    AuroraPackPromoCard {
-                        container.analytics.log(.auroraPromoTap)
-                        router.push(.paywall(source: "promo"))
-                    }
-                    .padding(.horizontal, Theme.Spacing.xl)
-                    .padding(.top, Theme.Spacing.xxxl)
-                }
-
-                SectionHeader("Aurora in the wild", trailing: "See all") {
-                    router.selectedTab = .browse
-                }
-                Text("Each animation, shown inside a sample app layout.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .padding(.horizontal, Theme.Spacing.xxl)
-                    .padding(.top, -8)
-                    .padding(.bottom, 12)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    // Lazy: 30 mockups, each embedding a live aurora preview —
-                    // an eager HStack instantiates (and animates) all of them.
-                    LazyHStack(spacing: 14) {
-                        ForEach(container.usageMockups) { m in
-                            UsageMockupCard(mockup: m) {
-                                router.push(.detail(animationId: m.animationId))
-                            }
-                        }
-                    }
-                    .padding(.horizontal, Theme.Spacing.xl)
-                }
-
-                SectionHeader("Browse by category")
-                CategoryGrid(categories: viewModel.categories) { category in
-                    // Carry the tapped category into a filtered Browse tab.
-                    router.pendingBrowseCategory = category
-                    router.selectedTab = .browse
-                }
-
-                SectionHeader("New & noteworthy", trailing: "See all") {
-                    router.selectedTab = .browse
-                }
-                LazyVGrid(
-                    columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
-                    spacing: 12
-                ) {
-                    ForEach(viewModel.newlyAdded) { item in
-                        AnimationCard(item) {
-                            router.push(.detail(animationId: item.id))
-                        }
-                    }
-                }
+                RemindMeStrip(
+                    coordinator: container.notificationCoordinator,
+                    countdownLabel: viewModel.dropCountdownLabel,
+                    streak: { viewModel.streak },
+                    onPrime: { showPriming = true }
+                )
                 .padding(.horizontal, Theme.Spacing.xl)
+                .padding(.top, 12)
+
+                WeeklyChallengeCard(
+                    daysLeftLabel: viewModel.challengeDaysLeft,
+                    joined: viewModel.challengeJoined,
+                    onJoin: {
+                        viewModel.joinChallenge()
+                        router.pendingBrowseCategory = .loaders
+                        router.selectedTab = .browse
+                    }
+                )
+                .padding(.horizontal, Theme.Spacing.xl)
+                .padding(.top, 20)
+
+                miniRow(
+                    title: "Free this week", caption: "rotates Friday",
+                    items: viewModel.freeThisWeek
+                )
+                miniRow(
+                    title: "Trending now", caption: nil, seeAll: true,
+                    items: viewModel.trending
+                )
 
                 Spacer().frame(height: 120)
             }
@@ -110,8 +74,131 @@ struct DiscoverView: View {
             await viewModel.reload()
             await container.refreshUsageMockups()
         }
+        .onAppear { viewModel.refreshDerived() }
         .background(Theme.Palette.background)
         .ignoresSafeArea(edges: .bottom)
+        #if os(iOS)
+        .fullScreenCover(isPresented: $showPriming) { NotificationPrimingView() }
+        #else
+        .sheet(isPresented: $showPriming) { NotificationPrimingView() }
+        #endif
+    }
+
+    // MARK: - Header (date · title · streak · bell)
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(viewModel.dateLabel)
+                    .font(.system(size: 13.5, weight: .medium))
+                    .foregroundStyle(Theme.Palette.textSecondary)
+                Text("Discover")
+                    .font(.system(size: 32, weight: .heavy))
+                    .tracking(-1)
+                    .foregroundStyle(Theme.Palette.textPrimary)
+            }
+            Spacer()
+
+            if viewModel.streak > 0 {
+                StreakChip(count: viewModel.streak)
+            }
+
+            IconButton("bell") { router.push(.activity) }
+                .overlay(alignment: .topTrailing) {
+                    if viewModel.unreadCount > 0 {
+                        Text("\(viewModel.unreadCount)")
+                            .font(.system(size: 10, weight: .heavy))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 3)
+                            .frame(minWidth: 17, minHeight: 17)
+                            .background(Color(hex: "#FF3B30"), in: Capsule())
+                            .overlay(
+                                Capsule().strokeBorder(Theme.Palette.background, lineWidth: 2)
+                            )
+                            .offset(x: 4, y: -4)
+                    }
+                }
+        }
+        .padding(.horizontal, Theme.Spacing.xxl)
+        .padding(.top, 8)
+    }
+
+    // MARK: - Horizontal mini-card rows
+
+    @ViewBuilder
+    private func miniRow(
+        title: String, caption: String?, seeAll: Bool = false,
+        items: [AnimationItem]
+    ) -> some View {
+        HStack(alignment: .lastTextBaseline) {
+            Text(title)
+                .font(.system(size: 18, weight: .bold))
+                .tracking(-0.4)
+                .foregroundStyle(Theme.Palette.textPrimary)
+            Spacer()
+            if let caption {
+                Text(caption)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Theme.Palette.textTertiary)
+            } else if seeAll {
+                Button("See all") { router.selectedTab = .browse }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.accent)
+                    .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.xxl)
+        .padding(.top, 24)
+        .padding(.bottom, 12)
+
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: 12) {
+                ForEach(items) { item in
+                    EngagementMiniCard(item: item) {
+                        router.push(.detail(animationId: item.id))
+                    }
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.xl)
+        }
+    }
+}
+
+/// The drop strip needs to observe the NotificationCoordinator (for the
+/// "Reminder set ✓" state), which the plain DiscoverView can't do through the
+/// container. Wrapping it keeps the observation scoped to this row.
+private struct RemindMeStrip: View {
+
+    @ObservedObject var coordinator: NotificationCoordinator
+    let countdownLabel: String
+    let streak: () -> Int
+    let onPrime: () -> Void
+
+    var body: some View {
+        DropCountdownStrip(
+            countdownLabel: countdownLabel,
+            isReminderActive: coordinator.isRemindMeActive,
+            onRemind: handleRemind
+        )
+        .task { await coordinator.refreshAuthorization() }
+    }
+
+    private func handleRemind() {
+        switch coordinator.authorization {
+        case .notDetermined:
+            onPrime()
+        case .denied:
+            #if os(iOS)
+            if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                UIApplication.shared.open(url)
+            }
+            #endif
+        case .authorized:
+            var prefs = coordinator.preferences
+            prefs.isEnabled = true
+            prefs.fridayDrops.toggle()
+            coordinator.update(prefs, streak: streak())
+        }
     }
 }
 

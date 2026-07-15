@@ -175,7 +175,15 @@ final class AppContainer: ObservableObject {
     // MARK: - View-model factories
 
     func makeDiscoverViewModel() -> DiscoverViewModel {
-        DiscoverViewModel(repository: animationRepository, purchases: purchaseRepository)
+        DiscoverViewModel(
+            repository: animationRepository,
+            purchases: purchaseRepository,
+            streakTracker: streakTracker,
+            activity: activityRepository,
+            copyActivity: copyActivity,
+            analytics: analytics,
+            signedIn: { [authStore] in authStore.isAuthenticated }
+        )
     }
 
     func makeBrowseViewModel() -> BrowseViewModel {

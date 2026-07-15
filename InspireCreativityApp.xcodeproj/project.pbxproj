@@ -19,6 +19,7 @@
 		091A8A85A3CDF5B95A135C55 /* MagneticPoetryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61FBE8A746A8D24927A79EA6 /* MagneticPoetryView.swift */; };
 		0DE31C873F3DE47D0DA052E4 /* AuthServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2FA671FB62178768DC33684 /* AuthServiceTests.swift */; };
 		0E7AE278E26BC029387ABD01 /* FloatingTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BDD550F2814FD66CB8ED787 /* FloatingTabBar.swift */; };
+		0EEA5BD6BAA42D0CFA0B09FB /* EngagementCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 888ED99B6D5D54782B95B9D8 /* EngagementCards.swift */; };
 		0F0115982A3A38CFD54E1C7F /* KnobDetentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41069A9D2B8A714765711BBB /* KnobDetentView.swift */; };
 		118A221E902084EBD76BE426 /* LibraryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3163399E3EEB394753E8EA26 /* LibraryViewModel.swift */; };
 		11D72CA115972C65D562D34C /* NotificationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54745CF5E37937C19F177CF8 /* NotificationCoordinator.swift */; };
@@ -161,6 +162,7 @@
 		6CA2684EF43EF3538B86F82F /* EdgeSwipePageCurlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2D0143ED68FE154478CA0D1 /* EdgeSwipePageCurlView.swift */; };
 		6F9C0DB337CEB48DA881CBBA /* ProBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFDAC0DB5D6B97DE0FF62E14 /* ProBadge.swift */; };
 		6FA34D0C521CFAB49D33AB36 /* DrawerCascadeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D93BA63D315F2243AD0F0332 /* DrawerCascadeView.swift */; };
+		716516A143CD40E4677767C8 /* DiscoverViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D65677EE6A6F43C385C08B5E /* DiscoverViewModelTests.swift */; };
 		71A70D3B4F4387D6AAA0DE43 /* ParallaxDeckTabsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C5D267C1B8307996EC393C /* ParallaxDeckTabsView.swift */; };
 		7251799D235F62796DB744F0 /* CopyVanishView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03E43B8E7A3EEE217AECAE71 /* CopyVanishView.swift */; };
 		72A11C8AFCACA9E76949CF4A /* AnimationCatalogSeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9437562A4BD888F3E3B8FEB7 /* AnimationCatalogSeed.swift */; };
@@ -543,6 +545,7 @@
 		8629FCD4490840B09A8AF225 /* GlassShatterView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = GlassShatterView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/GlassShatterView.swift; sourceTree = "<group>"; };
 		86BEA9C9375495718FF2CA70 /* DecodeMatrixView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DecodeMatrixView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/DecodeMatrixView.swift; sourceTree = "<group>"; };
 		87E0EA9BCD38E5501040B632 /* MercuryPourView.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; name = MercuryPourView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/MercuryPourView.metal; sourceTree = "<group>"; };
+		888ED99B6D5D54782B95B9D8 /* EngagementCards.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EngagementCards.swift; sourceTree = "<group>"; };
 		8933304484F9F75442E694F8 /* MuteMorphView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MuteMorphView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/MuteMorphView.swift; sourceTree = "<group>"; };
 		893DC8EF73079679BF69D22C /* DiscoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoverView.swift; sourceTree = "<group>"; };
 		8D7172619DB15AD08404D409 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -654,6 +657,7 @@
 		D5D0E3CC4239E364091B2F5B /* RadioInkView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RadioInkView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/RadioInkView.swift; sourceTree = "<group>"; };
 		D5E78990A2222FA8942461F0 /* RecentItemsRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecentItemsRepository.swift; sourceTree = "<group>"; };
 		D5F2E519E1E3FD8303A29D15 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		D65677EE6A6F43C385C08B5E /* DiscoverViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DiscoverViewModelTests.swift; sourceTree = "<group>"; };
 		D6A1CCE10D6AB12D08812865 /* TearReceiptView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TearReceiptView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/TearReceiptView.swift; sourceTree = "<group>"; };
 		D719BD58DFD32E988D50E17F /* DominoSegmentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DominoSegmentView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/DominoSegmentView.swift; sourceTree = "<group>"; };
 		D801DA85F2E4716F8D1E5706 /* StampInkView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = StampInkView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/StampInkView.swift; sourceTree = "<group>"; };
@@ -766,6 +770,7 @@
 				893DC8EF73079679BF69D22C /* DiscoverView.swift */,
 				0D963BA9E43E798515A542B5 /* DiscoverViewModel.swift */,
 				F884AF643F2A03F7498F3EDB /* HeroCard.swift */,
+				888ED99B6D5D54782B95B9D8 /* EngagementCards.swift */,
 			);
 			path = Discover;
 			sourceTree = "<group>";
@@ -1095,6 +1100,7 @@
 				C7DB9F1C489E7FFC494D5287 /* CopyActivityStoreTests.swift */,
 				DC76D7578AA8C21AD5548E8E /* EngagementRepositoriesTests.swift */,
 				A25C25AAFFEF4013E1C77C73 /* NotificationPlannerTests.swift */,
+				D65677EE6A6F43C385C08B5E /* DiscoverViewModelTests.swift */,
 			);
 			path = InspireCreativityAppTests;
 			sourceTree = SOURCE_ROOT;
@@ -1858,6 +1864,7 @@
 				216312DCD0B59459B4AC873C /* NotificationSettingsView.swift in Sources */,
 				C80DB75B6B65096454D7BCC8 /* NotificationPrimingView.swift in Sources */,
 				26436F7679A79745EFA42BB6 /* CollectionDetailView.swift in Sources */,
+				0EEA5BD6BAA42D0CFA0B09FB /* EngagementCards.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1887,6 +1894,7 @@
 				62B67E49F10F6325E6194F40 /* CopyActivityStoreTests.swift in Sources */,
 				7701873588C24C85AA5E3C7D /* EngagementRepositoriesTests.swift in Sources */,
 				C909AF06FC1A754BA3FAAF7C /* NotificationPlannerTests.swift in Sources */,
+				716516A143CD40E4677767C8 /* DiscoverViewModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -21,3 +21,7 @@ enum Category: String, Codable, Hashable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var displayName: String { rawValue }
 }
+
+/// Unambiguous alias for contexts where other imported modules also declare
+/// a `Category` type (e.g. the test target's transitive dependencies).
+typealias AnimationCategory = Category

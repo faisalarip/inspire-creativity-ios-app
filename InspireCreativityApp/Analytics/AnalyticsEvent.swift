@@ -33,6 +33,7 @@ enum AnalyticsEvent: Equatable {
     case purchaseFailed(productID: String, source: String, reason: String)
     case paywallDismissed(source: String, secondsBucket: String)
     case restoreCompleted(source: String)
+    case notificationPermission(granted: Bool)
 
     var name: String {
         switch self {
@@ -51,6 +52,7 @@ enum AnalyticsEvent: Equatable {
         case .purchaseFailed:     return "purchase_failed"
         case .paywallDismissed:   return "paywall_dismissed"
         case .restoreCompleted:   return "restore_completed"
+        case .notificationPermission: return "notification_permission"
         }
     }
 
@@ -90,6 +92,8 @@ enum AnalyticsEvent: Equatable {
             return ["source": source, "seconds_bucket": secondsBucket]
         case let .restoreCompleted(source):
             return ["source": source]
+        case let .notificationPermission(granted):
+            return ["granted": granted]
         }
     }
 }

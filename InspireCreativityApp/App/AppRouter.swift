@@ -12,7 +12,7 @@ import Observation
 
 /// Tabs the user can switch between.
 enum AppTab: String, CaseIterable, Hashable, Identifiable {
-    case discover, browse, samples, library
+    case discover, browse, samples, search, library
     var id: String { rawValue }
 
     var title: String {
@@ -20,6 +20,7 @@ enum AppTab: String, CaseIterable, Hashable, Identifiable {
         case .discover: "Discover"
         case .browse: "Browse"
         case .samples: "Samples"
+        case .search: "Search"
         case .library: "Library"
         }
     }
@@ -28,7 +29,8 @@ enum AppTab: String, CaseIterable, Hashable, Identifiable {
         switch self {
         case .discover: "house.fill"
         case .browse: "square.grid.2x2.fill"
-        case .samples: "play.rectangle.on.rectangle.fill"
+        case .samples: "sparkles.rectangle.stack.fill"
+        case .search: "magnifyingglass"
         case .library: "books.vertical.fill"
         }
     }
@@ -39,6 +41,9 @@ enum AppRoute: Hashable {
     case detail(animationId: String)
     case paywall(source: String)
     case settings
+    case activity
+    case notificationSettings
+    case collection(id: UUID)
 }
 
 /// Per-tab path storage + sheet presentation. Observable so views can bind.
@@ -60,6 +65,7 @@ final class AppRouter: ObservableObject {
     @Published var discoverPath: [AppRoute] = []
     @Published var browsePath: [AppRoute] = []
     @Published var samplesPath: [AppRoute] = []
+    @Published var searchPath: [AppRoute] = []
     @Published var libraryPath: [AppRoute] = []
 
     func path(for tab: AppTab) -> Binding<[AppRoute]> {
@@ -67,6 +73,7 @@ final class AppRouter: ObservableObject {
         case .discover: return Binding(get: { self.discoverPath }, set: { self.discoverPath = $0 })
         case .browse:   return Binding(get: { self.browsePath },   set: { self.browsePath = $0 })
         case .samples:   return Binding(get: { self.samplesPath },   set: { self.samplesPath = $0 })
+        case .search:   return Binding(get: { self.searchPath },   set: { self.searchPath = $0 })
         case .library:  return Binding(get: { self.libraryPath },  set: { self.libraryPath = $0 })
         }
     }
@@ -84,6 +91,7 @@ final class AppRouter: ObservableObject {
         case .discover: discoverPath.append(route)
         case .browse:   browsePath.append(route)
         case .samples:   samplesPath.append(route)
+        case .search:   searchPath.append(route)
         case .library:  libraryPath.append(route)
         }
         if let screen = screen(for: route) { analytics.track(screen: screen) }
@@ -96,6 +104,8 @@ final class AppRouter: ObservableObject {
         switch route {
         case .detail:  return .detail
         case .paywall: return .paywall
+        case .activity: return .activity
+        case .notificationSettings: return .notificationSettings
         default:       return nil
         }
     }
@@ -105,6 +115,7 @@ final class AppRouter: ObservableObject {
         case .discover: if !discoverPath.isEmpty { discoverPath.removeLast() }
         case .browse:   if !browsePath.isEmpty   { browsePath.removeLast() }
         case .samples:   if !samplesPath.isEmpty   { samplesPath.removeLast() }
+        case .search:   if !searchPath.isEmpty   { searchPath.removeLast() }
         case .library:  if !libraryPath.isEmpty  { libraryPath.removeLast() }
         }
     }
@@ -119,6 +130,7 @@ final class AppRouter: ObservableObject {
         case .discover: return discoverPath
         case .browse:   return browsePath
         case .samples:   return samplesPath
+        case .search:   return searchPath
         case .library:  return libraryPath
         }
     }

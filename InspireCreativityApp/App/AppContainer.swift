@@ -20,6 +20,15 @@ final class AppContainer: ObservableObject {
     let animationRepository: AnimationRepositoryProtocol
     let favoritesRepository: FavoritesRepositoryProtocol
     let purchaseRepository: PurchaseRepositoryProtocol
+
+    // v2.0 engagement layer — all device-local, UserDefaults-backed.
+    let streakTracker = StreakTracker()
+    let copyActivity = CopyActivityStore()
+    let recentItemsRepository: RecentItemsRepositoryProtocol = RecentItemsRepository()
+    let collectionsRepository: CollectionsRepositoryProtocol = CollectionsRepository()
+    let activityRepository: ActivityRepositoryProtocol = ActivityRepository()
+    let recentSearches = RecentSearchesStore()
+    let notificationCoordinator: NotificationCoordinator
     /// StoreKit 2 entitlement authority. Also vended directly to the paywall
     /// and Settings (for products / restore). `purchaseRepository` is this
     /// same instance behind the protocol.
@@ -69,6 +78,10 @@ final class AppContainer: ObservableObject {
 
         let journeyMetrics = JourneyMetrics()
         self.journeyMetrics = journeyMetrics
+        self.notificationCoordinator = NotificationCoordinator(
+            scheduler: SystemNotificationScheduler(),
+            analytics: analytics
+        )
 
         // Set the 5 GA4 user properties once at launch (device-scoped, no
         // setUserID — values are non-PII strings only).
@@ -188,7 +201,9 @@ final class AppContainer: ObservableObject {
             favorites: favoritesRepository,
             purchases: purchaseRepository,
             analytics: analytics,
-            journeyMetrics: journeyMetrics
+            journeyMetrics: journeyMetrics,
+            recents: recentItemsRepository,
+            copyActivity: copyActivity
         )
     }
 

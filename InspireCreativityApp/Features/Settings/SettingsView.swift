@@ -15,6 +15,9 @@ struct SettingsView: View {
     @EnvironmentObject private var container: AppContainer
     @ObservedObject var store: StoreManager
     let onGoPro: () -> Void
+    /// iOS-only: pushes the notification-preferences screen. nil (macOS)
+    /// hides the row — the Mac shell has no notification surface yet.
+    var onOpenNotifications: (() -> Void)? = nil
 
     @AppStorage(AnalyticsConsent.analyticsEnabledKey) private var analyticsEnabled = true
     @State private var showAuthSheet = false
@@ -37,6 +40,7 @@ struct SettingsView: View {
                     if store.isPro { ProStatusView(store: store) }
                     accountSection
                     purchasesSection
+                    if onOpenNotifications != nil { notificationsSection }
                     aboutSection
                     if authStore.isAuthenticated { dangerSection }
 
@@ -139,6 +143,16 @@ struct SettingsView: View {
     }
 
     // MARK: - About / Legal
+
+    private var notificationsSection: some View {
+        SettingsCard(title: "Notifications") {
+            actionRow(icon: "bell.badge.fill",
+                      title: "Notifications",
+                      subtitle: "Friday Drops, price drops, streak reminders") {
+                onOpenNotifications?()
+            }
+        }
+    }
 
     private var aboutSection: some View {
         SettingsCard(title: "About") {

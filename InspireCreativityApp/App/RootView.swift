@@ -83,9 +83,13 @@ struct RootView: View {
             // .discover is logged exactly once.
             router.analytics = container.analytics
             container.analytics.track(screen: .discover)
+            recordEngagementTick()
         }
         .onChange(of: router.selectedTab) { _, tab in
             container.analytics.track(screen: AnalyticsScreen(rawValue: tab.id) ?? .discover)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { recordEngagementTick() }
         }
     }
 
@@ -103,6 +107,8 @@ struct RootView: View {
                     .environment(\.previewsPaused, paused(unless: .browse))
                 tabContent(.samples).opacity(router.selectedTab == .samples ? 1 : 0)
                     .environment(\.previewsPaused, paused(unless: .samples))
+                tabContent(.search).opacity(router.selectedTab == .search ? 1 : 0)
+                    .environment(\.previewsPaused, paused(unless: .search))
                 tabContent(.library).opacity(router.selectedTab == .library ? 1 : 0)
                     .environment(\.previewsPaused, paused(unless: .library))
             }
@@ -124,6 +130,18 @@ struct RootView: View {
         router.selectedTab != tab || scenePhase != .active
     }
 
+    /// Engagement bookkeeping on every foreground: advance the streak, let
+    /// the Activity inbox seed/append its weekly drop entry, and reconcile
+    /// scheduled notifications with the current authorization + preferences.
+    private func recordEngagementTick() {
+        container.streakTracker.recordAppOpen()
+        container.activityRepository.refresh(now: Date())
+        Task {
+            await container.notificationCoordinator.refreshAuthorization()
+            container.notificationCoordinator.apply(streak: container.streakTracker.current)
+        }
+    }
+
     @ViewBuilder
     private func tabContent(_ tab: AppTab) -> some View {
         NavigationStack(path: router.path(for: tab)) {
@@ -138,7 +156,17 @@ struct RootView: View {
                             .hiddenNavigationBar()
                     case .settings:
                         SettingsView(store: container.store,
-                                     onGoPro: { router.push(.paywall(source: "settings")) })
+                                     onGoPro: { router.push(.paywall(source: "settings")) },
+                                     onOpenNotifications: { router.push(.notificationSettings) })
+                            .hiddenNavigationBar()
+                    case .activity:
+                        ActivityView()
+                            .hiddenNavigationBar()
+                    case .notificationSettings:
+                        NotificationSettingsView()
+                            .hiddenNavigationBar()
+                    case .collection(let id):
+                        CollectionDetailView(collectionId: id)
                             .hiddenNavigationBar()
                     }
                 }
@@ -151,6 +179,7 @@ struct RootView: View {
         case .discover: DiscoverView(viewModel: container.makeDiscoverViewModel())
         case .browse:   BrowseView(viewModel: container.makeBrowseViewModel())
         case .samples:  SamplesView()
+        case .search:   SearchView(viewModel: container.makeSearchViewModel())
         case .library:  LibraryView(viewModel: container.makeLibraryViewModel())
         }
     }

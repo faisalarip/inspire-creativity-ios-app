@@ -52,6 +52,9 @@ final class DetailViewModel: ObservableObject {
     private let purchases: PurchaseRepositoryProtocol
     private let analytics: AnalyticsTracking
     private let journeyMetrics: JourneyMetrics
+    /// Optional engagement hooks (nil in previews/tests that don't care).
+    private let recents: RecentItemsRepositoryProtocol?
+    private let copyActivity: CopyActivityStore?
     private var cancellables: Set<AnyCancellable> = []
     /// Guards `markViewed()` so the view event fires once per real
     /// presentation, not once per view-model instance that happens to be
@@ -64,7 +67,9 @@ final class DetailViewModel: ObservableObject {
         favorites: FavoritesRepositoryProtocol,
         purchases: PurchaseRepositoryProtocol,
         analytics: AnalyticsTracking = NoOpAnalyticsTracker(),
-        journeyMetrics: JourneyMetrics = JourneyMetrics()
+        journeyMetrics: JourneyMetrics = JourneyMetrics(),
+        recents: RecentItemsRepositoryProtocol? = nil,
+        copyActivity: CopyActivityStore? = nil
     ) {
         // Resolve the item once (fall back to featured for unknown ids), assign
         // stored props, then wire bindings unconditionally so the detail screen
@@ -75,6 +80,8 @@ final class DetailViewModel: ObservableObject {
         self.purchases = purchases
         self.analytics = analytics
         self.journeyMetrics = journeyMetrics
+        self.recents = recents
+        self.copyActivity = copyActivity
         self.isFavorited = favorites.isFavorite(resolved.id)
         self.isOwned = purchases.isOwned(resolved.id, freeOverride: resolved.isFree)
         self.hasPro = purchases.isPro
@@ -109,6 +116,7 @@ final class DetailViewModel: ObservableObject {
         hasLoggedView = true
         analytics.log(.animationView(id: item.id, category: item.category.rawValue, isPro: item.isPro))
         journeyMetrics.recordAnimationView()
+        recents?.record(item.id)
     }
 
     func toggleFavorite() {
@@ -124,6 +132,7 @@ final class DetailViewModel: ObservableObject {
     /// the view itself never holds the analytics dependency or the item id.
     func logCodeCopied() {
         analytics.log(.codeCopied(id: item.id))
+        copyActivity?.recordCopy()
     }
 
     /// Logs the code-unlock intent from the leaf view's CTA. Granted access

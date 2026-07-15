@@ -9,4 +9,6 @@ import Foundation
 
 enum AnalyticsScreen: String {
     case discover, browse, detail, paywall, settings, samples, library
+    case search, activity
+    case notificationSettings = "notification_settings"
 }

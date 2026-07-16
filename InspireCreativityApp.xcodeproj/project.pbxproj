@@ -112,6 +112,7 @@
 		4F65A18F9515D1F0EE06E28D /* GradientFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5CE02328DBEA11A067FC4127 /* GradientFlowView.swift */; };
 		5069ED7E25CD93BCC0CA6E5E /* OrigamiHeroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E0DBF56F5E78A0BAF0F9AB2 /* OrigamiHeroView.swift */; };
 		5255F2F403254E219DCCE626 /* MacSidebar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22F5FCF1BE834C5E9DA1541D /* MacSidebar.swift */; };
+		532E341C9742B1BA8176C43F /* SearchViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14C0C051808A0C034EE1FD91 /* SearchViewModelTests.swift */; };
 		53436DBECFEB8FEC3EE06D2D /* FlingPaperPlaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F499CABA98FA34A2EFC414C2 /* FlingPaperPlaneView.swift */; };
 		5396D4FBA3FFD6C54FA4163F /* TwoFingerTearSeamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6975E2B59B32CE6985F9996B /* TwoFingerTearSeamView.swift */; };
 		548350AC51D2D15BB21987C4 /* OtpCascadeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97EC98780C194E82CA688AC0 /* OtpCascadeView.swift */; };
@@ -124,6 +125,7 @@
 		57569B12B1DBCD2981CBE33F /* PendulumNewtonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB6582DDE83A343828671BD /* PendulumNewtonView.swift */; };
 		57DFAE95B63E7059367B736E /* SpotlightSweepTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFFB651C9D17010439F46181 /* SpotlightSweepTextView.swift */; };
 		584344BDC56E83D727C802F8 /* NotificationPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3B1A0C9C034DA1837F091D5 /* NotificationPreferences.swift */; };
+		58E2168C8230599CE4B9ABF6 /* CategoryCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F9E47AB441E0CA2143CBD97 /* CategoryCard.swift */; };
 		590C44EDAD60C8B0BDB9B89B /* SymbolAssemblyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94F1835E23780B71740409B3 /* SymbolAssemblyView.swift */; };
 		5A386B4689DDB5038A340694 /* FoilTiltView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E3A5C9D08335A2EB93EE39A /* FoilTiltView.swift */; };
 		5AB3C1F2A8017CD4BCC14966 /* EngagementSchedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = 152A4B72B96E8E088788AD0C /* EngagementSchedule.swift */; };
@@ -389,6 +391,7 @@
 		12F1C9823B7D241C34392D7F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		132C538C5CD2F760463FCF8E /* AnimationItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationItem.swift; sourceTree = "<group>"; };
 		139A513AEC3305ADEF1024ED /* Difficulty.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Difficulty.swift; sourceTree = "<group>"; };
+		14C0C051808A0C034EE1FD91 /* SearchViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SearchViewModelTests.swift; sourceTree = "<group>"; };
 		14D5D0F960C8C1E074EDD681 /* ZipperUnzipView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ZipperUnzipView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/ZipperUnzipView.swift; sourceTree = "<group>"; };
 		152A4B72B96E8E088788AD0C /* EngagementSchedule.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EngagementSchedule.swift; sourceTree = "<group>"; };
 		15A62872F90BFBCAADA5DCCF /* Category.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Category.swift; sourceTree = "<group>"; };
@@ -532,6 +535,7 @@
 		7CFBBBA1CE70084528774427 /* FlipboardSegmentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FlipboardSegmentView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/FlipboardSegmentView.swift; sourceTree = "<group>"; };
 		7D28A7BE3270F6F2E730011E /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		7E9C0C18CC367697949619AB /* BespokeAnimations.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = BespokeAnimations.swift; path = InspireCreativityApp/Animations/Catalog/BespokeAnimations.swift; sourceTree = "<group>"; };
+		7F9E47AB441E0CA2143CBD97 /* CategoryCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CategoryCard.swift; sourceTree = "<group>"; };
 		802172530892C09519404962 /* AdvancedPreviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedPreviews.swift; sourceTree = "<group>"; };
 		80878B060362EFB7BCB420FC /* ZipperConfirmView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ZipperConfirmView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/ZipperConfirmView.swift; sourceTree = "<group>"; };
 		80F270208367BD0E559B1112 /* EmojiFountainView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = EmojiFountainView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/EmojiFountainView.swift; sourceTree = "<group>"; };
@@ -789,6 +793,7 @@
 			children = (
 				6AC4FA0F701F0DD31050AD9C /* BrowseView.swift */,
 				47F9550584FD300878A00C10 /* BrowseViewModel.swift */,
+				7F9E47AB441E0CA2143CBD97 /* CategoryCard.swift */,
 			);
 			path = Browse;
 			sourceTree = "<group>";
@@ -1101,6 +1106,7 @@
 				DC76D7578AA8C21AD5548E8E /* EngagementRepositoriesTests.swift */,
 				A25C25AAFFEF4013E1C77C73 /* NotificationPlannerTests.swift */,
 				D65677EE6A6F43C385C08B5E /* DiscoverViewModelTests.swift */,
+				14C0C051808A0C034EE1FD91 /* SearchViewModelTests.swift */,
 			);
 			path = InspireCreativityAppTests;
 			sourceTree = SOURCE_ROOT;
@@ -1865,6 +1871,7 @@
 				C80DB75B6B65096454D7BCC8 /* NotificationPrimingView.swift in Sources */,
 				26436F7679A79745EFA42BB6 /* CollectionDetailView.swift in Sources */,
 				0EEA5BD6BAA42D0CFA0B09FB /* EngagementCards.swift in Sources */,
+				58E2168C8230599CE4B9ABF6 /* CategoryCard.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1895,6 +1902,7 @@
 				7701873588C24C85AA5E3C7D /* EngagementRepositoriesTests.swift in Sources */,
 				C909AF06FC1A754BA3FAAF7C /* NotificationPlannerTests.swift in Sources */,
 				716516A143CD40E4677767C8 /* DiscoverViewModelTests.swift in Sources */,
+				532E341C9742B1BA8176C43F /* SearchViewModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

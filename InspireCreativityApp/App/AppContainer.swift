@@ -191,7 +191,12 @@ final class AppContainer: ObservableObject {
     }
 
     func makeSearchViewModel() -> SearchViewModel {
-        SearchViewModel(repository: animationRepository)
+        SearchViewModel(
+            repository: animationRepository,
+            recentSearches: recentSearches,
+            analytics: analytics,
+            journeyMetrics: journeyMetrics
+        )
     }
 
     func makeLibraryViewModel() -> LibraryViewModel {

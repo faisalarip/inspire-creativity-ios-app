@@ -69,31 +69,23 @@ final class AnalyticsInstrumentationTests: XCTestCase {
     }
 
     /// Bug 2 regression: constructing a BrowseViewModel must NOT log
-    /// `category_selected` on launch. CombineLatest3 emits its initial
-    /// `(nil, .featured, "")` on subscription; the dedup baseline is seeded to
-    /// the initial category so that synthetic emission is treated as
-    /// already-seen. The first genuine user category change must still log.
+    /// `category_selected` on launch — only a genuine scope change may, and
+    /// exactly once (re-assigning the same scope is a no-op).
     func testBrowseDoesNotLogCategorySelectedOnLaunch() {
         let spy = SpyAnalyticsTracker()
         let vm = BrowseViewModel(repository: InMemoryAnimationRepository(),
                                  analytics: spy)
 
-        // Let the 120ms debounce (DispatchQueue.main) settle without any user action.
-        let settled = expectation(description: "debounce settled")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { settled.fulfill() }
-        wait(for: [settled], timeout: 1.0)
-
         XCTAssertTrue(categoryEvents(in: spy).isEmpty,
-                      "no category_selected event may fire before the user changes the category")
+                      "no category_selected event may fire before the user drills in")
 
-        // A genuine user category change must log exactly once.
-        vm.selectedCategory = .loaders
-        let logged = expectation(description: "category change logged")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { logged.fulfill() }
-        wait(for: [logged], timeout: 1.0)
+        vm.scope = .category(.loaders)
+        XCTAssertEqual(categoryEvents(in: spy), [.categorySelected(AnimationCategory.loaders.rawValue)],
+                       "the first genuine drill-in must log category_selected exactly once")
 
-        XCTAssertEqual(categoryEvents(in: spy), [.categorySelected(Category.loaders.rawValue)],
-                       "the first genuine category change must log category_selected exactly once")
+        vm.scope = .category(.loaders)
+        XCTAssertEqual(categoryEvents(in: spy).count, 1,
+                       "re-assigning the same scope must not re-log")
     }
 
     func testCodeUnlockAttemptLogsNeedsPro() {
@@ -124,12 +116,13 @@ final class AnalyticsInstrumentationTests: XCTestCase {
     }
 
     func testSearchRecordsJourneySearch() {
-        let d = UserDefaults(suiteName: "BrowseSearch.\(UUID().uuidString)")!
+        let d = UserDefaults(suiteName: "SearchTab.\(UUID().uuidString)")!
         let metrics = JourneyMetrics(defaults: d)
-        let vm = BrowseViewModel(repository: InMemoryAnimationRepository(),
+        let vm = SearchViewModel(repository: InMemoryAnimationRepository(),
+                                 recentSearches: RecentSearchesStore(defaults: d),
                                  analytics: SpyAnalyticsTracker(),
                                  journeyMetrics: metrics)
-        vm.searchText = "spinner"
+        vm.query = "spinner"
         let settled = expectation(description: "debounce settled")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { settled.fulfill() }
         wait(for: [settled], timeout: 1.0)

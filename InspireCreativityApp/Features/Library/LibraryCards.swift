@@ -92,6 +92,7 @@ struct LibraryStatsCard: View {
                         .font(.system(size: 9.5))
                         .foregroundStyle(.white.opacity(0.5))
                 }
+                .fixedSize()
                 .padding(.leading, 8)
             }
             .frame(height: 44, alignment: .bottom)
@@ -138,8 +139,9 @@ struct CollectionCard: View {
                                     .fill(Color(hex: items[index].tintHex))
                                     .overlay(
                                         AnimationPreviewRegistry.view(for: items[index].id)
-                                            .clipShape(RoundedRectangle(cornerRadius: 7))
+                                            .allowsHitTesting(false)
                                     )
+                                    .clipShape(RoundedRectangle(cornerRadius: 7))
                             } else {
                                 RoundedRectangle(cornerRadius: 7)
                                     .fill(Color.white.opacity(0.04))

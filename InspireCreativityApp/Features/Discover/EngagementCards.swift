@@ -48,8 +48,9 @@ struct EngagementMiniCard: View {
                     .frame(height: previewHeight)
                     .overlay(
                         AnimationPreviewRegistry.view(for: item.id)
-                            .clipShape(RoundedRectangle(cornerRadius: 13))
+                            .allowsHitTesting(false)
                     )
+                    .clipShape(RoundedRectangle(cornerRadius: 13))
                     .overlay(
                         RoundedRectangle(cornerRadius: 13)
                             .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
@@ -186,6 +187,8 @@ struct DropCountdownStrip: View {
                 Text(countdownLabel)
                     .font(Theme.Typo.mono(12))
                     .foregroundStyle(.white.opacity(0.6))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
             Spacer(minLength: 8)
 

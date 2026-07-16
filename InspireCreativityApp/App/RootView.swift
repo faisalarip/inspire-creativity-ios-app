@@ -84,6 +84,9 @@ struct RootView: View {
             router.analytics = container.analytics
             container.analytics.track(screen: .discover)
             recordEngagementTick()
+            #if DEBUG
+            applyScreenshotLaunchOverrides()
+            #endif
         }
         .onChange(of: router.selectedTab) { _, tab in
             container.analytics.track(screen: AnalyticsScreen(rawValue: tab.id) ?? .discover)
@@ -129,6 +132,29 @@ struct RootView: View {
     private func paused(unless tab: AppTab) -> Bool {
         router.selectedTab != tab || scenePhase != .active
     }
+
+    #if DEBUG
+    /// Headless-QA hook: `simctl spawn <udid> defaults write <bundle>
+    /// icapp-tab browse` (and/or `icapp-route activity`) before launch lands
+    /// on that tab/route directly. Keys are one-shot — consumed and cleared.
+    /// Debug builds only — no effect on release behavior.
+    private func applyScreenshotLaunchOverrides() {
+        let defaults = UserDefaults.standard
+        if let raw = defaults.string(forKey: "icapp-tab") {
+            defaults.removeObject(forKey: "icapp-tab")
+            if let tab = AppTab(rawValue: raw) { router.selectedTab = tab }
+        }
+        if let route = defaults.string(forKey: "icapp-route") {
+            defaults.removeObject(forKey: "icapp-route")
+            switch route {
+            case "activity": router.push(.activity)
+            case "notifications": router.push(.notificationSettings)
+            case "settings": router.push(.settings)
+            default: break
+            }
+        }
+    }
+    #endif
 
     /// Engagement bookkeeping on every foreground: advance the streak, let
     /// the Activity inbox seed/append its weekly drop entry, and reconcile

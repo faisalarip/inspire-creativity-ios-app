@@ -74,7 +74,17 @@ struct DiscoverView: View {
             await viewModel.reload()
             await container.refreshUsageMockups()
         }
-        .onAppear { viewModel.refreshDerived() }
+        .onAppear {
+            viewModel.refreshDerived()
+            #if DEBUG
+            // Headless-QA hook: `defaults write <bundle> icapp-priming 1`
+            // before launch opens the priming cover (one-shot).
+            if UserDefaults.standard.bool(forKey: "icapp-priming") {
+                UserDefaults.standard.removeObject(forKey: "icapp-priming")
+                showPriming = true
+            }
+            #endif
+        }
         .background(Theme.Palette.background)
         .ignoresSafeArea(edges: .bottom)
         #if os(iOS)

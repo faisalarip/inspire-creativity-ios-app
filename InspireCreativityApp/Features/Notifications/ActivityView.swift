@@ -142,8 +142,9 @@ private struct ActivityRow: View {
                 .frame(width: 46, height: 46)
                 .overlay(
                     AnimationPreviewRegistry.view(for: animationId)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .allowsHitTesting(false)
                 )
+                .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
                         .strokeBorder(Theme.Palette.hairline, lineWidth: 0.5)

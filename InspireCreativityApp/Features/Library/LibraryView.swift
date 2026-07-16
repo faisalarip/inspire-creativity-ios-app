@@ -2,14 +2,20 @@
 //  LibraryView.swift
 //  InspireCreativityApp
 //
+//  v2.0 Library (artboard 09): stats card with streak + weekly activity,
+//  continue row, user collections, owned/favorites tabs and .swift export.
+//  Sign-out lives in Settings.
+//
 
 import SwiftUI
 
 struct LibraryView: View {
 
     @EnvironmentObject private var router: AppRouter
-    @EnvironmentObject private var authStore: AuthStore
     @StateObject private var viewModel: LibraryViewModel
+
+    @State private var showNewCollection = false
+    @State private var newCollectionName = ""
 
     init(viewModel: LibraryViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -21,140 +27,131 @@ struct LibraryView: View {
                 NavHeader(title: "Library", isLarge: true, trailing: {
                     IconButton("gearshape.fill") { router.push(.settings) }
                 })
-                userCard
+
+                LibraryStatsCard(
+                    streak: viewModel.streak,
+                    ownedCount: viewModel.owned.count,
+                    savedCount: viewModel.favorites.count,
+                    isPro: viewModel.isPro,
+                    weekBars: viewModel.weekBars,
+                    copiesThisWeek: viewModel.copiesThisWeek,
+                    onGoPro: { router.push(.paywall(source: "library")) }
+                )
+                .padding(.horizontal, Theme.Spacing.xl)
+
+                if !viewModel.recentItems.isEmpty {
+                    sectionHeader("Pick up where you left off", top: 22)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 12) {
+                            ForEach(viewModel.recentItems) { item in
+                                EngagementMiniCard(item: item, width: 132, previewHeight: 90) {
+                                    router.push(.detail(animationId: item.id))
+                                }
+                            }
+                        }
+                        .padding(.horizontal, Theme.Spacing.xl)
+                    }
+                }
+
+                collectionsShelf
                 tabBar
                 contentGrid
-                if authStore.isAuthenticated { signOutRow }
+
                 Spacer().frame(height: 120)
             }
         }
+        .onAppear { viewModel.refreshStats() }
         .background(Theme.Palette.background)
         .ignoresSafeArea(edges: .bottom)
+        .alert("New collection", isPresented: $showNewCollection) {
+            TextField("Name", text: $newCollectionName)
+            Button("Create") {
+                viewModel.createCollection(named: newCollectionName)
+                newCollectionName = ""
+            }
+            Button("Cancel", role: .cancel) { newCollectionName = "" }
+        } message: {
+            Text("Group animations for a project or an idea.")
+        }
     }
 
-    /// Bottom-of-Library affordance: shows the signed-in email and signs the
-    /// user out on tap. Mirrors the "Go Pro" CTA's pill-on-card look from
-    /// `userCard` so it slots into the existing language.
-    private var signOutRow: some View {
-        Button {
-            Task { await authStore.signOut() }
-        } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(Color.white.opacity(0.05))
-                        .frame(width: 36, height: 36)
-                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.8))
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Sign out")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                    if let email = authStore.session?.user.email {
-                        Text(email)
-                            .font(Theme.Typo.mono(11))
-                            .foregroundStyle(.white.opacity(0.55))
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-                }
+    // MARK: - Collections
+
+    private var collectionsShelf: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .lastTextBaseline) {
+                Text("Collections")
+                    .font(.system(size: 18, weight: .bold))
+                    .tracking(-0.4)
+                    .foregroundStyle(Theme.Palette.textPrimary)
                 Spacer()
-                if authStore.isLoading {
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .tint(.white.opacity(0.6))
-                } else {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.35))
-                }
+                Button("New collection") { showNewCollection = true }
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.accent)
+                    .buttonStyle(.plain)
             }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.white.opacity(0.03))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(Theme.Palette.hairline, lineWidth: 0.5)
-            )
+            .padding(.horizontal, Theme.Spacing.xxl)
+            .padding(.top, 24)
+            .padding(.bottom, 12)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 12) {
+                    ForEach(viewModel.collections) { collection in
+                        CollectionCard(
+                            name: collection.name,
+                            items: Array(viewModel.items(for: collection).prefix(4)),
+                            totalCount: collection.animationIds.count
+                        ) {
+                            router.push(.collection(id: collection.id))
+                        }
+                    }
+                    NewCollectionTile { showNewCollection = true }
+                }
+                .padding(.horizontal, Theme.Spacing.xl)
+            }
         }
-        .buttonStyle(.plain)
-        .disabled(authStore.isLoading)
-        .padding(.horizontal, Theme.Spacing.xl)
-        .padding(.top, Theme.Spacing.xxl)
     }
 
-    private var userCard: some View {
-        HStack(spacing: 12) {
-            Avatar("You Dev", size: 48)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text("Hey, developer")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
-                    if viewModel.isPro { ProBadge() }
-                }
-                Text("\(viewModel.owned.count) owned · \(viewModel.favorites.count) saved")
-                    .font(Theme.Typo.mono(12))
-                    .foregroundStyle(.white.opacity(0.6))
-            }
-            Spacer()
-            if !viewModel.isPro {
-                Button { router.push(.paywall(source: "library")) } label: {
-                    Text("Go Pro")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(Theme.Palette.accent, in: Capsule())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(16)
-        .background(
-            LinearGradient(
-                colors: [
-                    Theme.Palette.accent.opacity(0.18),
-                    Theme.Palette.accent.opacity(0.04)
-                ],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .strokeBorder(Theme.Palette.accent.opacity(0.3), lineWidth: 0.5)
-        )
-        .padding(.horizontal, Theme.Spacing.xl)
-    }
+    // MARK: - Tabs + export
 
     private var tabBar: some View {
-        HStack(spacing: 18) {
-            ForEach(LibraryViewModel.Tab.allCases, id: \.self) { t in
-                let active = viewModel.tab == t
+        HStack(spacing: 0) {
+            ForEach(LibraryViewModel.Tab.allCases, id: \.self) { tab in
+                let active = viewModel.tab == tab
                 Button {
-                    withAnimation(.easeOut(duration: 0.2)) { viewModel.tab = t }
+                    withAnimation(.easeOut(duration: 0.2)) { viewModel.tab = tab }
                 } label: {
-                    VStack(spacing: 4) {
+                    VStack(spacing: 6) {
                         HStack(spacing: 5) {
-                            Text(t.title)
-                                .font(.system(size: 14, weight: .semibold))
+                            Text(tab.title)
+                                .font(.system(size: 15, weight: .semibold))
+                                .tracking(-0.2)
                                 .foregroundStyle(active ? .white : .white.opacity(0.5))
-                            Text("\(count(for: t))")
+                            Text("\(count(for: tab))")
                                 .font(.system(size: 12))
+                                .monospacedDigit()
                                 .foregroundStyle(.white.opacity(0.6))
                         }
                         Rectangle()
                             .fill(active ? Theme.Palette.accent : .clear)
                             .frame(height: 2)
                     }
+                    .fixedSize()
                 }
                 .buttonStyle(.plain)
+                .padding(.trailing, 16)
             }
             Spacer()
+            ShareLink(item: viewModel.exportSnippet, preview: SharePreview("InspireCreativityLibrary.swift")) {
+                HStack(spacing: 5) {
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("Export .swift")
+                        .font(.system(size: 12.5, weight: .semibold))
+                }
+                .foregroundStyle(.white.opacity(0.6))
+            }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, Theme.Spacing.xl)
         .padding(.top, Theme.Spacing.xxl)
@@ -164,9 +161,10 @@ struct LibraryView: View {
         switch tab {
         case .owned: viewModel.owned.count
         case .favorites: viewModel.favorites.count
-        case .recent: viewModel.recent.count
         }
     }
+
+    // MARK: - Grid
 
     @ViewBuilder
     private var contentGrid: some View {
@@ -198,5 +196,17 @@ struct LibraryView: View {
             .padding(.horizontal, Theme.Spacing.xl)
             .padding(.top, 14)
         }
+    }
+
+    // MARK: - Helpers
+
+    private func sectionHeader(_ title: String, top: CGFloat) -> some View {
+        Text(title)
+            .font(.system(size: 18, weight: .bold))
+            .tracking(-0.4)
+            .foregroundStyle(Theme.Palette.textPrimary)
+            .padding(.horizontal, Theme.Spacing.xxl)
+            .padding(.top, top)
+            .padding(.bottom, 12)
     }
 }

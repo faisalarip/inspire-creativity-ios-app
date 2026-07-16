@@ -203,7 +203,11 @@ final class AppContainer: ObservableObject {
         LibraryViewModel(
             repository: animationRepository,
             favoritesRepo: favoritesRepository,
-            purchases: purchaseRepository
+            purchases: purchaseRepository,
+            recents: recentItemsRepository,
+            collectionsRepo: collectionsRepository,
+            streakTracker: streakTracker,
+            copyActivity: copyActivity
         )
     }
 

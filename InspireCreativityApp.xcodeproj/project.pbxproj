@@ -164,6 +164,7 @@
 		6CA2684EF43EF3538B86F82F /* EdgeSwipePageCurlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2D0143ED68FE154478CA0D1 /* EdgeSwipePageCurlView.swift */; };
 		6F9C0DB337CEB48DA881CBBA /* ProBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFDAC0DB5D6B97DE0FF62E14 /* ProBadge.swift */; };
 		6FA34D0C521CFAB49D33AB36 /* DrawerCascadeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D93BA63D315F2243AD0F0332 /* DrawerCascadeView.swift */; };
+		6FA80AD907266610C542DF45 /* LibraryCards.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B49BBED4F020633220C556A /* LibraryCards.swift */; };
 		716516A143CD40E4677767C8 /* DiscoverViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D65677EE6A6F43C385C08B5E /* DiscoverViewModelTests.swift */; };
 		71A70D3B4F4387D6AAA0DE43 /* ParallaxDeckTabsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2C5D267C1B8307996EC393C /* ParallaxDeckTabsView.swift */; };
 		7251799D235F62796DB744F0 /* CopyVanishView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03E43B8E7A3EEE217AECAE71 /* CopyVanishView.swift */; };
@@ -314,6 +315,7 @@
 		DDB674BAB282F7DCB87923DF /* FoldOrigamiView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A36E661CCCAB429513EB7D1 /* FoldOrigamiView.swift */; };
 		DF9E77D66C824AE48D83AE85 /* AnalyticsConsentPrompt.swift in Sources */ = {isa = PBXBuildFile; fileRef = C590609122B848F894D7CF3D /* AnalyticsConsentPrompt.swift */; };
 		E1D4C57176CC4DE980EF5CB9 /* PinchZoomClampFrameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA236CB4B54170FE42765B82 /* PinchZoomClampFrameView.swift */; };
+		E2563300B2AB783F989C8B17 /* LibraryViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C59E80663572B8A053847CDA /* LibraryViewModelTests.swift */; };
 		E2836094B9EDDA91547D9E7B /* CollectionsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D58120A3D6C997C82FDE09D /* CollectionsRepository.swift */; };
 		E2EF9357599D5208B026C981 /* DragSpringNetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1BB250A7600507AEADF09932 /* DragSpringNetView.swift */; };
 		E447257D45F22F4F1AA631D1 /* RotateDialKnobView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D2BC5440216EA187C44C459 /* RotateDialKnobView.swift */; };
@@ -450,6 +452,7 @@
 		3875299303687F2D31FE13C6 /* MagneticSnapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticSnapView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/MagneticSnapView.swift; sourceTree = "<group>"; };
 		3A23C37C54709239F687BCA0 /* ArcFanMenuView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ArcFanMenuView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/ArcFanMenuView.swift; sourceTree = "<group>"; };
 		3AC5A43E55628209613E297E /* AnimationPreviewRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationPreviewRegistry.swift; sourceTree = "<group>"; };
+		3B49BBED4F020633220C556A /* LibraryCards.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LibraryCards.swift; sourceTree = "<group>"; };
 		3EEE673CCC6108989B566198 /* MetaballOrbitView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MetaballOrbitView.swift; path = InspireCreativityApp/Animations/Catalog/Loaders/MetaballOrbitView.swift; sourceTree = "<group>"; };
 		3F1C1FB3ECA59597C3523E39 /* TraceCheckmarkView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = TraceCheckmarkView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/TraceCheckmarkView.swift; sourceTree = "<group>"; };
 		3F895F98C4EA1E4634B15D34 /* RadarLockView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RadarLockView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/RadarLockView.swift; sourceTree = "<group>"; };
@@ -640,6 +643,7 @@
 		C53EA2D434A7B6D73BACA450 /* HexPulseView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HexPulseView.swift; path = InspireCreativityApp/Animations/Catalog/Backgrounds/HexPulseView.swift; sourceTree = "<group>"; };
 		C577F3ECCF2AB402F4D27883 /* FoldAccordionView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FoldAccordionView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/FoldAccordionView.swift; sourceTree = "<group>"; };
 		C590609122B848F894D7CF3D /* AnalyticsConsentPrompt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsConsentPrompt.swift; sourceTree = "<group>"; };
+		C59E80663572B8A053847CDA /* LibraryViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LibraryViewModelTests.swift; sourceTree = "<group>"; };
 		C6B7915621E0B7956B01D868 /* AnimationRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationRepository.swift; sourceTree = "<group>"; };
 		C6BE993E9E2334B96F14EC34 /* ContourTopoView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ContourTopoView.swift; path = InspireCreativityApp/Animations/Catalog/Backgrounds/ContourTopoView.swift; sourceTree = "<group>"; };
 		C7C555A264A71616BA4B00DA /* CrumpleDismissView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CrumpleDismissView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/CrumpleDismissView.swift; sourceTree = "<group>"; };
@@ -872,6 +876,7 @@
 				58278D049C482CFBB9500259 /* LibraryView.swift */,
 				3163399E3EEB394753E8EA26 /* LibraryViewModel.swift */,
 				4C0942D8BA6EBAC3F200E232 /* CollectionDetailView.swift */,
+				3B49BBED4F020633220C556A /* LibraryCards.swift */,
 			);
 			path = Library;
 			sourceTree = "<group>";
@@ -1107,6 +1112,7 @@
 				A25C25AAFFEF4013E1C77C73 /* NotificationPlannerTests.swift */,
 				D65677EE6A6F43C385C08B5E /* DiscoverViewModelTests.swift */,
 				14C0C051808A0C034EE1FD91 /* SearchViewModelTests.swift */,
+				C59E80663572B8A053847CDA /* LibraryViewModelTests.swift */,
 			);
 			path = InspireCreativityAppTests;
 			sourceTree = SOURCE_ROOT;
@@ -1872,6 +1878,7 @@
 				26436F7679A79745EFA42BB6 /* CollectionDetailView.swift in Sources */,
 				0EEA5BD6BAA42D0CFA0B09FB /* EngagementCards.swift in Sources */,
 				58E2168C8230599CE4B9ABF6 /* CategoryCard.swift in Sources */,
+				6FA80AD907266610C542DF45 /* LibraryCards.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1903,6 +1910,7 @@
 				C909AF06FC1A754BA3FAAF7C /* NotificationPlannerTests.swift in Sources */,
 				716516A143CD40E4677767C8 /* DiscoverViewModelTests.swift in Sources */,
 				532E341C9742B1BA8176C43F /* SearchViewModelTests.swift in Sources */,
+				E2563300B2AB783F989C8B17 /* LibraryViewModelTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

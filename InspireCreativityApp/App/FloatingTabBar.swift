@@ -16,6 +16,21 @@ struct FloatingTabBar: View {
         AppTab.allCases.firstIndex(of: selected) ?? 0
     }
 
+    /// Bottom safe-area inset of the key window (34pt on home-indicator
+    /// iPhones, 0 on home-button devices). Used to anchor the pill relative
+    /// to the physical screen edge instead of the safe area.
+    private var bottomSafeInset: CGFloat {
+        #if canImport(UIKit)
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets.bottom ?? 0
+        #else
+        0
+        #endif
+    }
+
     var body: some View {
         GeometryReader { proxy in
             let tabs = AppTab.allCases
@@ -65,7 +80,10 @@ struct FloatingTabBar: View {
         .padding(6)
         .background(liquidGlassPill)
         .padding(.horizontal, 14)
-        .padding(.bottom, 22)
+        // Anchor 22pt above the PHYSICAL screen bottom (per the design), not
+        // above the safe area — otherwise the pill floats ~56pt high on
+        // home-indicator devices. Negative padding extends past the safe line.
+        .padding(.bottom, 22 - bottomSafeInset)
     }
 
     /// Frosted-glass pill: ultraThinMaterial base + layered highlight gradients

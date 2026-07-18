@@ -128,10 +128,19 @@ private struct CollectionPickerSheet: View {
     @State private var query = ""
     @State private var memberIds: Set<String> = []
 
+    /// Default suggestions lead with the hand-crafted flagship set in its
+    /// curated order — the bespoke long tail's synthetic download counts
+    /// would otherwise bury it. Search still spans the whole catalog.
     private var results: [AnimationItem] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard trimmed.isEmpty else { return container.animationRepository.search(trimmed) }
+
         let all = container.animationRepository.all()
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return Array(all.prefix(50)) }
-        return container.animationRepository.search(query)
+        let handcraftedIds = AnimationCatalogSeed.handcrafted.map(\.id)
+        let handcraftedSet = Set(handcraftedIds)
+        let handcrafted = handcraftedIds.compactMap { id in all.first { $0.id == id } }
+        let rest = all.filter { !handcraftedSet.contains($0.id) } // already popularity-sorted
+        return handcrafted + Array(rest.prefix(max(0, 50 - handcrafted.count)))
     }
 
     var body: some View {
@@ -148,6 +157,11 @@ private struct CollectionPickerSheet: View {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(Color(hex: item.tintHex))
                             .frame(width: 34, height: 34)
+                            .overlay(
+                                AnimationPreviewRegistry.view(for: item.id)
+                                    .allowsHitTesting(false)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
                         VStack(alignment: .leading, spacing: 1) {
                             Text(item.name)
                                 .font(.system(size: 15, weight: .medium))

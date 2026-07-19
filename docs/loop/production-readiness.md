@@ -10,10 +10,9 @@ rules at the bottom.
       tests green.
 - [x] **Push `release` to origin** — pushed f3509b4 (iOS suite 188/188,
       macOS build clean).
-- [ ] **Delete dead code left by the v2 redesigns**: `AuroraPackPromoCard`,
-      `CategoryGrid`, `HeroCard` (Discover v1 leftovers, unused on iOS), and
-      the never-triggered `showAuth` sheet in `MacDetailPane`. Remove their
-      pbxproj references too; suite must stay green.
+- [x] **Delete dead code left by the v2 redesigns** — 3 Discover v1 views +
+      pbxproj refs deleted, Mac dead auth sheet + unused authStore removed;
+      188/188 iOS tests, macOS build clean.
 - [ ] **Release-configuration build check**: `xcodebuild -configuration
       Release build` for iOS Simulator AND macOS destinations. Catches
       DEBUG-only code leaking into release (the QA hooks are `#if DEBUG`).

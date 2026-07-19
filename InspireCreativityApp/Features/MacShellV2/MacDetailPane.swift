@@ -19,7 +19,6 @@ struct MacDetailPane: View {
     // MARK: Dependencies & state
 
     @EnvironmentObject private var container: AppContainer
-    @EnvironmentObject private var authStore: AuthStore
     @StateObject private var viewModel: DetailViewModel
 
     let onClose: () -> Void
@@ -27,7 +26,6 @@ struct MacDetailPane: View {
     @State private var tab: DetailTab = .code
     @State private var replay: Int = 0
     @State private var showExporter = false
-    @State private var showAuth = false
     @State private var showPaywall = false
     @State private var showInteractHint = false
 
@@ -76,13 +74,6 @@ struct MacDetailPane: View {
             contentType: .swiftSource,
             defaultFilename: SwiftSnippet.fileName(for: viewModel.item.name)
         ) { _ in }
-        .sheet(isPresented: $showAuth) {
-            AuthGateView()
-                .environmentObject(container)
-                .environmentObject(authStore)
-                .environmentObject(container.store)
-                .frame(minWidth: 480, minHeight: 620)
-        }
         .sheet(isPresented: $showPaywall) {
             PaywallView(viewModel: container.makePaywallViewModel(source: "detail",
                                                                    animationId: viewModel.item.id))
@@ -93,9 +84,6 @@ struct MacDetailPane: View {
                 // bypasses `AppRouter`, so it never gets the `.paywall`
                 // screen_view that `AppRouter.push(.paywall)` gives iOS.
                 .onAppear { container.analytics.track(screen: .paywall) }
-        }
-        .onChange(of: authStore.isAuthenticated) { _, isAuth in
-            if isAuth { showAuth = false }
         }
     }
 

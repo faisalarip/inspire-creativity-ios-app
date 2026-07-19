@@ -53,7 +53,6 @@
 		264D4A1501D2EF7473C47B20 /* DiscoverViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D963BA9E43E798515A542B5 /* DiscoverViewModel.swift */; };
 		2713BF7750B64A4DF4CBCAFD /* SegmentRelayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DBEBA4CD684E037EE77F3D3 /* SegmentRelayView.swift */; };
 		27A7FA34CCF784A8F25719EC /* OrigamiUnfoldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A100CEB36FEB8C7A5971894 /* OrigamiUnfoldView.swift */; };
-		286DBB862F7E1710ED61B00B /* HeroCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = F884AF643F2A03F7498F3EDB /* HeroCard.swift */; };
 		2A14F7E3D0F75DE96523090E /* TactileCounterFlipView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED8D2CDA1B143FCF2DE93116 /* TactileCounterFlipView.swift */; };
 		2A3AE5E3E497B9E555CCEFC7 /* PermissionBellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E196A223AFD846500215A007 /* PermissionBellView.swift */; };
 		2AB5B81541A250ADF7745D6F /* PaperTearView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8CA694332C3772500A8F7FC /* PaperTearView.swift */; };
@@ -177,7 +176,6 @@
 		773989FB27FECB7B4C20D8A6 /* PasswordRevealView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11D639D3E2ACF3F0A590460A /* PasswordRevealView.swift */; };
 		7A1C0DE5B0F1CA7E90AB0001 /* BrowseFilterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1C0DE5B0F1CA7E90AB0002 /* BrowseFilterTests.swift */; };
 		7A53B8AB13B29BD3DE09227B /* CrtPoweronView.metal in Sources */ = {isa = PBXBuildFile; fileRef = 460ACA8577787CA9D59F21BE /* CrtPoweronView.metal */; };
-		7A57DC411B958841D94C22F2 /* AuroraPackPromoCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5E732010C44DA939BEC3410 /* AuroraPackPromoCard.swift */; };
 		7C8CFAC4345B7567953C3B44 /* OrbitalElectronsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6834515DAF4692A737C5E7BA /* OrbitalElectronsView.swift */; };
 		7EBE9543F171A332F5B3F04B /* CrumpleDismissView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7C555A264A71616BA4B00DA /* CrumpleDismissView.swift */; };
 		7F8EAE332EAA03712E4CB743 /* GenieWarpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25E0A8D421B3F17211AAD853 /* GenieWarpView.swift */; };
@@ -257,7 +255,6 @@
 		B253C666E90DE728E000018F /* HeatMirageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC940BBE4EFB42C2419D0663 /* HeatMirageView.swift */; };
 		B2BE6AE1EAA23599EC65CA94 /* FavoriteFoldView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1CE6F322EE6F5D423B3D96C /* FavoriteFoldView.swift */; };
 		B2C3D4E5F6A7B8C9D0E1F2A3 /* PlatformClipboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E1F2 /* PlatformClipboard.swift */; };
-		B2ECDB2D751F5BC191A879FA /* CategoryGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37A5D643CFF4A20D9F882776 /* CategoryGrid.swift */; };
 		B49EE392275D1C17141F9B3B /* BespokeCodeSamples.swift in Sources */ = {isa = PBXBuildFile; fileRef = 542300F6DC63037D47410903 /* BespokeCodeSamples.swift */; };
 		B5B1D875229546F7810DB327 /* InteractHintToast.swift in Sources */ = {isa = PBXBuildFile; fileRef = F102DC731BBA4B33ACF52874 /* InteractHintToast.swift */; };
 		B6E3D4A9B26724AA77015DC1 /* HoldChargeBurstView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACCF4D0ECA9616FDD5417407 /* HoldChargeBurstView.swift */; };
@@ -446,7 +443,6 @@
 		35DE3676A652D400305A48E0 /* WormPagerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = WormPagerView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/WormPagerView.swift; sourceTree = "<group>"; };
 		361E22506EB084BF5ED5B712 /* MockURLProtocol.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MockURLProtocol.swift; sourceTree = "<group>"; };
 		36498B19B74C27B418AF59AA /* DragRopeBridgeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DragRopeBridgeView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/DragRopeBridgeView.swift; sourceTree = "<group>"; };
-		37A5D643CFF4A20D9F882776 /* CategoryGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryGrid.swift; sourceTree = "<group>"; };
 		37B17C1A4FB14000B84557F8 /* MacCategoryGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCategoryGridView.swift; sourceTree = "<group>"; };
 		382C8889FB11F1F8A88D4523 /* Badges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Badges.swift; sourceTree = "<group>"; };
 		3875299303687F2D31FE13C6 /* MagneticSnapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticSnapView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/MagneticSnapView.swift; sourceTree = "<group>"; };
@@ -597,7 +593,6 @@
 		A3D86A2772663765B1B8AD1C /* SocialAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialAuthService.swift; sourceTree = "<group>"; };
 		A4AC11CDBAA8E77E84AD513D /* ElasticSlingView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ElasticSlingView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/ElasticSlingView.swift; sourceTree = "<group>"; };
 		A5A83D5F49BE5AA451EC3AC1 /* FlingPinballBumpersView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FlingPinballBumpersView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/FlingPinballBumpersView.swift; sourceTree = "<group>"; };
-		A5E732010C44DA939BEC3410 /* AuroraPackPromoCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuroraPackPromoCard.swift; sourceTree = "<group>"; };
 		A7059F20C7075324D67766B7 /* SplitFlapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SplitFlapView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/SplitFlapView.swift; sourceTree = "<group>"; };
 		A7B3C1055F9F37F5F69622FA /* NeonFlickerView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NeonFlickerView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/NeonFlickerView.swift; sourceTree = "<group>"; };
 		A95644011F2EB7F2977266E8 /* FerrofluidDotsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FerrofluidDotsView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/FerrofluidDotsView.swift; sourceTree = "<group>"; };
@@ -712,7 +707,6 @@
 		F5A8F8FA0EC263CB7376970F /* AnalyticsUserPropertyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AnalyticsUserPropertyTests.swift; path = AnalyticsUserPropertyTests.swift; sourceTree = "<group>"; };
 		F76047B384240EC245DAFF19 /* SandPourView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SandPourView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/SandPourView.swift; sourceTree = "<group>"; };
 		F80BAC9D3634440B0DCFF3BA /* PagePeelView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PagePeelView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/PagePeelView.swift; sourceTree = "<group>"; };
-		F884AF643F2A03F7498F3EDB /* HeroCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeroCard.swift; sourceTree = "<group>"; };
 		FA236CB4B54170FE42765B82 /* PinchZoomClampFrameView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = PinchZoomClampFrameView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/PinchZoomClampFrameView.swift; sourceTree = "<group>"; };
 		FCDFAA623C062EC44FE48AC7 /* InspireCreativityApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = InspireCreativityApp.entitlements; sourceTree = "<group>"; };
 		FDA308513D84255C3951D32D /* AuthValidationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AuthValidationTests.swift; sourceTree = "<group>"; };
@@ -773,11 +767,8 @@
 		1F20AD2F7BD05DCEFDE668A8 /* Discover */ = {
 			isa = PBXGroup;
 			children = (
-				A5E732010C44DA939BEC3410 /* AuroraPackPromoCard.swift */,
-				37A5D643CFF4A20D9F882776 /* CategoryGrid.swift */,
 				893DC8EF73079679BF69D22C /* DiscoverView.swift */,
 				0D963BA9E43E798515A542B5 /* DiscoverViewModel.swift */,
-				F884AF643F2A03F7498F3EDB /* HeroCard.swift */,
 				888ED99B6D5D54782B95B9D8 /* EngagementCards.swift */,
 			);
 			path = Discover;
@@ -1597,11 +1588,8 @@
 				B5B1D875229546F7810DB327 /* InteractHintToast.swift in Sources */,
 				3773A8858A77E31B48690156 /* DetailViewModel.swift in Sources */,
 				D9228AAF0A58561B817A2656 /* SwiftCodeView.swift in Sources */,
-				7A57DC411B958841D94C22F2 /* AuroraPackPromoCard.swift in Sources */,
-				B2ECDB2D751F5BC191A879FA /* CategoryGrid.swift in Sources */,
 				4140C967EE4E9BF92787B86B /* DiscoverView.swift in Sources */,
 				264D4A1501D2EF7473C47B20 /* DiscoverViewModel.swift in Sources */,
-				286DBB862F7E1710ED61B00B /* HeroCard.swift in Sources */,
 				1B82D24D5432F8745F7F6C85 /* LibraryView.swift in Sources */,
 				118A221E902084EBD76BE426 /* LibraryViewModel.swift in Sources */,
 				010F31D9BABD385D1A9CEA70 /* PaywallView.swift in Sources */,

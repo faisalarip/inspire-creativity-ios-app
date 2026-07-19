@@ -33,7 +33,8 @@ struct DetailView: View {
         CodeAccess.evaluate(itemIsPro: viewModel.item.isPro,
                             hasProEntitlement: viewModel.hasPro)
     }
-    private var canViewCode: Bool { access == .granted }
+    /// Granted access, or a Pro item unlocked with a metered copy this week.
+    private var canViewCode: Bool { access == .granted || viewModel.meterUnlocked }
 
     init(viewModel: DetailViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -125,12 +126,20 @@ struct DetailView: View {
                         fileName: filename + ".swift",
                         source: viewModel.code,
                         locked: !canViewCode,
-                        lockTitle: "Preview is limited",
-                        lockCTA: "Unlock to view full code",
+                        lockTitle: viewModel.meterRemaining > 0
+                            ? "You have \(viewModel.meterRemaining) free Pro \(viewModel.meterRemaining == 1 ? "copy" : "copies") this week"
+                            : "Preview is limited",
+                        lockCTA: viewModel.meterRemaining > 0
+                            ? "Use 1 free Pro copy"
+                            : "Unlock to view full code",
                         onUnlock: {
                             viewModel.logCodeUnlockAttempt(access)
-                            if access == .needsPro {
-                                router.push(.paywall(source: "detail",
+                            guard access == .needsPro else { return }
+                            // Meter first: unlock in place while copies remain;
+                            // the paywall fires only at exhaustion (source
+                            // "meter" — the highest-intent trigger we have).
+                            if !viewModel.redeemMeterCopy() {
+                                router.push(.paywall(source: "meter",
                                                      animationId: viewModel.item.id))
                             }
                         },
@@ -253,7 +262,19 @@ struct DetailView: View {
 
     @ViewBuilder
     private var ctaButton: some View {
-        if viewModel.isOwned {
+        if viewModel.meterUnlocked, !viewModel.isOwned {
+            // Unlocked with a metered copy — same payoff hint as owned items.
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Theme.Palette.success)
+                Text("Unlocked with a free Pro copy — drag up for the code")
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.85))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
+        } else if viewModel.isOwned {
             // No dead button — the code lives in the sheet below. Just a hint.
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
@@ -268,26 +289,35 @@ struct DetailView: View {
             .padding(.vertical, 14)
             .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
         } else {
-            Button {
-                router.push(.paywall(source: "detail", animationId: viewModel.item.id))
-            } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "lock.fill")
-                    Text("Unlock everything with Pro")
+            VStack(spacing: 8) {
+                Button {
+                    router.push(.paywall(source: "detail", animationId: viewModel.item.id))
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "lock.fill")
+                        Text("Unlock everything with Pro")
+                    }
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Color(red: 0x1A / 255, green: 0x0E / 255, blue: 0))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        LinearGradient(
+                            colors: [Theme.Palette.proGoldStart, Theme.Palette.proGoldEnd],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        ),
+                        in: RoundedRectangle(cornerRadius: 14)
+                    )
                 }
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color(red: 0x1A / 255, green: 0x0E / 255, blue: 0))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(
-                    LinearGradient(
-                        colors: [Theme.Palette.proGoldStart, Theme.Palette.proGoldEnd],
-                        startPoint: .topLeading, endPoint: .bottomTrailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 14)
-                )
+                .buttonStyle(.plain)
+
+                if viewModel.meterRemaining > 0 {
+                    Text("or drag up and use 1 of your \(viewModel.meterRemaining) free Pro \(viewModel.meterRemaining == 1 ? "copy" : "copies") this week")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .frame(maxWidth: .infinity)
+                }
             }
-            .buttonStyle(.plain)
         }
     }
 }

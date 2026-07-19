@@ -36,6 +36,8 @@ enum AnalyticsEvent: Equatable {
     case notificationPermission(granted: Bool)
     case restoreFailed(source: String, reason: String)
     case pricingUnavailable(source: String)
+    case meterCopyUsed(animationId: String, remaining: Int)
+    case meterExhausted(animationId: String)
 
     var name: String {
         switch self {
@@ -57,6 +59,8 @@ enum AnalyticsEvent: Equatable {
         case .notificationPermission: return "notification_permission"
         case .restoreFailed:      return "restore_failed"
         case .pricingUnavailable: return "pricing_unavailable"
+        case .meterCopyUsed:      return "meter_copy_used"
+        case .meterExhausted:     return "meter_exhausted"
         }
     }
 
@@ -104,6 +108,10 @@ enum AnalyticsEvent: Equatable {
             return ["source": source, "reason": reason]
         case let .pricingUnavailable(source):
             return ["source": source]
+        case let .meterCopyUsed(animationId, remaining):
+            return ["animation_id": animationId, "remaining": remaining]
+        case let .meterExhausted(animationId):
+            return ["animation_id": animationId]
         }
     }
 }

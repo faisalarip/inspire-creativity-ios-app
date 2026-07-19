@@ -19,6 +19,8 @@ final class AnalyticsEventTests: XCTestCase {
             .signIn(method: "apple"),
             .restoreFailed(source: "detail", reason: "no_purchases"),
             .pricingUnavailable(source: "library"),
+            .meterCopyUsed(animationId: "aurora-mesh", remaining: 2),
+            .meterExhausted(animationId: "aurora-mesh"),
             .auroraPromoTap
         ]
         for event in events {

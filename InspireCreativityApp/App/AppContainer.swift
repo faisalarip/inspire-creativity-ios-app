@@ -28,6 +28,7 @@ final class AppContainer: ObservableObject {
     let collectionsRepository: CollectionsRepositoryProtocol = CollectionsRepository()
     let activityRepository: ActivityRepositoryProtocol = ActivityRepository()
     let recentSearches = RecentSearchesStore()
+    let proCopyMeter = ProCopyMeter()
     let notificationCoordinator: NotificationCoordinator
     /// StoreKit 2 entitlement authority. Also vended directly to the paywall
     /// and Settings (for products / restore). `purchaseRepository` is this
@@ -219,7 +220,8 @@ final class AppContainer: ObservableObject {
             analytics: analytics,
             journeyMetrics: journeyMetrics,
             recents: recentItemsRepository,
-            copyActivity: copyActivity
+            copyActivity: copyActivity,
+            meter: proCopyMeter
         )
     }
 

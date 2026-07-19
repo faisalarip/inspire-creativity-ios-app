@@ -65,6 +65,13 @@ enum EngagementSchedule {
         return (0..<4).map { free[(start + $0) % free.count] }
     }
 
+    /// Identifies the drop period (Friday 08:00 → next Friday 08:00) that
+    /// `date` falls in. Stable within a period, changes exactly at the drop —
+    /// used by the Pro-copy meter so allowances reset with the Friday Drop.
+    static func dropPeriodSeed(for date: Date, calendar: Calendar) -> Int {
+        Int(nextDrop(after: date, calendar: calendar).timeIntervalSince1970)
+    }
+
     /// Days until the weekly challenge closes (Sunday): "3d left" / "ends today".
     static func challengeDaysLeftLabel(from date: Date, calendar: Calendar) -> String {
         guard calendar.component(.weekday, from: date) != 1 else { return "ends today" }

@@ -53,6 +53,9 @@ final class DetailViewModel: ObservableObject {
     /// Optional engagement hooks (nil in previews/tests that don't care).
     private let recents: RecentItemsRepositoryProtocol?
     private let copyActivity: CopyActivityStore?
+    /// v2.1 metering: a few free Pro copies per drop week (nil = no metering,
+    /// e.g. the Mac shell until it adopts the meter UI).
+    private let meter: ProCopyMeter?
     private var cancellables: Set<AnyCancellable> = []
     /// Guards `markViewed()` so the view event fires once per real
     /// presentation, not once per view-model instance that happens to be
@@ -67,7 +70,8 @@ final class DetailViewModel: ObservableObject {
         analytics: AnalyticsTracking = NoOpAnalyticsTracker(),
         journeyMetrics: JourneyMetrics = JourneyMetrics(),
         recents: RecentItemsRepositoryProtocol? = nil,
-        copyActivity: CopyActivityStore? = nil
+        copyActivity: CopyActivityStore? = nil,
+        meter: ProCopyMeter? = nil
     ) {
         // Resolve the item once (fall back to featured for unknown ids), assign
         // stored props, then wire bindings unconditionally so the detail screen
@@ -80,6 +84,7 @@ final class DetailViewModel: ObservableObject {
         self.journeyMetrics = journeyMetrics
         self.recents = recents
         self.copyActivity = copyActivity
+        self.meter = meter
         self.isFavorited = favorites.isFavorite(resolved.id)
         self.isOwned = purchases.isOwned(resolved.id, freeOverride: resolved.isFree)
         self.hasPro = purchases.isPro
@@ -103,6 +108,36 @@ final class DetailViewModel: ObservableObject {
         purchases.isProPublisher
             .receive(on: DispatchQueue.main)
             .assign(to: &$hasPro)
+
+        refreshMeter()
+    }
+
+    // MARK: Pro-copy meter
+
+    /// Pro copies left this drop week (0 when metering is off or irrelevant).
+    @Published private(set) var meterRemaining = 0
+    /// True when THIS Pro item was unlocked with a metered copy this week.
+    @Published private(set) var meterUnlocked = false
+
+    private func refreshMeter() {
+        guard let meter, item.isPro else { return }
+        meterRemaining = meter.remaining()
+        meterUnlocked = meter.isRedeemed(item.id)
+    }
+
+    /// Unlocks this Pro item with one metered copy. Returns false when the
+    /// meter is spent — the caller routes to the paywall (source "meter",
+    /// the highest-intent moment in the funnel).
+    @discardableResult
+    func redeemMeterCopy() -> Bool {
+        guard let meter, item.isPro, !hasPro else { return false }
+        if meter.redeem(item.id) {
+            analytics.log(.meterCopyUsed(animationId: item.id, remaining: meter.remaining()))
+            refreshMeter()
+            return true
+        }
+        analytics.log(.meterExhausted(animationId: item.id))
+        return false
     }
 
     /// Logs the animation view + records it for journey metrics, exactly once per

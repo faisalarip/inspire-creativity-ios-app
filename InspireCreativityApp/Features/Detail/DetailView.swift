@@ -183,9 +183,14 @@ struct DetailView: View {
     /// sharing can't bypass the Pro paywall.
     private var shareText: String {
         if canViewCode {
-            return "\(viewModel.item.name) — a SwiftUI animation from InspireCreativity\n\n\(viewModel.code)"
+            return """
+            \(viewModel.item.name) — a SwiftUI animation from Inspire Creativity
+            \(AppLinks.appStoreURL.absoluteString)
+
+            \(viewModel.code)
+            """
         } else {
-            return "Check out \"\(viewModel.item.name)\" — a hand-crafted SwiftUI animation in InspireCreativity."
+            return "Check out “\(viewModel.item.name)” — a hand-crafted SwiftUI animation in Inspire Creativity. \(AppLinks.appStoreURL.absoluteString)"
         }
     }
 

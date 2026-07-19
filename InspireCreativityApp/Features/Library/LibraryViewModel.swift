@@ -147,6 +147,7 @@ final class LibraryViewModel: ObservableObject {
         //
         //  InspireCreativityLibrary.swift
         //  Exported from Inspire Creativity — \(exportable.count) animation\(exportable.count == 1 ? "" : "s")
+        //  \(AppLinks.appStoreURL.absoluteString)
         //
         """
         return SwiftSnippet(

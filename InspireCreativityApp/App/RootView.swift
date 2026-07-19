@@ -49,6 +49,7 @@ struct RootView: View {
     @EnvironmentObject private var store: StoreManager
     @StateObject private var router = AppRouter()
     @Environment(\.scenePhase) private var scenePhase
+    @State private var showOnboarding = false
 
     var body: some View {
         // Browsing the catalog never requires an account (Guideline 5.1.1).
@@ -84,10 +85,16 @@ struct RootView: View {
             router.analytics = container.analytics
             container.analytics.track(screen: .discover)
             recordEngagementTick()
+            showOnboarding = !container.onboardingPreferences.isCompleted
             #if DEBUG
             applyScreenshotLaunchOverrides()
             #endif
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $showOnboarding) { OnboardingView() }
+        #else
+        .sheet(isPresented: $showOnboarding) { OnboardingView() }
+        #endif
         .onChange(of: router.selectedTab) { _, tab in
             container.analytics.track(screen: AnalyticsScreen(rawValue: tab.id) ?? .discover)
         }
@@ -140,6 +147,10 @@ struct RootView: View {
     /// Debug builds only — no effect on release behavior.
     private func applyScreenshotLaunchOverrides() {
         let defaults = UserDefaults.standard
+        if defaults.bool(forKey: "icapp-onboarding") {
+            defaults.removeObject(forKey: "icapp-onboarding")
+            showOnboarding = true
+        }
         if let raw = defaults.string(forKey: "icapp-tab") {
             defaults.removeObject(forKey: "icapp-tab")
             if let tab = AppTab(rawValue: raw) { router.selectedTab = tab }

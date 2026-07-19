@@ -21,6 +21,7 @@ final class AnalyticsEventTests: XCTestCase {
             .pricingUnavailable(source: "library"),
             .meterCopyUsed(animationId: "aurora-mesh", remaining: 2),
             .meterExhausted(animationId: "aurora-mesh"),
+            .onboardingCompleted(categoriesCount: 3),
             .auroraPromoTap
         ]
         for event in events {

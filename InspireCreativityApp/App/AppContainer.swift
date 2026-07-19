@@ -29,6 +29,7 @@ final class AppContainer: ObservableObject {
     let activityRepository: ActivityRepositoryProtocol = ActivityRepository()
     let recentSearches = RecentSearchesStore()
     let proCopyMeter = ProCopyMeter()
+    let onboardingPreferences = OnboardingPreferences()
     let notificationCoordinator: NotificationCoordinator
     /// StoreKit 2 entitlement authority. Also vended directly to the paywall
     /// and Settings (for products / restore). `purchaseRepository` is this
@@ -182,7 +183,8 @@ final class AppContainer: ObservableObject {
             streakTracker: streakTracker,
             activity: activityRepository,
             copyActivity: copyActivity,
-            analytics: analytics
+            analytics: analytics,
+            onboarding: onboardingPreferences
         )
     }
 
@@ -243,6 +245,9 @@ final class AppContainer: ObservableObject {
 /// Legal pages are hosted free on GitHub Pages (public repo `inspirecreativity-legal`).
 /// Swap these for a custom domain later if you register one.
 enum AppLinks {
+    /// Public App Store page (app id from App Store Connect) — appended to
+    /// shared snippets so every share is an acquisition surface.
+    static let appStoreURL = URL(string: "https://apps.apple.com/app/id6778075297")!
     static let privacyURL = URL(string: "https://faisalarip.github.io/inspirecreativity-legal/privacy/")!
     static let termsURL   = URL(string: "https://faisalarip.github.io/inspirecreativity-legal/terms/")!
     static let supportEmail = "faisalarip10@gmail.com"

@@ -38,6 +38,7 @@ enum AnalyticsEvent: Equatable {
     case pricingUnavailable(source: String)
     case meterCopyUsed(animationId: String, remaining: Int)
     case meterExhausted(animationId: String)
+    case onboardingCompleted(categoriesCount: Int)
 
     var name: String {
         switch self {
@@ -61,6 +62,7 @@ enum AnalyticsEvent: Equatable {
         case .pricingUnavailable: return "pricing_unavailable"
         case .meterCopyUsed:      return "meter_copy_used"
         case .meterExhausted:     return "meter_exhausted"
+        case .onboardingCompleted: return "onboarding_completed"
         }
     }
 
@@ -112,6 +114,8 @@ enum AnalyticsEvent: Equatable {
             return ["animation_id": animationId, "remaining": remaining]
         case let .meterExhausted(animationId):
             return ["animation_id": animationId]
+        case let .onboardingCompleted(categoriesCount):
+            return ["categories_count": categoriesCount]
         }
     }
 }

@@ -31,6 +31,8 @@ final class DiscoverViewModel: ObservableObject {
     private let activity: ActivityRepositoryProtocol
     private let copyActivity: CopyActivityStore
     private let analytics: AnalyticsTracking
+    /// First-run category picks; nil or empty → global curation.
+    private let onboarding: OnboardingPreferences?
     private let defaults: UserDefaults
     private let calendar: Calendar
     private let now: () -> Date
@@ -48,6 +50,7 @@ final class DiscoverViewModel: ObservableObject {
         activity: ActivityRepositoryProtocol,
         copyActivity: CopyActivityStore,
         analytics: AnalyticsTracking = NoOpAnalyticsTracker(),
+        onboarding: OnboardingPreferences? = nil,
         defaults: UserDefaults = .standard,
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init
@@ -58,6 +61,7 @@ final class DiscoverViewModel: ObservableObject {
         self.activity = activity
         self.copyActivity = copyActivity
         self.analytics = analytics
+        self.onboarding = onboarding
         self.defaults = defaults
         self.calendar = calendar
         self.now = now
@@ -83,6 +87,10 @@ final class DiscoverViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.refreshDerived() }
             .store(in: &cancellables)
+
+        onboarding?.didChange
+            .sink { [weak self] in self?.refreshDerived() }
+            .store(in: &cancellables)
     }
 
     /// Recomputes every date-derived section. Called at init, on catalog
@@ -97,7 +105,18 @@ final class DiscoverViewModel: ObservableObject {
         challengeDaysLeft = EngagementSchedule.challengeDaysLeftLabel(from: date, calendar: calendar)
         challengeJoined = defaults.bool(forKey: challengeKey)
         freeThisWeek = EngagementSchedule.freeThisWeek(from: all, on: date, calendar: calendar)
-        trending = repository.trending()
+        // Personalized trending: bias toward the categories picked at
+        // onboarding; fall back to the global curated row.
+        let picks = onboarding?.categories ?? []
+        if picks.isEmpty {
+            trending = repository.trending()
+        } else {
+            trending = Array(
+                all.filter { picks.contains($0.category) }
+                    .sorted { $0.downloads > $1.downloads }
+                    .prefix(8)
+            )
+        }
         streak = streakTracker.current
         unreadCount = activity.unreadCount
     }

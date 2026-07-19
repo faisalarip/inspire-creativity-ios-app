@@ -43,7 +43,7 @@ struct MacDetailPane: View {
         )
     }
 
-    private var canViewCode: Bool { access == .granted }
+    private var canViewCode: Bool { access == .granted || viewModel.meterUnlocked }
 
     // MARK: - Body
 
@@ -185,9 +185,13 @@ struct MacDetailPane: View {
                 }
             }
         } else {
-            LockedCodePanel(access: access) {
+            LockedCodePanel(meterRemaining: viewModel.meterRemaining) {
                 viewModel.logCodeUnlockAttempt(access)
-                showPaywall = true
+                // Meter parity with iOS: unlock in place while copies remain,
+                // paywall only at exhaustion.
+                if !viewModel.redeemMeterCopy() {
+                    showPaywall = true
+                }
             }
         }
     }
@@ -430,7 +434,7 @@ private struct ActionBarButton: View {
 // ── Locked code panel ─────────────────────────────────────────────────────────
 
 private struct LockedCodePanel: View {
-    let access: CodeAccess
+    let meterRemaining: Int
     let onCTA: () -> Void
 
     var body: some View {
@@ -438,8 +442,13 @@ private struct LockedCodePanel: View {
             Image(systemName: "lock.fill")
                 .font(.system(size: 40))
                 .foregroundStyle(.secondary)
+            if meterRemaining > 0 {
+                Text("You have \(meterRemaining) free Pro \(meterRemaining == 1 ? "copy" : "copies") this week")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
             Button(action: onCTA) {
-                Text("Unlock with Pro")
+                Text(meterRemaining > 0 ? "Use 1 free Pro copy" : "Unlock with Pro")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)

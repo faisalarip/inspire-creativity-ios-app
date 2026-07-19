@@ -168,6 +168,7 @@ final class PaywallViewModel: ObservableObject {
 
     func restore() async {
         errorMessage = nil
+        recoveryHint = nil
         isPurchasing = true
         defer { isPurchasing = false }
         do {

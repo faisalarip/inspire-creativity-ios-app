@@ -22,6 +22,7 @@ struct PaywallView: View {
                 pitch
                 features
                 planPicker
+                priceAnchor
                 cta
                 disclaimer
             }
@@ -31,7 +32,8 @@ struct PaywallView: View {
             if done { dismiss() }
         }
         .onAppear {
-            container.analytics.log(.paywallViewed(source: viewModel.source))
+            container.analytics.log(.paywallViewed(source: viewModel.source,
+                                                   animationId: viewModel.contextItem?.id))
             viewModel.markAppeared()
         }
         .onDisappear {
@@ -51,24 +53,55 @@ struct PaywallView: View {
             .frame(height: 260)
             .ignoresSafeArea(edges: .top)
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3),
-                      spacing: 6) {
-                ForEach([
-                    "aurora-mesh", "hologram-card", "liquid-heart",
-                    "morphing-fab", "aurora-borealis", "elastic-tabs"
-                ], id: \.self) { id in
-                    ZStack {
-                        Color.black
-                        AnimationPreviewRegistry.view(for: id)
+            if let item = viewModel.contextItem {
+                // Contextual hero: the exact animation the user tried to
+                // unlock, live, with its name — sell that, not a mood board.
+                ZStack(alignment: .bottomLeading) {
+                    Color(hex: item.tintHex)
+                    AnimationPreviewRegistry.view(for: item.id)
+                        .allowsHitTesting(false)
+                    LinearGradient(
+                        colors: [.clear, .black.opacity(0.72)],
+                        startPoint: .center, endPoint: .bottom
+                    )
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.name)
+                            .font(.system(size: 22, weight: .heavy))
+                            .foregroundStyle(.white)
+                        Text("Unlock this — and every other Pro animation.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.white.opacity(0.75))
                     }
-                    .frame(height: 60)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .opacity(0.6)
+                    .padding(14)
                 }
+                .frame(height: 200)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.5)
+                )
+                .padding(.horizontal, 16)
+                .padding(.top, 52)
+            } else {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3),
+                          spacing: 6) {
+                    ForEach([
+                        "aurora-mesh", "hologram-card", "liquid-heart",
+                        "morphing-fab", "aurora-borealis", "elastic-tabs"
+                    ], id: \.self) { id in
+                        ZStack {
+                            Color.black
+                            AnimationPreviewRegistry.view(for: id)
+                        }
+                        .frame(height: 60)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .opacity(0.6)
+                    }
+                }
+                .padding(8)
+                .frame(height: 260)
+                .ignoresSafeArea(edges: .top)
             }
-            .padding(8)
-            .frame(height: 260)
-            .ignoresSafeArea(edges: .top)
 
             LinearGradient(
                 colors: [.clear, Theme.Palette.background],
@@ -124,7 +157,9 @@ struct PaywallView: View {
                 .lineSpacing(2)
         }
         .padding(.horizontal, 24)
-        .padding(.top, -20)
+        // The gradient hero fades out, so the pitch overlaps it (-20); the
+        // contextual hero is a solid card, so give it breathing room instead.
+        .padding(.top, viewModel.contextItem == nil ? -20 : 14)
     }
 
     private var features: some View {
@@ -204,6 +239,21 @@ struct PaywallView: View {
         }
     }
 
+    /// Honest anchor under the price: live StoreKit price ÷ real catalog
+    /// count, plus the anti-subscription framing (strongest asset for
+    /// subscription-fatigued devs). Nil until products load.
+    @ViewBuilder
+    private var priceAnchor: some View {
+        if let anchor = viewModel.perAnimationAnchor {
+            Text(anchor)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(Theme.Palette.success)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 10)
+                .padding(.horizontal, 24)
+        }
+    }
+
     @ViewBuilder
     private var cta: some View {
         VStack(spacing: 10) {
@@ -211,6 +261,13 @@ struct PaywallView: View {
                 Text(message)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Color(red: 1.0, green: 0.5, blue: 0.5))
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+            if let hint = viewModel.recoveryHint {
+                Text(hint)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.65))
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
             }

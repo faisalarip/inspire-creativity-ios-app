@@ -41,8 +41,7 @@ struct MacDetailPane: View {
     private var access: CodeAccess {
         CodeAccess.evaluate(
             itemIsPro: viewModel.item.isPro,
-            hasProEntitlement: viewModel.hasPro,
-            isAuthenticated: authStore.isAuthenticated
+            hasProEntitlement: viewModel.hasPro
         )
     }
 
@@ -85,7 +84,8 @@ struct MacDetailPane: View {
                 .frame(minWidth: 480, minHeight: 620)
         }
         .sheet(isPresented: $showPaywall) {
-            PaywallView(viewModel: container.makePaywallViewModel(source: "detail"))
+            PaywallView(viewModel: container.makePaywallViewModel(source: "detail",
+                                                                   animationId: viewModel.item.id))
                 .environmentObject(container)
                 .environmentObject(container.store)
                 .frame(minWidth: 520, minHeight: 640)
@@ -199,8 +199,7 @@ struct MacDetailPane: View {
         } else {
             LockedCodePanel(access: access) {
                 viewModel.logCodeUnlockAttempt(access)
-                if access == .needsSignIn { showAuth = true }
-                else { showPaywall = true }
+                showPaywall = true
             }
         }
     }
@@ -452,7 +451,7 @@ private struct LockedCodePanel: View {
                 .font(.system(size: 40))
                 .foregroundStyle(.secondary)
             Button(action: onCTA) {
-                Text(access == .needsPro ? "Unlock with Pro" : "Sign in to view the code")
+                Text("Unlock with Pro")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)

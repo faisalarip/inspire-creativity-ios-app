@@ -15,7 +15,6 @@ struct DetailView: View {
 
     @State private var sheet: SheetState = .peek
     @State private var dragOffset: CGFloat = 0
-    @State private var showAuthSheet = false
     /// True while a finger is on the interactive preview, so the enclosing
     /// ScrollView stops scrolling and the preview's own gesture wins.
     @State private var previewInteracting = false
@@ -28,13 +27,11 @@ struct DetailView: View {
         AnimationPreviewRegistry.isInteractive(viewModel.item.id)
     }
 
-    /// Three-way gate (see `CodeAccess`): the Pro entitlement unlocks code in
-    /// any auth state, Pro items route to the paywall, and free items ask
-    /// signed-out users for the (free) sign-in.
+    /// Two-way gate (see `CodeAccess`): the Pro entitlement unlocks code in
+    /// any auth state, Pro items route to the paywall, free code is open.
     private var access: CodeAccess {
         CodeAccess.evaluate(itemIsPro: viewModel.item.isPro,
-                            hasProEntitlement: viewModel.hasPro,
-                            isAuthenticated: authStore.isAuthenticated)
+                            hasProEntitlement: viewModel.hasPro)
     }
     private var canViewCode: Bool { access == .granted }
 
@@ -128,18 +125,13 @@ struct DetailView: View {
                         fileName: filename + ".swift",
                         source: viewModel.code,
                         locked: !canViewCode,
-                        lockTitle: access == .needsSignIn
-                            ? "Sign in to view the full code"
-                            : "Preview is limited",
-                        lockCTA: access == .needsSignIn
-                            ? "Sign in"
-                            : "Unlock to view full code",
+                        lockTitle: "Preview is limited",
+                        lockCTA: "Unlock to view full code",
                         onUnlock: {
                             viewModel.logCodeUnlockAttempt(access)
-                            switch access {
-                            case .needsPro: router.push(.paywall(source: "detail"))
-                            case .needsSignIn: showAuthSheet = true
-                            case .granted: break
+                            if access == .needsPro {
+                                router.push(.paywall(source: "detail",
+                                                     animationId: viewModel.item.id))
                             }
                         },
                         onCopy: { viewModel.logCodeCopied() }
@@ -176,17 +168,10 @@ struct DetailView: View {
             // than on init — see DetailViewModel.markViewed().
             viewModel.markViewed()
         }
-        .sheet(isPresented: $showAuthSheet) {
-            AuthGateView()
-                .environmentObject(authStore)
-        }
-        .onChange(of: authStore.isAuthenticated) { _, isAuth in
-            if isAuth { showAuthSheet = false }
-        }
     }
 
-    /// Share payload. Only includes the source when the signed-in user can
-    /// view it, so sharing can't bypass the sign-in gate or the Pro paywall.
+    /// Share payload. Only includes the source when the user can view it, so
+    /// sharing can't bypass the Pro paywall.
     private var shareText: String {
         if canViewCode {
             return "\(viewModel.item.name) — a SwiftUI animation from InspireCreativity\n\n\(viewModel.code)"
@@ -283,7 +268,9 @@ struct DetailView: View {
             .padding(.vertical, 14)
             .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
         } else {
-            Button { router.push(.paywall(source: "detail")) } label: {
+            Button {
+                router.push(.paywall(source: "detail", animationId: viewModel.item.id))
+            } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "lock.fill")
                     Text("Unlock everything with Pro")

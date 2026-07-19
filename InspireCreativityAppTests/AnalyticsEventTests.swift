@@ -12,11 +12,13 @@ final class AnalyticsEventTests: XCTestCase {
             .favoriteToggled(id: "ges-x", on: true),
             .search(termLength: 4),
             .categorySelected("Gestures"),
-            .paywallViewed(source: "detail"),
+            .paywallViewed(source: "detail", animationId: "aurora-mesh"),
             .purchaseCompleted(productID: "pro.lifetime", source: "detail",
                                context: PurchaseContext(hitProLock: true, animationsViewedBucket: "4_10",
                                                         timeToPurchaseBucket: "1_24h", signedIn: false)),
             .signIn(method: "apple"),
+            .restoreFailed(source: "detail", reason: "no_purchases"),
+            .pricingUnavailable(source: "library"),
             .auroraPromoTap
         ]
         for event in events {

@@ -6,22 +6,20 @@
 import Foundation
 import Combine
 
-/// Three-way access decision for the code sheet. Pure logic so the gate is
+/// Two-way access decision for the code sheet. Pure logic so the gate is
 /// unit-testable. Purchasing never requires an account: a Pro entitlement
 /// unlocks code in ANY auth state (a signed-out buyer or Restore must never
-/// stay locked out), Pro items route to the paywall, and free items ask
-/// signed-out users for the (free) sign-in.
+/// stay locked out), Pro items route to the paywall — and FREE code is open
+/// to everyone. Copying free code is the activation moment (the analytics
+/// showed a sign-in wall here cut ~77% of users off before first value).
 enum CodeAccess: Equatable {
     case granted
-    case needsSignIn
     case needsPro
 
     static func evaluate(itemIsPro: Bool,
-                         hasProEntitlement: Bool,
-                         isAuthenticated: Bool) -> CodeAccess {
+                         hasProEntitlement: Bool) -> CodeAccess {
         if hasProEntitlement { return .granted }
-        if itemIsPro { return .needsPro }
-        return isAuthenticated ? .granted : .needsSignIn
+        return itemIsPro ? .needsPro : .granted
     }
 }
 
@@ -140,9 +138,8 @@ final class DetailViewModel: ObservableObject {
     func logCodeUnlockAttempt(_ access: CodeAccess) {
         let result: String
         switch access {
-        case .needsPro:    result = "needs_pro"
-        case .needsSignIn: result = "needs_sign_in"
-        case .granted:     return
+        case .needsPro: result = "needs_pro"
+        case .granted:  return
         }
         analytics.log(.codeUnlockAttempt(result: result,
                                          animationID: item.id,

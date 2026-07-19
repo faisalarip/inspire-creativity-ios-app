@@ -45,7 +45,7 @@ final class JourneyMetricsTests: XCTestCase {
         var t = Date(timeIntervalSince1970: 1_000_000)      // first-open time
         let m = JourneyMetrics(defaults: d, now: { t })
         m.recordAnimationView(); m.recordAnimationView(); m.recordAnimationView(); m.recordAnimationView() // 4
-        m.recordCodeUnlockAttempt(result: .needsSignIn)     // does NOT count as pro lock
+        m.recordCodeUnlockAttempt(result: .granted)         // does NOT count as pro lock
         XCTAssertFalse(m.hitProLock)
         m.recordCodeUnlockAttempt(result: .needsPro)        // pro lock
         XCTAssertTrue(m.hitProLock)

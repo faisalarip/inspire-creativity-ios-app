@@ -35,7 +35,7 @@ struct LibraryView: View {
                     isPro: viewModel.isPro,
                     weekBars: viewModel.weekBars,
                     copiesThisWeek: viewModel.copiesThisWeek,
-                    onGoPro: { router.push(.paywall(source: "library")) }
+                    onGoPro: { router.push(.paywall(source: "library", animationId: nil)) }
                 )
                 .padding(.horizontal, Theme.Spacing.xl)
 

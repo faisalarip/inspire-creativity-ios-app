@@ -181,8 +181,7 @@ final class AppContainer: ObservableObject {
             streakTracker: streakTracker,
             activity: activityRepository,
             copyActivity: copyActivity,
-            analytics: analytics,
-            signedIn: { [authStore] in authStore.isAuthenticated }
+            analytics: analytics
         )
     }
 
@@ -224,10 +223,12 @@ final class AppContainer: ObservableObject {
         )
     }
 
-    func makePaywallViewModel(source: String) -> PaywallViewModel {
+    func makePaywallViewModel(source: String, animationId: String? = nil) -> PaywallViewModel {
         PaywallViewModel(store: store, analytics: analytics, source: source,
                          journeyMetrics: journeyMetrics,
-                         signedIn: { [authStore] in authStore.isAuthenticated })
+                         signedIn: { [authStore] in authStore.isAuthenticated },
+                         contextItem: animationId.flatMap { animationRepository.find(id: $0) },
+                         proCount: animationRepository.all().filter(\.isPro).count)
     }
 }
 

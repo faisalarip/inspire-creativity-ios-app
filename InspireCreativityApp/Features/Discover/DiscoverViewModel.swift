@@ -31,7 +31,6 @@ final class DiscoverViewModel: ObservableObject {
     private let activity: ActivityRepositoryProtocol
     private let copyActivity: CopyActivityStore
     private let analytics: AnalyticsTracking
-    private let signedIn: () -> Bool
     private let defaults: UserDefaults
     private let calendar: Calendar
     private let now: () -> Date
@@ -49,7 +48,6 @@ final class DiscoverViewModel: ObservableObject {
         activity: ActivityRepositoryProtocol,
         copyActivity: CopyActivityStore,
         analytics: AnalyticsTracking = NoOpAnalyticsTracker(),
-        signedIn: @escaping () -> Bool = { false },
         defaults: UserDefaults = .standard,
         calendar: Calendar = .current,
         now: @escaping () -> Date = Date.init
@@ -60,7 +58,6 @@ final class DiscoverViewModel: ObservableObject {
         self.activity = activity
         self.copyActivity = copyActivity
         self.analytics = analytics
-        self.signedIn = signedIn
         self.defaults = defaults
         self.calendar = calendar
         self.now = now
@@ -130,8 +127,7 @@ final class DiscoverViewModel: ObservableObject {
         guard let pick = dailyPick,
               CodeAccess.evaluate(
                   itemIsPro: pick.isPro,
-                  hasProEntitlement: purchases.isPro,
-                  isAuthenticated: signedIn()
+                  hasProEntitlement: purchases.isPro
               ) == .granted else { return .needsDetail }
 
         var source = pick.swiftCode

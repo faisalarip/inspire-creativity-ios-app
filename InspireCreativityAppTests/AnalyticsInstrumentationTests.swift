@@ -54,7 +54,7 @@ final class AnalyticsInstrumentationTests: XCTestCase {
         let spy = SpyAnalyticsTracker()
         let router = AppRouter()
         router.analytics = spy
-        router.push(.paywall(source: "settings"))
+        router.push(.paywall(source: "settings", animationId: nil))
         XCTAssertEqual(spy.screens, [.paywall],
                        "pushing .paywall must track the paywall screen")
     }

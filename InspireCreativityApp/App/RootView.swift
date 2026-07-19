@@ -150,6 +150,8 @@ struct RootView: View {
             case "activity": router.push(.activity)
             case "notifications": router.push(.notificationSettings)
             case "settings": router.push(.settings)
+            case "paywall": router.push(.paywall(source: "qa", animationId: "aurora-mesh"))
+            case "detail": router.push(.detail(animationId: "spinner"))
             default: break
             }
         }
@@ -177,12 +179,13 @@ struct RootView: View {
                     case .detail(let id):
                         DetailView(viewModel: container.makeDetailViewModel(animationId: id))
                             .hiddenNavigationBar()
-                    case .paywall(let source):
-                        PaywallView(viewModel: container.makePaywallViewModel(source: source))
+                    case .paywall(let source, let animationId):
+                        PaywallView(viewModel: container.makePaywallViewModel(
+                            source: source, animationId: animationId))
                             .hiddenNavigationBar()
                     case .settings:
                         SettingsView(store: container.store,
-                                     onGoPro: { router.push(.paywall(source: "settings")) },
+                                     onGoPro: { router.push(.paywall(source: "settings", animationId: nil)) },
                                      onOpenNotifications: { router.push(.notificationSettings) })
                             .hiddenNavigationBar()
                     case .activity:

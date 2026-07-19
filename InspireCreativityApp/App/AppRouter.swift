@@ -39,7 +39,9 @@ enum AppTab: String, CaseIterable, Hashable, Identifiable {
 /// Route values pushed onto a tab's NavigationStack.
 enum AppRoute: Hashable {
     case detail(animationId: String)
-    case paywall(source: String)
+    /// `animationId` carries the animation that triggered the paywall so it
+    /// can sell that specific unlock (contextual hero).
+    case paywall(source: String, animationId: String?)
     case settings
     case activity
     case notificationSettings

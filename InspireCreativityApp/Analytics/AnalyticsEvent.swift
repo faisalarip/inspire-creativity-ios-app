@@ -23,7 +23,7 @@ enum AnalyticsEvent: Equatable {
     case favoriteToggled(id: String, on: Bool)
     case search(termLength: Int)
     case categorySelected(String)
-    case paywallViewed(source: String)
+    case paywallViewed(source: String, animationId: String?)
     case purchaseCompleted(productID: String, source: String, context: PurchaseContext)
     case signIn(method: String)
     case auroraPromoTap
@@ -34,6 +34,8 @@ enum AnalyticsEvent: Equatable {
     case paywallDismissed(source: String, secondsBucket: String)
     case restoreCompleted(source: String)
     case notificationPermission(granted: Bool)
+    case restoreFailed(source: String, reason: String)
+    case pricingUnavailable(source: String)
 
     var name: String {
         switch self {
@@ -53,6 +55,8 @@ enum AnalyticsEvent: Equatable {
         case .paywallDismissed:   return "paywall_dismissed"
         case .restoreCompleted:   return "restore_completed"
         case .notificationPermission: return "notification_permission"
+        case .restoreFailed:      return "restore_failed"
+        case .pricingUnavailable: return "pricing_unavailable"
         }
     }
 
@@ -68,8 +72,10 @@ enum AnalyticsEvent: Equatable {
             return ["term_length": termLength]
         case let .categorySelected(category):
             return ["category": category]
-        case let .paywallViewed(source):
-            return ["source": source]
+        case let .paywallViewed(source, animationId):
+            var params: [String: Any] = ["source": source]
+            if let animationId { params["animation_id"] = animationId }
+            return params
         case let .purchaseCompleted(productID, source, context):
             return ["product_id": productID, "source": source,
                     "hit_pro_lock": context.hitProLock,
@@ -94,6 +100,10 @@ enum AnalyticsEvent: Equatable {
             return ["source": source]
         case let .notificationPermission(granted):
             return ["granted": granted]
+        case let .restoreFailed(source, reason):
+            return ["source": source, "reason": reason]
+        case let .pricingUnavailable(source):
+            return ["source": source]
         }
     }
 }

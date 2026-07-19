@@ -17,7 +17,6 @@ final class DiscoverViewModelTests: XCTestCase {
     }
 
     private func makeVM(
-        signedIn: Bool = true,
         isPro: Bool = false,
         defaults: UserDefaults? = nil,
         now: Date = Fixtures.date(2026, 7, 15, 12)
@@ -34,7 +33,6 @@ final class DiscoverViewModelTests: XCTestCase {
             activity: ActivityRepository(defaults: suite, calendar: Fixtures.utcCalendar),
             copyActivity: copyActivity,
             analytics: analytics,
-            signedIn: { signedIn },
             defaults: suite,
             calendar: Fixtures.utcCalendar,
             now: { now }
@@ -71,7 +69,7 @@ final class DiscoverViewModelTests: XCTestCase {
 
     func testCopyDailyPickWhenGrantedRecordsEverything() throws {
         // Pro entitlement grants every pick regardless of the day's rotation.
-        let (vm, analytics, copyActivity, _) = makeVM(signedIn: true, isPro: true)
+        let (vm, analytics, copyActivity, _) = makeVM(isPro: true)
         XCTAssertNotNil(vm.dailyPick)
 
         XCTAssertEqual(vm.copyDailyPick(), .copied)
@@ -80,11 +78,21 @@ final class DiscoverViewModelTests: XCTestCase {
         XCTAssertEqual(copyActivity.copiesThisWeek(for: Fixtures.date(2026, 7, 15)), 1)
     }
 
-    func testCopyDailyPickNeedsDetailWhenSignedOut() {
-        let (vm, analytics, _, _) = makeVM(signedIn: false)
-        XCTAssertEqual(vm.copyDailyPick(), .needsDetail)
-        XCTAssertFalse(vm.dailyCopied)
-        XCTAssertTrue(analytics.events.isEmpty)
+    /// The quick-copy gate must exactly mirror the entitlement gate: free
+    /// picks copy for everyone, Pro picks route to Detail (paywall) for
+    /// non-entitled users — no sign-in wall in either case.
+    func testCopyDailyPickMatchesEntitlementGate() throws {
+        let (vm, analytics, _, _) = makeVM(isPro: false)
+        let pick = try XCTUnwrap(vm.dailyPick)
+        if pick.isPro {
+            XCTAssertEqual(vm.copyDailyPick(), .needsDetail)
+            XCTAssertFalse(vm.dailyCopied)
+            XCTAssertTrue(analytics.events.isEmpty)
+        } else {
+            XCTAssertEqual(vm.copyDailyPick(), .copied)
+            XCTAssertTrue(vm.dailyCopied)
+            XCTAssertEqual(analytics.loggedNames, ["code_copied"])
+        }
     }
 
     func testUnreadCountReflectsActivityInbox() {

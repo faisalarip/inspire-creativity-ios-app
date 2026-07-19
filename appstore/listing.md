@@ -14,10 +14,12 @@ InspireCreativity
 
 **Subtitle** (≤30)
 ```
-SwiftUI animations & code
+Copy SwiftUI animation code
 ```
+<!-- 2.0: leads with the action verb + top search tokens. Previous:
+"SwiftUI animations & code" -->
 
-**Bundle ID:** `com.faisalarip.InspireCreativityApp`
+**Bundle ID:** `com.inspirecreativity`
 **Category:** Developer Tools (primary) · Graphics & Design (secondary)
 **Min OS:** iOS 17
 
@@ -27,7 +29,7 @@ SwiftUI animations & code
 
 **Promotional Text** (≤170, updatable without review)
 ```
-Stop reinventing the spring curve. Browse 100+ hand-crafted SwiftUI animations, preview them live, and copy production-ready code straight into Xcode.
+300+ SwiftUI animations with live previews. Copy free code in one tap — no account needed — and get 3 free Pro copies every week. New drop every Friday.
 ```
 
 **Description** (≤4000)
@@ -39,14 +41,17 @@ InspireCreativity is a hand-crafted catalog of production-ready SwiftUI animatio
 Stop reinventing the spring curve. Whether you need a tactile button, a smooth loader, a slick transition, or a jaw-dropping animated background, it's here and ready to paste.
 
 WHAT'S INSIDE
-• 100+ hand-crafted SwiftUI animations across buttons, loaders, gestures, transitions, micro-interactions, and backgrounds
+• 300+ hand-crafted SwiftUI animations across buttons, loaders, gestures, transitions, micro-interactions, text effects, Metal shaders, and backgrounds
 • Live previews — see exactly how each animation behaves before you use it
-• Production-ready source — tap to copy the full SwiftUI code for any animation
+• Production-ready source — tap to copy the full SwiftUI code, no account needed
+• 30 real-app recipes — see each animation inside a full app screen and copy the exact integration code
 • The Aurora Collection — gorgeous mesh-gradient backgrounds that make any screen feel premium
+• A reason to come back — daily pick, streaks, weekly challenges, and a fresh drop every Friday
+• Your library — favorites, collections, recents, and .swift export
 • Fully offline — the entire catalog is bundled, so you can browse anywhere
 
 FREE TO START
-20 animations are free, forever. Explore the catalog and preview everything before you decide.
+20 animations are free forever, the free set rotates every Friday, and you get 3 free Pro copies every week. Explore everything before you decide.
 
 UNLOCK EVERYTHING WITH PRO
 One simple, one-time purchase unlocks the entire library — every animation, forever. No subscription, no recurring charges. Buy once and restore on any device signed in to your Apple ID.
@@ -58,15 +63,16 @@ BUILT FOR BUILDERS
 • Designed for iOS 17 and later
 
 ACCOUNT & PRIVACY
-Browsing and previews are free and need no account. A free account unlocks viewing and copying the full source code and syncs your Pro purchase across devices. We collect as little as possible — no tracking, and no third-party ads or analytics.
+Browsing, previews, and copying free code need no account. Your Pro purchase lives with your Apple ID — restore on any device. We collect as little as possible: anonymous usage analytics only (you can turn this off in Settings), no ads, no tracking.
 
 Find your next "wow" moment. Download InspireCreativity and ship delight in your next app.
 ```
 
 **Keywords** (≤100, no spaces after commas)
 ```
-snippet,swift,developer,ui,gradient,mesh,aurora,transition,loader,component,design,source,motion
+animation,snippet,swift,developer,ui,gradient,mesh,aurora,transition,loader,component,code,motion
 ```
+<!-- 2.0: added "animation" (was missing!), "code"; dropped "design","source" -->
 
 **Support URL**
 ```
@@ -80,7 +86,7 @@ https://faisalarip.github.io/inspirecreativity-legal/
 
 **Version**
 ```
-1.0
+2.0
 ```
 
 **Copyright** (≤200)
@@ -88,9 +94,17 @@ https://faisalarip.github.io/inspirecreativity-legal/
 © 2026 Faisal Arif
 ```
 
-**What's New** (release notes, v1.0)
+**What's New** (release notes, v2.0)
 ```
-Welcome to InspireCreativity 1.0 — 100+ hand-crafted SwiftUI animations with live previews and one-tap copy. 20 are free; unlock everything with a one-time Pro purchase. No subscriptions.
+The Engagement Update.
+
+• Copy free animations' code instantly — no account needed
+• 3 free Pro copies every week, resetting with the Friday Drop
+• Daily pick, streaks, and a weekly challenge on your new Discover
+• Samples tab: 30 real-app recipes with the exact integration code
+• Search gets its own tab; Browse goes category-first
+• Library: collections, stats, recents, and .swift export
+• Optional notifications so you never miss a Friday Drop
 ```
 
 ---
@@ -109,11 +123,16 @@ Welcome to InspireCreativity 1.0 — 100+ hand-crafted SwiftUI animations with l
 
 ## App privacy (nutrition label)
 
-Collected data, both **Linked to identity**, used for **App Functionality**, NOT used for tracking:
-- **Email Address** (account auth)
-- **Name** (first + last; account personalization)
+Collected data, NOT used for tracking:
+- **Email Address** (Linked to identity; account auth — optional sign-in)
+- **Name** (Linked to identity; account personalization)
+- **Product Interaction / Usage Data** (Not linked; Firebase Analytics — Analytics purpose)
+- **Crash & Performance Data** (Not linked; if Crashlytics/Perf enabled)
 
-No third-party ads, no analytics SDKs, no tracking.
+⚠️ 2.0 CORRECTION: the previous label said "no analytics SDKs" — the app
+ships Firebase Analytics (GA4, user-toggleable in Settings). The ASC
+privacy questionnaire MUST declare Analytics usage data or the label
+misrepresents collection. No ads, no cross-app tracking (no ATT needed).
 
 **Privacy Policy URL:** `https://faisalarip.github.io/inspirecreativity-legal/privacy/`
 

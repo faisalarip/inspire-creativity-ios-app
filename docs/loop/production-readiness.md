@@ -8,9 +8,8 @@ rules at the bottom.
 - [x] **Apply confirmed findings from the conversion-diff review workflow**
       — 1 confirmed finding (stale recoveryHint in restore()) fixed; 188/188
       tests green.
-- [ ] **Push `release` to origin** (`git push`). This is the production path
-      (Xcode Cloud / TestFlight per docs/ci). Precondition: full iOS test
-      suite green + macOS build green on the exact HEAD being pushed.
+- [x] **Push `release` to origin** — pushed f3509b4 (iOS suite 188/188,
+      macOS build clean).
 - [ ] **Delete dead code left by the v2 redesigns**: `AuroraPackPromoCard`,
       `CategoryGrid`, `HeroCard` (Discover v1 leftovers, unused on iOS), and
       the never-triggered `showAuth` sheet in `MacDetailPane`. Remove their

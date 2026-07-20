@@ -50,6 +50,9 @@ struct RootView: View {
     @StateObject private var router = AppRouter()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showOnboarding = false
+    /// Measured once in onAppear (an event context) — reading window state
+    /// during body freezes the reading view's subtree. See FloatingTabBar.
+    @State private var bottomWindowInset: CGFloat = 0
 
     var body: some View {
         // Browsing the catalog never requires an account (Guideline 5.1.1).
@@ -85,6 +88,13 @@ struct RootView: View {
             router.analytics = container.analytics
             container.analytics.track(screen: .discover)
             recordEngagementTick()
+            #if canImport(UIKit)
+            bottomWindowInset = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap(\.windows)
+                .first(where: \.isKeyWindow)?
+                .safeAreaInsets.bottom ?? 0
+            #endif
             showOnboarding = !container.onboardingPreferences.isCompleted
             #if DEBUG
             applyScreenshotLaunchOverrides()
@@ -125,8 +135,13 @@ struct RootView: View {
             .animation(.easeOut(duration: 0.15), value: router.selectedTab)
 
             if !router.hidesTabBar {
-                FloatingTabBar(selected: $router.selectedTab)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                FloatingTabBar(selected: router.selectedTab,
+                               bottomInset: bottomWindowInset) { tab in
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        router.selectedTab = tab
+                    }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .environmentObject(router)

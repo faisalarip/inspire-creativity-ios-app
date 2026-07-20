@@ -86,7 +86,7 @@ https://faisalarip.github.io/inspirecreativity-legal/
 
 **Version**
 ```
-2.0
+2.1.0
 ```
 
 **Copyright** (≤200)
@@ -94,7 +94,7 @@ https://faisalarip.github.io/inspirecreativity-legal/
 © 2026 Faisal Arif
 ```
 
-**What's New** (release notes, v2.0)
+**What's New** (release notes, v2.1.0)
 ```
 The Engagement Update.
 

@@ -12,7 +12,10 @@
   var c = (q.get("c") || "none").replace(/[^a-z0-9_-]/gi, "");
   var appURL = "inspirecreativity://open?utm_source=" + src +
                "&utm_medium=referral&utm_campaign=" + c;
-  var storeURL = "https://apps.apple.com/app/id6778075297?ct=" +
+  // NOTE: replace <provider> with the ASC provider token (pt=) — the ct=
+  // campaign token only registers alongside it. Until then the fallback
+  // still works as a plain store link.
+  var storeURL = "https://apps.apple.com/app/apple-store/id6778075297?pt=<provider>&ct=" +
                  encodeURIComponent(src + "_" + c) + "&mt=8";
   var t = setTimeout(function () { location.href = storeURL; }, 1200);
   window.addEventListener("pagehide", function () { clearTimeout(t); });

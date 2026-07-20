@@ -17,12 +17,18 @@ inspirecreativity://open?utm_source=medium&utm_medium=blog&utm_campaign=<post-sl
 ```
 
 **App Store (readers who DON'T have the app yet):** iOS has no install
-referrer, so use Apple's campaign token — installs show up in
-App Store Connect → Analytics → Sources:
+referrer, so use Apple's campaign link — downloads AND sales per campaign
+show up in App Store Connect → Analytics → Sources → Campaigns. The `ct=`
+token only registers together with your provider token (`pt=`), so generate
+the link in ASC (Analytics → Sources → Campaigns → Generate Campaign Link)
+instead of hand-building it:
 ```
-https://apps.apple.com/app/id6778075297?ct=medium_<post-slug>&mt=8
+https://apps.apple.com/app/apple-store/id6778075297?pt=<provider>&ct=medium_<post-slug>&mt=8
 ```
-In-app, those users self-report "Medium" at onboarding, which closes the loop.
+A PLAIN App Store link still yields aggregate web-referrer data in ASC
+(medium.com under Sources → Web Referrers) but nothing per-post and nothing
+in Firebase. Either way, installers self-report "Medium" at onboarding,
+which closes the GA4 loop.
 
 **Smart hand-off page (best of both):** host `go.html` (next to this file) on
 the GitHub Pages site, then link Medium posts to:

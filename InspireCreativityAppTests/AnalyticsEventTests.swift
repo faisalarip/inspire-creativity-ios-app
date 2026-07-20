@@ -22,6 +22,7 @@ final class AnalyticsEventTests: XCTestCase {
             .meterCopyUsed(animationId: "aurora-mesh", remaining: 2),
             .meterExhausted(animationId: "aurora-mesh"),
             .onboardingCompleted(categoriesCount: 3),
+            .campaignDetails(source: "medium", medium: "referral", campaign: "launch"),
             .auroraPromoTap
         ]
         for event in events {

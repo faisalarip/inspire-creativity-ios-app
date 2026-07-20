@@ -190,6 +190,7 @@
 		86D6C5B2AFFA5C39FB4CDCFB /* PagePeelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F80BAC9D3634440B0DCFF3BA /* PagePeelView.swift */; };
 		871704859E5F1DACFA93B81C /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A2D7586E1E77DA3D2DFAB881 /* Foundation.framework */; };
 		87C1620BBB47B9A64F6A2E7C /* RadioInkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5D0E3CC4239E364091B2F5B /* RadioInkView.swift */; };
+		89426C001F7096642EF87BBF /* AcquisitionAttribution.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60E5C8A868029A6330854DAA /* AcquisitionAttribution.swift */; };
 		8B4F2E72E08A535DCFB4DC58 /* MagneticSnapDockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0DF0BC6A2DE2BBBB459D0D /* MagneticSnapDockView.swift */; };
 		8BED3B52BDDA3AF274E1DD7F /* ConicPrismView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7749E3F05F3FDAEFE3B85632 /* ConicPrismView.swift */; };
 		8C59429469B262F5E49B2C57 /* ThumbFlipLikeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6F40099A4840DDF395BC758 /* ThumbFlipLikeView.swift */; };
@@ -223,6 +224,7 @@
 		9E8B94FD897D233C1259E0DA /* HeatMirage.metal in Sources */ = {isa = PBXBuildFile; fileRef = AAF1F67C5AC8D4841F1166F2 /* HeatMirage.metal */; };
 		9FD5D976DE98EAEE7D534BE5 /* PinchCollapseGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AEA8E26388833F35CA554A4 /* PinchCollapseGridView.swift */; };
 		A038DE0A42A735610041286E /* ConstellationHeroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D80D4CAD87F963D2E48D4149 /* ConstellationHeroView.swift */; };
+		A0BB6E0CCC085CA0A58DEFFA /* AcquisitionAttributionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 811D3B18D6AF7ECDFC1ACC26 /* AcquisitionAttributionTests.swift */; };
 		A0C058614A25956926733F1A /* ConsoleAnalyticsTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B746E39F8EFEEFAA7999BCB0 /* ConsoleAnalyticsTracker.swift */; };
 		A10646899BA311ACD73882D3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = CBC451507EFC0E1F6FF23208 /* PrivacyInfo.xcprivacy */; };
 		A1536C0590689B4D6677C912 /* CoinFlipStackView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E055D0AF4FD8F7F18693EDC /* CoinFlipStackView.swift */; };
@@ -508,6 +510,7 @@
 		5F396DCAE73BF48FD8FF5110 /* ScrubberWaveView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ScrubberWaveView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/ScrubberWaveView.swift; sourceTree = "<group>"; };
 		5F616686062A43B60CDB2E3A /* AnalyticsEventTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AnalyticsEventTests.swift; sourceTree = "<group>"; };
 		60427FCF3F39BB5B051FFD71 /* OdometerDotsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OdometerDotsView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/OdometerDotsView.swift; sourceTree = "<group>"; };
+		60E5C8A868029A6330854DAA /* AcquisitionAttribution.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AcquisitionAttribution.swift; path = InspireCreativityApp/Analytics/AcquisitionAttribution.swift; sourceTree = "<group>"; };
 		61FBE8A746A8D24927A79EA6 /* MagneticPoetryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MagneticPoetryView.swift; path = InspireCreativityApp/Animations/Catalog/TextEffects/MagneticPoetryView.swift; sourceTree = "<group>"; };
 		621B6409DE398398BC15BF22 /* IrisShutterView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = IrisShutterView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/IrisShutterView.swift; sourceTree = "<group>"; };
 		6231D97F09CFF8978A45474D /* SocialAuthSessionMappingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SocialAuthSessionMappingTests.swift; sourceTree = "<group>"; };
@@ -546,6 +549,7 @@
 		802172530892C09519404962 /* AdvancedPreviews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedPreviews.swift; sourceTree = "<group>"; };
 		80878B060362EFB7BCB420FC /* ZipperConfirmView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ZipperConfirmView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/ZipperConfirmView.swift; sourceTree = "<group>"; };
 		80F270208367BD0E559B1112 /* EmojiFountainView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = EmojiFountainView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/EmojiFountainView.swift; sourceTree = "<group>"; };
+		811D3B18D6AF7ECDFC1ACC26 /* AcquisitionAttributionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AcquisitionAttributionTests.swift; sourceTree = "<group>"; };
 		816F5D40E725271853240714 /* StreakTrackerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StreakTrackerTests.swift; sourceTree = "<group>"; };
 		81FFC37CD720CADF73352252 /* NotificationScheduling.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NotificationScheduling.swift; sourceTree = "<group>"; };
 		820AAC0941267398642A4217 /* CometTrailCrumbsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CometTrailCrumbsView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/CometTrailCrumbsView.swift; sourceTree = "<group>"; };
@@ -1118,6 +1122,7 @@
 				C59E80663572B8A053847CDA /* LibraryViewModelTests.swift */,
 				57BC7CFC52602480A7AA9113 /* ProCopyMeterTests.swift */,
 				9C10C48C0050234FE7C0BC3E /* OnboardingPreferencesTests.swift */,
+				811D3B18D6AF7ECDFC1ACC26 /* AcquisitionAttributionTests.swift */,
 			);
 			path = InspireCreativityAppTests;
 			sourceTree = SOURCE_ROOT;
@@ -1318,6 +1323,7 @@
 				DC2A613E2B44A9D25EBB659F /* FirebaseAnalyticsTracker.swift */,
 				24C9A2CC29F4FBCE7D67A1E3 /* AnalyticsUserProperty.swift */,
 				E4BA762432A34C18DC8A4D4B /* JourneyMetrics.swift */,
+				60E5C8A868029A6330854DAA /* AcquisitionAttribution.swift */,
 			);
 			name = Analytics;
 			sourceTree = SOURCE_ROOT;
@@ -1894,6 +1900,7 @@
 				AB554D5949EA8714794821E6 /* ProCopyMeter.swift in Sources */,
 				FB08E47873A7050E3D7E57CE /* OnboardingPreferences.swift in Sources */,
 				E951E78E1E2C361934A93B5F /* OnboardingView.swift in Sources */,
+				89426C001F7096642EF87BBF /* AcquisitionAttribution.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1928,6 +1935,7 @@
 				E2563300B2AB783F989C8B17 /* LibraryViewModelTests.swift in Sources */,
 				A312C2D8E35C5A955F38FE30 /* ProCopyMeterTests.swift in Sources */,
 				D4A7488BBE80816267209639 /* OnboardingPreferencesTests.swift in Sources */,
+				A0BB6E0CCC085CA0A58DEFFA /* AcquisitionAttributionTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1984,7 +1992,7 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 2.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.inspirecreativity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
@@ -2075,7 +2083,7 @@
 					"@executable_path/Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 2.0;
+				MARKETING_VERSION = 2.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.inspirecreativity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";

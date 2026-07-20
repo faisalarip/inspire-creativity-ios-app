@@ -14,6 +14,10 @@ enum AnalyticsUserProperty: Equatable {
     case platform(String)
     case engagementLevel(String)
     case animationsViewedBucket(String)
+    /// Where the user came from (self-reported at onboarding, or measured
+    /// from a UTM-tagged link). Segments every event — incl. purchases —
+    /// by acquisition source in GA4.
+    case acquisitionSource(String)
 
     var name: String {
         switch self {
@@ -22,6 +26,7 @@ enum AnalyticsUserProperty: Equatable {
         case .platform:               return "platform"
         case .engagementLevel:        return "engagement_level"
         case .animationsViewedBucket: return "animations_viewed_bucket"
+        case .acquisitionSource:      return "acquisition_source"
         }
     }
 
@@ -32,6 +37,7 @@ enum AnalyticsUserProperty: Equatable {
         case let .platform(p):               return p
         case let .engagementLevel(l):        return l
         case let .animationsViewedBucket(b): return b
+        case let .acquisitionSource(s):      return s
         }
     }
 }

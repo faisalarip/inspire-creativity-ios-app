@@ -30,6 +30,7 @@ final class AppContainer: ObservableObject {
     let recentSearches = RecentSearchesStore()
     let proCopyMeter = ProCopyMeter()
     let onboardingPreferences = OnboardingPreferences()
+    let acquisition: AcquisitionAttribution
     let notificationCoordinator: NotificationCoordinator
     /// StoreKit 2 entitlement authority. Also vended directly to the paywall
     /// and Settings (for products / restore). `purchaseRepository` is this
@@ -84,6 +85,7 @@ final class AppContainer: ObservableObject {
             scheduler: SystemNotificationScheduler(),
             analytics: analytics
         )
+        self.acquisition = AcquisitionAttribution(analytics: analytics)
 
         // Set the 5 GA4 user properties once at launch (device-scoped, no
         // setUserID — values are non-PII strings only).

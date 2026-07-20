@@ -39,6 +39,9 @@ enum AnalyticsEvent: Equatable {
     case meterCopyUsed(animationId: String, remaining: Int)
     case meterExhausted(animationId: String)
     case onboardingCompleted(categoriesCount: Int)
+    /// GA4's manual campaign attribution event — source/medium/campaign
+    /// exactly as GA4 expects, so acquisition reports pick them up.
+    case campaignDetails(source: String, medium: String, campaign: String)
 
     var name: String {
         switch self {
@@ -63,6 +66,7 @@ enum AnalyticsEvent: Equatable {
         case .meterCopyUsed:      return "meter_copy_used"
         case .meterExhausted:     return "meter_exhausted"
         case .onboardingCompleted: return "onboarding_completed"
+        case .campaignDetails:     return "campaign_details"
         }
     }
 
@@ -116,6 +120,8 @@ enum AnalyticsEvent: Equatable {
             return ["animation_id": animationId]
         case let .onboardingCompleted(categoriesCount):
             return ["categories_count": categoriesCount]
+        case let .campaignDetails(source, medium, campaign):
+            return ["source": source, "medium": medium, "campaign": campaign]
         }
     }
 }

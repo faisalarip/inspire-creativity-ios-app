@@ -14,6 +14,14 @@ struct OnboardingView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var selected: Set<Category> = []
+    @State private var referral: String?
+
+    /// Self-reported acquisition options (value → label). Values are the
+    /// GA4 `acquisition_source` user-property values.
+    private static let referralOptions: [(value: String, label: String)] = [
+        ("medium", "Medium"), ("x", "X / Twitter"), ("youtube", "YouTube"),
+        ("app_store_search", "App Store"), ("friend", "A friend"), ("other", "Other"),
+    ]
 
     private let columns = [
         GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10),
@@ -85,6 +93,33 @@ struct OnboardingView: View {
                 }
                 .padding(.top, 22)
 
+                Text("Where did you find us?")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                    .padding(.top, 22)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 7) {
+                        ForEach(Self.referralOptions, id: \.value) { option in
+                            let isOn = referral == option.value
+                            Button {
+                                referral = isOn ? nil : option.value
+                            } label: {
+                                Text(option.label)
+                                    .font(.system(size: 12.5, weight: .semibold))
+                                    .foregroundStyle(isOn ? .white : .white.opacity(0.65))
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 7)
+                                    .background(
+                                        isOn ? Theme.Palette.accent : Color.white.opacity(0.06),
+                                        in: Capsule()
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .padding(.top, 8)
+
                 Button {
                     finish(Array(selected))
                 } label: {
@@ -117,6 +152,9 @@ struct OnboardingView: View {
     private func finish(_ categories: [Category]) {
         container.onboardingPreferences.complete(categories: categories)
         container.analytics.log(.onboardingCompleted(categoriesCount: categories.count))
+        if let referral {
+            container.acquisition.setSelfReported(referral)
+        }
         dismiss()
     }
 }

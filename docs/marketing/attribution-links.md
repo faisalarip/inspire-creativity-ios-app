@@ -30,10 +30,14 @@ A PLAIN App Store link still yields aggregate web-referrer data in ASC
 in Firebase. Either way, installers self-report "Medium" at onboarding,
 which closes the GA4 loop.
 
-**Smart hand-off page (best of both) — LIVE since 2026-07-20:**
+**Smart hand-off page (best of both) — LIVE, short form:**
 ```
-https://faisalarip.github.io/inspirecreativity-legal/go.html?src=medium&c=<post-slug>
+https://faisalarip.github.io/go?s=m&c=<post-slug>
 ```
+Short source codes: `m`=medium, `x`=x, `yt`=youtube (expanded to full GA4
+values by the page). Lives in the faisalarip.github.io root repo at
+`go/index.html`. The longer
+`…/inspirecreativity-legal/go.html?src=…` variant also stays live.
 Deployed to the inspirecreativity-legal Pages repo (go.html at root; a copy
 lives next to this file). It tries the app scheme first (installed →
 measured GA4 attribution) and falls back to the App Store after ~1.2s.

@@ -58,7 +58,7 @@ struct BrowseView: View {
                 .font(.system(size: 32, weight: .heavy))
                 .tracking(-1)
                 .foregroundStyle(Theme.Palette.textPrimary)
-            Text("\(viewModel.totalCount) animations · \(viewModel.categories.count) categories · new every Friday")
+            Text("\(viewModel.totalCount) animations · \(viewModel.categories.count) categories · new every Tue & Fri")
                 .font(.system(size: 13.5))
                 .foregroundStyle(Theme.Palette.textSecondary)
         }

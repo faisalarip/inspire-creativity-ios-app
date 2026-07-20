@@ -46,6 +46,7 @@ enum AppRoute: Hashable {
     case activity
     case notificationSettings
     case collection(id: UUID)
+    case unlocked
 }
 
 /// Per-tab path storage + sheet presentation. Observable so views can bind.
@@ -108,6 +109,7 @@ final class AppRouter: ObservableObject {
         case .paywall: return .paywall
         case .activity: return .activity
         case .notificationSettings: return .notificationSettings
+        case .unlocked: return .unlocked
         default:       return nil
         }
     }

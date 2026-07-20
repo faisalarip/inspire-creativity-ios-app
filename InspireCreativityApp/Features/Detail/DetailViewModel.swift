@@ -56,6 +56,8 @@ final class DetailViewModel: ObservableObject {
     /// v2.1 metering: a few free Pro copies per drop week (nil = no metering,
     /// e.g. the Mac shell until it adopts the meter UI).
     private let meter: ProCopyMeter?
+    /// Collection-progress tracking (NEW badges on the Unlocked page).
+    private let seen: SeenItemsRepositoryProtocol?
     private var cancellables: Set<AnyCancellable> = []
     /// Guards `markViewed()` so the view event fires once per real
     /// presentation, not once per view-model instance that happens to be
@@ -71,7 +73,8 @@ final class DetailViewModel: ObservableObject {
         journeyMetrics: JourneyMetrics = JourneyMetrics(),
         recents: RecentItemsRepositoryProtocol? = nil,
         copyActivity: CopyActivityStore? = nil,
-        meter: ProCopyMeter? = nil
+        meter: ProCopyMeter? = nil,
+        seen: SeenItemsRepositoryProtocol? = nil
     ) {
         // Resolve the item once (fall back to featured for unknown ids), assign
         // stored props, then wire bindings unconditionally so the detail screen
@@ -85,6 +88,7 @@ final class DetailViewModel: ObservableObject {
         self.recents = recents
         self.copyActivity = copyActivity
         self.meter = meter
+        self.seen = seen
         self.isFavorited = favorites.isFavorite(resolved.id)
         self.isOwned = purchases.isOwned(resolved.id, freeOverride: resolved.isFree)
         self.hasPro = purchases.isPro
@@ -150,6 +154,7 @@ final class DetailViewModel: ObservableObject {
         analytics.log(.animationView(id: item.id, category: item.category.rawValue, isPro: item.isPro))
         journeyMetrics.recordAnimationView()
         recents?.record(item.id)
+        seen?.markSeen(item.id)
     }
 
     func toggleFavorite() {

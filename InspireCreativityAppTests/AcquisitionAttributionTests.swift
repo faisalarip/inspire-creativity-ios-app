@@ -57,3 +57,20 @@ final class AcquisitionAttributionTests: XCTestCase {
                       "user property must be re-set each launch")
     }
 }
+
+extension AcquisitionAttributionTests {
+    func testPurchaseCompletedCarriesAcquisitionSource() {
+        var context = PurchaseContext(hitProLock: true, animationsViewedBucket: "4_10",
+                                      timeToPurchaseBucket: "1_24h", signedIn: false)
+        context.acquisitionSource = "medium"
+        let params = AnalyticsEvent.purchaseCompleted(
+            productID: "pro.lifetime", source: "meter", context: context).parameters
+        XCTAssertEqual(params["acquisition_source"] as? String, "medium")
+
+        let bare = AnalyticsEvent.purchaseCompleted(
+            productID: "pro.lifetime", source: "meter",
+            context: PurchaseContext(hitProLock: false, animationsViewedBucket: "0",
+                                     timeToPurchaseBucket: "lt_1h", signedIn: false)).parameters
+        XCTAssertNil(bare["acquisition_source"], "unattributed buyers stay clean")
+    }
+}

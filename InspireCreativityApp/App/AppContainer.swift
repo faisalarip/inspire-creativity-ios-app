@@ -25,6 +25,7 @@ final class AppContainer: ObservableObject {
     let streakTracker = StreakTracker()
     let copyActivity = CopyActivityStore()
     let recentItemsRepository: RecentItemsRepositoryProtocol = RecentItemsRepository()
+    let seenItemsRepository: SeenItemsRepositoryProtocol = SeenItemsRepository()
     let collectionsRepository: CollectionsRepositoryProtocol = CollectionsRepository()
     let activityRepository: ActivityRepositoryProtocol = ActivityRepository()
     let recentSearches = RecentSearchesStore()
@@ -225,7 +226,8 @@ final class AppContainer: ObservableObject {
             journeyMetrics: journeyMetrics,
             recents: recentItemsRepository,
             copyActivity: copyActivity,
-            meter: proCopyMeter
+            meter: proCopyMeter,
+            seen: seenItemsRepository
         )
     }
 
@@ -233,6 +235,7 @@ final class AppContainer: ObservableObject {
         PaywallViewModel(store: store, analytics: analytics, source: source,
                          journeyMetrics: journeyMetrics,
                          signedIn: { [authStore] in authStore.isAuthenticated },
+                         acquisitionSource: { [acquisition] in acquisition.source },
                          contextItem: animationId.flatMap { animationRepository.find(id: $0) },
                          proCount: animationRepository.all().filter(\.isPro).count)
     }

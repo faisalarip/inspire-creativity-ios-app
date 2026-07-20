@@ -116,20 +116,20 @@ final class ActivityRepositoryTests: XCTestCase {
         XCTAssertEqual(ActivityRepository(defaults: defaults, calendar: cal).unreadCount, 0)
     }
 
-    func testFridayRefreshAppendsSingleDropEntryPerWeek() {
+    func testRefreshAppendsOneDropEntryPerDropPeriod() {
         let defaults = Fixtures.freshDefaults("activity")
         let repo = ActivityRepository(defaults: defaults, calendar: cal)
         repo.refresh(now: Fixtures.date(2026, 7, 15, 12)) // Wednesday: seed only
         XCTAssertEqual(repo.all().count, 6)
 
-        repo.refresh(now: Fixtures.date(2026, 7, 17, 9))  // Friday: +1 drop entry
+        repo.refresh(now: Fixtures.date(2026, 7, 17, 9))  // after Friday drop: +1
         XCTAssertEqual(repo.all().count, 7)
         XCTAssertEqual(repo.unreadCount, 4)
 
-        repo.refresh(now: Fixtures.date(2026, 7, 18, 9))  // Saturday same week: no dupe
+        repo.refresh(now: Fixtures.date(2026, 7, 18, 9))  // same period: no dupe
         XCTAssertEqual(repo.all().count, 7)
 
-        repo.refresh(now: Fixtures.date(2026, 7, 24, 9))  // next Friday: +1
+        repo.refresh(now: Fixtures.date(2026, 7, 21, 9))  // after Tuesday drop: +1
         XCTAssertEqual(repo.all().count, 8)
     }
 }

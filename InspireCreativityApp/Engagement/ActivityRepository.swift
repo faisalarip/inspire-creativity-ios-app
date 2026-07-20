@@ -92,19 +92,18 @@ final class ActivityRepository: ActivityRepositoryProtocol {
     // MARK: - Weekly drop entry
 
     private func appendDropEntryIfNeeded(now: Date) {
-        // Friday == weekday 6 in the Gregorian calendar.
-        let weekday = calendar.component(.weekday, from: now)
-        guard weekday == 6 || weekday == 7 || weekday == 1 else { return }
-        let weekSeed = calendar.component(.yearForWeekOfYear, from: now) * 100
-            + calendar.component(.weekOfYear, from: now)
-        guard defaults.integer(forKey: Keys.lastDropWeek) != weekSeed else { return }
-        defaults.set(weekSeed, forKey: Keys.lastDropWeek)
+        let periodSeed = EngagementSchedule.dropPeriodSeed(for: now, calendar: calendar)
+        let stored = defaults.integer(forKey: Keys.lastDropWeek)
+        defaults.set(periodSeed, forKey: Keys.lastDropWeek)
+        // First run just records the current period — the seed inbox already
+        // contains a drop entry. Later period changes append one entry each.
+        guard stored != 0, stored != periodSeed else { return }
         let entry = ActivityItem(
-            id: "drop-\(weekSeed)",
+            id: "drop-\(periodSeed)",
             kind: .drop,
-            headline: "Friday Drop is live",
-            detail: "— 5 new Aurora animations",
-            subtitle: "One is free this week",
+            headline: "New drop is live",
+            detail: "— 5 new animations",
+            subtitle: "Fresh every Tuesday and Friday",
             date: now,
             animationId: "aurora-mesh",
             authorName: nil,

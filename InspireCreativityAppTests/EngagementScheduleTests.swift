@@ -67,9 +67,31 @@ final class EngagementScheduleTests: XCTestCase {
         XCTAssertEqual(drop, Fixtures.date(2026, 7, 17, 8))
     }
 
-    func testNextDropOnFridayAfterEightIsNextWeek() {
+    func testNextDropOnFridayAfterEightIsNextTuesday() {
+        // Drops land Tue AND Fri: after Friday's drop the next one is Tuesday.
         let drop = EngagementSchedule.nextDrop(after: Fixtures.date(2026, 7, 17, 9), calendar: cal)
-        XCTAssertEqual(drop, Fixtures.date(2026, 7, 24, 8))
+        XCTAssertEqual(drop, Fixtures.date(2026, 7, 21, 8))
+    }
+
+    func testNextDropFromMondayIsTuesday() {
+        let drop = EngagementSchedule.nextDrop(after: Fixtures.date(2026, 7, 13, 12), calendar: cal)
+        XCTAssertEqual(drop, Fixtures.date(2026, 7, 14, 8))
+    }
+
+    func testDropPicksDeterministicAndNonOverlappingAcrossPeriods() {
+        let pool = (0..<40).map { Fixtures.item(id: String(format: "anim-%02d", $0)) }
+        let wednesday = Fixtures.date(2026, 7, 15, 12)
+        let thursday = Fixtures.date(2026, 7, 16, 20)
+        let nextPeriod = Fixtures.date(2026, 7, 17, 9)
+
+        let picks = EngagementSchedule.dropPicks(from: pool, on: wednesday, calendar: cal)
+        XCTAssertEqual(picks.count, 5)
+        XCTAssertEqual(picks.map(\.id),
+                       EngagementSchedule.dropPicks(from: pool, on: thursday, calendar: cal).map(\.id),
+                       "stable within a drop period")
+        let next = EngagementSchedule.dropPicks(from: pool, on: nextPeriod, calendar: cal)
+        XCTAssertTrue(Set(picks.map(\.id)).isDisjoint(with: Set(next.map(\.id))),
+                      "consecutive drops must not repeat items until the catalog wraps")
     }
 
     func testCountdownLabels() {

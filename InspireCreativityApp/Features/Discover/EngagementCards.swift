@@ -180,7 +180,7 @@ struct DropCountdownStrip: View {
             Text("🎁").font(.system(size: 18))
 
             VStack(alignment: .leading, spacing: 1) {
-                Text("Next Friday Drop")
+                Text("Next Drop")
                     .font(.system(size: 14, weight: .bold))
                     .tracking(-0.2)
                     .foregroundStyle(Theme.Palette.textPrimary)

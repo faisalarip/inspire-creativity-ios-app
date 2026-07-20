@@ -12,10 +12,12 @@ import SwiftUI
 struct LibraryView: View {
 
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var container: AppContainer
     @StateObject private var viewModel: LibraryViewModel
 
     @State private var showNewCollection = false
     @State private var newCollectionName = ""
+    @State private var seenIds: Set<String> = []
 
     init(viewModel: LibraryViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -39,6 +41,8 @@ struct LibraryView: View {
                 )
                 .padding(.horizontal, Theme.Spacing.xl)
 
+                unlockedRow
+
                 if !viewModel.recentItems.isEmpty {
                     sectionHeader("Pick up where you left off", top: 22)
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -61,6 +65,7 @@ struct LibraryView: View {
             }
         }
         .onAppear { viewModel.refreshStats() }
+        .onReceive(container.seenItemsRepository.idsPublisher) { seenIds = $0 }
         .background(Theme.Palette.background)
         .ignoresSafeArea(edges: .bottom)
         .alert("New collection", isPresented: $showNewCollection) {
@@ -73,6 +78,49 @@ struct LibraryView: View {
         } message: {
             Text("Group animations for a project or an idea.")
         }
+    }
+
+    /// Entry to the Unlocked collection-progress page ("explored X of Y").
+    private var unlockedRow: some View {
+        Button {
+            router.push(.unlocked)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.Palette.accent)
+                Text("Your unlocked animations")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                Spacer()
+                if unseenUnlockedCount > 0 {
+                    Text("\(unseenUnlockedCount) new")
+                        .font(Theme.Typo.mono(11, weight: .semibold))
+                        .foregroundStyle(Theme.Palette.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Theme.Palette.accent.opacity(0.14), in: Capsule())
+                }
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.textTertiary)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(Theme.Palette.hairline, lineWidth: 0.5)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, Theme.Spacing.xl)
+        .padding(.top, 10)
+    }
+
+    private var unseenUnlockedCount: Int {
+        viewModel.owned.filter { !seenIds.contains($0.id) }.count
     }
 
     // MARK: - Collections

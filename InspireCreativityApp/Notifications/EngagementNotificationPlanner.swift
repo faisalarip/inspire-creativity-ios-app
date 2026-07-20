@@ -26,8 +26,14 @@ enum EngagementNotificationPlanner {
         var plans: [NotificationPlan] = []
         if prefs.fridayDrops {
             plans.append(NotificationPlan(
+                id: "engagement.drop.tuesday",
+                title: "🎁 New drop is live",
+                body: "5 new animations just landed. Come see what's fresh.",
+                weekday: 3, hour: 8, minute: 0
+            ))
+            plans.append(NotificationPlan(
                 id: "engagement.drop.friday",
-                title: "🎁 Friday Drop is live",
+                title: "🎁 New drop is live",
                 body: "5 new animations just landed. One is always free this week.",
                 weekday: 6, hour: 8, minute: 0
             ))

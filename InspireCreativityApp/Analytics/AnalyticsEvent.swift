@@ -15,6 +15,10 @@ struct PurchaseContext: Equatable {
     let animationsViewedBucket: String
     let timeToPurchaseBucket: String
     let signedIn: Bool
+    /// Where this buyer came from (self-reported or UTM-measured) — stamped
+    /// straight onto purchase_completed so revenue-by-source needs no
+    /// user-property gymnastics in GA4.
+    var acquisitionSource: String? = nil
 }
 
 enum AnalyticsEvent: Equatable {
@@ -87,11 +91,17 @@ enum AnalyticsEvent: Equatable {
             if let animationId { params["animation_id"] = animationId }
             return params
         case let .purchaseCompleted(productID, source, context):
-            return ["product_id": productID, "source": source,
-                    "hit_pro_lock": context.hitProLock,
-                    "animations_viewed_bucket": context.animationsViewedBucket,
-                    "time_to_purchase_bucket": context.timeToPurchaseBucket,
-                    "signed_in": context.signedIn]
+            var params: [String: Any] = [
+                "product_id": productID, "source": source,
+                "hit_pro_lock": context.hitProLock,
+                "animations_viewed_bucket": context.animationsViewedBucket,
+                "time_to_purchase_bucket": context.timeToPurchaseBucket,
+                "signed_in": context.signedIn,
+            ]
+            if let acquisition = context.acquisitionSource {
+                params["acquisition_source"] = acquisition
+            }
+            return params
         case let .signIn(method):
             return ["method": method]
         case .auroraPromoTap:

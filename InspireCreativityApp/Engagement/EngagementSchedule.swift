@@ -34,13 +34,17 @@ enum EngagementSchedule {
         return "resets in \(max(1, Int((remaining / 60).rounded(.up))))m"
     }
 
-    /// Next Friday 08:00 in the calendar's time zone (today 08:00 if that is still ahead).
+    /// Drops land twice a week: Tuesday and Friday at 08:00 local. Returns
+    /// whichever comes next (today 08:00 if still ahead).
     static func nextDrop(after date: Date, calendar: Calendar) -> Date {
-        var comps = DateComponents()
-        comps.weekday = 6 // Friday
-        comps.hour = 8
-        comps.minute = 0
-        return calendar.nextDate(after: date, matching: comps, matchingPolicy: .nextTime) ?? date
+        let candidates = [3, 6].compactMap { weekday -> Date? in // Tue, Fri
+            var comps = DateComponents()
+            comps.weekday = weekday
+            comps.hour = 8
+            comps.minute = 0
+            return calendar.nextDate(after: date, matching: comps, matchingPolicy: .nextTime)
+        }
+        return candidates.min() ?? date
     }
 
     /// "in 2d 14h" / "in 14h 5m" / "in 5m" / "now".
@@ -65,11 +69,25 @@ enum EngagementSchedule {
         return (0..<4).map { free[(start + $0) % free.count] }
     }
 
-    /// Identifies the drop period (Friday 08:00 → next Friday 08:00) that
-    /// `date` falls in. Stable within a period, changes exactly at the drop —
-    /// used by the Pro-copy meter so allowances reset with the Friday Drop.
+    /// Identifies the drop period (drop → next drop) that `date` falls in.
+    /// Stable within a period, changes exactly at each Tue/Fri 08:00 drop —
+    /// used by the Pro-copy meter so allowances reset with every drop.
     static func dropPeriodSeed(for date: Date, calendar: Calendar) -> Int {
         Int(nextDrop(after: date, calendar: calendar).timeIntervalSince1970)
+    }
+
+    /// The 5 "new in this drop" animations: deterministic per drop period,
+    /// rotating through the whole catalog — with 300+ bundled items that is
+    /// months of twice-weekly freshness before a repeat.
+    static func dropPicks(from items: [AnimationItem], on date: Date, calendar: Calendar) -> [AnimationItem] {
+        guard !items.isEmpty else { return [] }
+        let sorted = items.sorted { $0.id < $1.id }
+        // Consecutive periods advance by 5 so drops never overlap until the
+        // catalog wraps. Period seeds are drop timestamps ~3-4 days apart;
+        // dividing by a period-length lower bound yields a stable ordinal.
+        let ordinal = dropPeriodSeed(for: date, calendar: calendar) / (3 * 86_400)
+        let start = ((ordinal * 5) % sorted.count + sorted.count) % sorted.count
+        return (0..<min(5, sorted.count)).map { sorted[(start + $0) % sorted.count] }
     }
 
     /// Days until the weekly challenge closes (Sunday): "3d left" / "ends today".

@@ -18,6 +18,7 @@ final class DiscoverViewModel: ObservableObject {
     @Published private(set) var challengeDaysLeft = ""
     @Published private(set) var challengeJoined = false
     @Published private(set) var freeThisWeek: [AnimationItem] = []
+    @Published private(set) var dropPicks: [AnimationItem] = []
     @Published private(set) var trending: [AnimationItem] = []
     @Published private(set) var streak = 0
     @Published private(set) var unreadCount = 0
@@ -105,6 +106,7 @@ final class DiscoverViewModel: ObservableObject {
         challengeDaysLeft = EngagementSchedule.challengeDaysLeftLabel(from: date, calendar: calendar)
         challengeJoined = defaults.bool(forKey: challengeKey)
         freeThisWeek = EngagementSchedule.freeThisWeek(from: all, on: date, calendar: calendar)
+        dropPicks = EngagementSchedule.dropPicks(from: all, on: date, calendar: calendar)
         // Personalized trending: bias toward the categories picked at
         // onboarding; fall back to the global curated row.
         let picks = onboarding?.categories ?? []

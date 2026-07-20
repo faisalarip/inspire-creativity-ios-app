@@ -67,6 +67,7 @@
 		319E121B5FDDA09BBED857C8 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = FA9A8BB58F4DD4C3E0A71147 /* Supabase */; };
 		31B54040D98A61FC4DB2FE1D /* MagneticSwapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C991212D073F82BBD4BEBFCB /* MagneticSwapView.swift */; };
 		31C976A98AE307BE7A60B756 /* MagneticCursorFerrofluidView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D51A15D5903C2700C34023B /* MagneticCursorFerrofluidView.swift */; };
+		31EF37376534937345B7E20B /* SeenItemsRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9544756CFEBE0BBFD71296FE /* SeenItemsRepositoryTests.swift */; };
 		32248300C3F0DBED202DD5B8 /* ParticleAssembleCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 417A69ECA0C324A4E976A55C /* ParticleAssembleCheckView.swift */; };
 		33287BD15E3D36694E09A27F /* VenetianBlindsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D737098C17B0C16CBF2641E /* VenetianBlindsView.swift */; };
 		3492FD3ACC8BE39222F69FDC /* WaxMeltView.metal in Sources */ = {isa = PBXBuildFile; fileRef = 5EF6C9DD6E2EC0EDDBE14132 /* WaxMeltView.metal */; };
@@ -120,6 +121,7 @@
 		55B87DADD8CBB5A9974D6118 /* GearTrainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A08678D4CB7E492C32731A3 /* GearTrainView.swift */; };
 		55F7A68CF2C1D4E3D9D5B144 /* AuthValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA308513D84255C3951D32D /* AuthValidationTests.swift */; };
 		55F7A68CF2C1D4E3D9D5B145 /* CatalogPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDA308513D84255C3951D32E /* CatalogPolicyTests.swift */; };
+		560D4E6D621448D53F3AC03F /* UnlockedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 330214351D82466FFBC16403 /* UnlockedView.swift */; };
 		5702E26B29E29FEB506CE5EA /* TearPerforationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEE5A84B9C4126E5E34AEE4F /* TearPerforationView.swift */; };
 		57569B12B1DBCD2981CBE33F /* PendulumNewtonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBB6582DDE83A343828671BD /* PendulumNewtonView.swift */; };
 		57DFAE95B63E7059367B736E /* SpotlightSweepTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFFB651C9D17010439F46181 /* SpotlightSweepTextView.swift */; };
@@ -333,6 +335,7 @@
 		E9972DE6519FFE44582AF46E /* ClockPieWipeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70BB057ADD4B5D993ACF14BA /* ClockPieWipeView.swift */; };
 		E9BF7EC8E51341413D5970D3 /* PullToTriggerBowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB312229AEDC94F2DD50012A /* PullToTriggerBowView.swift */; };
 		EA0090516BC68EB871104D84 /* Chip.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5229D0CDFACBA80BB2AAEEA8 /* Chip.swift */; };
+		EB1F556F2450AE65E676C613 /* SeenItemsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 073F920CD0ED3557021C6894 /* SeenItemsRepository.swift */; };
 		EB57E6A089261DEB96D05B88 /* InkBleedToggleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A16EAA347BC3F5A6E5143E84 /* InkBleedToggleView.swift */; };
 		EC2CF15AEE32580725824179 /* FoilTiltView.metal in Sources */ = {isa = PBXBuildFile; fileRef = 24B6FB797254F19CF3B37474 /* FoilTiltView.metal */; };
 		ED685D1282B647649D24271F /* TypewriterReturnTabsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49F896B3CD06F8063DFAC707 /* TypewriterReturnTabsView.swift */; };
@@ -382,6 +385,7 @@
 		059E54DE30DB8389DE557E3A /* EngagementNotificationPlanner.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EngagementNotificationPlanner.swift; sourceTree = "<group>"; };
 		066F04F8C34E6BA806207CB2 /* StoreManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
 		06EE30DC21A52A26A6DA8BC2 /* FanDeckView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FanDeckView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/FanDeckView.swift; sourceTree = "<group>"; };
+		073F920CD0ED3557021C6894 /* SeenItemsRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SeenItemsRepository.swift; sourceTree = "<group>"; };
 		078F8EB2FDCF67045A047E56 /* JellyWobbleView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = JellyWobbleView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/JellyWobbleView.swift; sourceTree = "<group>"; };
 		0804B204F0E72E433A500305 /* SwipeStampImpressView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SwipeStampImpressView.swift; path = InspireCreativityApp/Animations/Catalog/Gestures/SwipeStampImpressView.swift; sourceTree = "<group>"; };
 		08E92BDF1B56F57B16A5969C /* JellyWobbleView.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; name = JellyWobbleView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/JellyWobbleView.metal; sourceTree = "<group>"; };
@@ -441,6 +445,7 @@
 		32087985BA41BD2AAE947E7C /* ActivityRepository.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ActivityRepository.swift; sourceTree = "<group>"; };
 		3288925741A3C7A6F3FB1B36 /* InkbleedSegmentView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = InkbleedSegmentView.swift; path = InspireCreativityApp/Animations/Catalog/Navigation/InkbleedSegmentView.swift; sourceTree = "<group>"; };
 		328CF05BD82582AB0DD93EDC /* ColumnSlatSlideView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ColumnSlatSlideView.swift; path = InspireCreativityApp/Animations/Catalog/Transitions/ColumnSlatSlideView.swift; sourceTree = "<group>"; };
+		330214351D82466FFBC16403 /* UnlockedView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UnlockedView.swift; sourceTree = "<group>"; };
 		3360C558EB7FC93513583F8F /* DevelopPixelsView.metal */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.metal; name = DevelopPixelsView.metal; path = InspireCreativityApp/Animations/Catalog/MetalShaders/DevelopPixelsView.metal; sourceTree = "<group>"; };
 		343DE53FF962645126281CA9 /* MercuryPourView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = MercuryPourView.swift; path = InspireCreativityApp/Animations/Catalog/MetalShaders/MercuryPourView.swift; sourceTree = "<group>"; };
 		3449310CC5054890B09E6758 /* ShatterReformView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShatterReformView.swift; path = InspireCreativityApp/Animations/Catalog/Buttons/ShatterReformView.swift; sourceTree = "<group>"; };
@@ -578,6 +583,7 @@
 		9437562A4BD888F3E3B8FEB7 /* AnimationCatalogSeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationCatalogSeed.swift; sourceTree = "<group>"; };
 		94EF677A1038D5C944234F40 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
 		94F1835E23780B71740409B3 /* SymbolAssemblyView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SymbolAssemblyView.swift; path = InspireCreativityApp/Animations/Catalog/Onboarding/SymbolAssemblyView.swift; sourceTree = "<group>"; };
+		9544756CFEBE0BBFD71296FE /* SeenItemsRepositoryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SeenItemsRepositoryTests.swift; sourceTree = "<group>"; };
 		959AF64BF0F8536C8885F891 /* PurchaseRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseRepository.swift; sourceTree = "<group>"; };
 		96843BA6D2FD6043918D753C /* AnalyticsEvent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AnalyticsEvent.swift; path = InspireCreativityApp/Analytics/AnalyticsEvent.swift; sourceTree = "<group>"; };
 		97EC98780C194E82CA688AC0 /* OtpCascadeView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OtpCascadeView.swift; path = InspireCreativityApp/Animations/Catalog/MicroInteractions/OtpCascadeView.swift; sourceTree = "<group>"; };
@@ -882,6 +888,7 @@
 				3163399E3EEB394753E8EA26 /* LibraryViewModel.swift */,
 				4C0942D8BA6EBAC3F200E232 /* CollectionDetailView.swift */,
 				3B49BBED4F020633220C556A /* LibraryCards.swift */,
+				330214351D82466FFBC16403 /* UnlockedView.swift */,
 			);
 			path = Library;
 			sourceTree = "<group>";
@@ -1123,6 +1130,7 @@
 				57BC7CFC52602480A7AA9113 /* ProCopyMeterTests.swift */,
 				9C10C48C0050234FE7C0BC3E /* OnboardingPreferencesTests.swift */,
 				811D3B18D6AF7ECDFC1ACC26 /* AcquisitionAttributionTests.swift */,
+				9544756CFEBE0BBFD71296FE /* SeenItemsRepositoryTests.swift */,
 			);
 			path = InspireCreativityAppTests;
 			sourceTree = SOURCE_ROOT;
@@ -1272,6 +1280,7 @@
 				05C11AF7A6BB28674573376A /* Seed */,
 				D5E78990A2222FA8942461F0 /* RecentItemsRepository.swift */,
 				5D58120A3D6C997C82FDE09D /* CollectionsRepository.swift */,
+				073F920CD0ED3557021C6894 /* SeenItemsRepository.swift */,
 			);
 			path = Repositories;
 			sourceTree = "<group>";
@@ -1901,6 +1910,8 @@
 				FB08E47873A7050E3D7E57CE /* OnboardingPreferences.swift in Sources */,
 				E951E78E1E2C361934A93B5F /* OnboardingView.swift in Sources */,
 				89426C001F7096642EF87BBF /* AcquisitionAttribution.swift in Sources */,
+				EB1F556F2450AE65E676C613 /* SeenItemsRepository.swift in Sources */,
+				560D4E6D621448D53F3AC03F /* UnlockedView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1936,6 +1947,7 @@
 				A312C2D8E35C5A955F38FE30 /* ProCopyMeterTests.swift in Sources */,
 				D4A7488BBE80816267209639 /* OnboardingPreferencesTests.swift in Sources */,
 				A0BB6E0CCC085CA0A58DEFFA /* AcquisitionAttributionTests.swift in Sources */,
+				31EF37376534937345B7E20B /* SeenItemsRepositoryTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

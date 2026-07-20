@@ -177,6 +177,7 @@ struct RootView: View {
             case "notifications": router.push(.notificationSettings)
             case "settings": router.push(.settings)
             case "paywall": router.push(.paywall(source: "qa", animationId: "aurora-mesh"))
+            case "unlocked": router.push(.unlocked)
             case "detail": router.push(.detail(animationId: "spinner"))
             case "detail-pro": router.push(.detail(animationId: "aurora-mesh"))
             default: break
@@ -223,6 +224,9 @@ struct RootView: View {
                             .hiddenNavigationBar()
                     case .collection(let id):
                         CollectionDetailView(collectionId: id)
+                            .hiddenNavigationBar()
+                    case .unlocked:
+                        UnlockedView()
                             .hiddenNavigationBar()
                     }
                 }

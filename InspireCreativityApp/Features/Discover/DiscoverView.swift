@@ -59,6 +59,10 @@ struct DiscoverView: View {
                 .padding(.top, 20)
 
                 miniRow(
+                    title: "New in this drop", caption: "fresh Tue & Fri",
+                    items: viewModel.dropPicks
+                )
+                miniRow(
                     title: "Free this week", caption: "rotates Friday",
                     items: viewModel.freeThisWeek
                 )

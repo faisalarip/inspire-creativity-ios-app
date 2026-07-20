@@ -25,21 +25,24 @@ final class NotificationPlannerTests: XCTestCase {
         XCTAssertEqual(d.frequency, .realtime)
     }
 
-    func testAllOnWithStreakYieldsThreePlans() {
+    func testAllOnWithStreakYieldsFourPlans() {
         var prefs = NotificationPreferences.default
         prefs.trending = true // still no local plan for trending
         let plans = EngagementNotificationPlanner.plans(for: prefs, streak: 6)
         XCTAssertEqual(plans.map(\.id), [
+            "engagement.drop.tuesday",
             "engagement.drop.friday",
             "engagement.free.friday",
             "engagement.streak.daily",
         ])
-        XCTAssertEqual(plans[0].weekday, 6)
+        XCTAssertEqual(plans[0].weekday, 3)
         XCTAssertEqual(plans[0].hour, 8)
         XCTAssertEqual(plans[1].weekday, 6)
-        XCTAssertEqual(plans[1].hour, 9)
-        XCTAssertNil(plans[2].weekday)
-        XCTAssertTrue(plans[2].title.contains("6-day streak"))
+        XCTAssertEqual(plans[1].hour, 8)
+        XCTAssertEqual(plans[2].weekday, 6)
+        XCTAssertEqual(plans[2].hour, 9)
+        XCTAssertNil(plans[3].weekday)
+        XCTAssertTrue(plans[3].title.contains("6-day streak"))
     }
 
     func testMasterOffYieldsNoPlans() {
@@ -95,7 +98,7 @@ final class NotificationCoordinatorTests: XCTestCase {
         await coordinator.refreshAuthorization()
         coordinator.apply(streak: 6)
         XCTAssertEqual(spy.removeAllCount, 1)
-        XCTAssertEqual(spy.scheduled.count, 3)
+        XCTAssertEqual(spy.scheduled.count, 4) // Tue drop, Fri drop, free, streak
     }
 
     func testApplyOnlyRemovesWhenDeniedOrDisabled() async {
@@ -130,7 +133,7 @@ final class NotificationCoordinatorTests: XCTestCase {
         XCTAssertTrue(granted)
         XCTAssertTrue(coordinator.preferences.isEnabled)
         XCTAssertTrue(coordinator.isRemindMeActive)
-        XCTAssertEqual(spy.scheduled.count, 3)
+        XCTAssertEqual(spy.scheduled.count, 4) // Tue drop, Fri drop, free, streak
         XCTAssertEqual(analytics.events, [.notificationPermission(granted: true)])
         XCTAssertEqual(NotificationPreferences.load(from: defaults).isEnabled, true)
     }

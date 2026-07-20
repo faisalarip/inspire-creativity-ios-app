@@ -72,12 +72,15 @@ final class PaywallViewModel: ObservableObject {
 
     private let journeyMetrics: JourneyMetrics
     private let signedIn: () -> Bool
+    /// Buyer's acquisition source at purchase time (nil when unattributed).
+    private let acquisitionSource: () -> String?
     private let now: () -> Date
     private var appearedAt: Date?
 
     init(store: StoreManager, analytics: AnalyticsTracking, source: String,
          journeyMetrics: JourneyMetrics = JourneyMetrics(),
          signedIn: @escaping () -> Bool = { false },
+         acquisitionSource: @escaping () -> String? = { nil },
          contextItem: AnimationItem? = nil,
          proCount: Int = 0,
          now: @escaping () -> Date = { Date() }) {
@@ -86,6 +89,7 @@ final class PaywallViewModel: ObservableObject {
         self.source = source
         self.journeyMetrics = journeyMetrics
         self.signedIn = signedIn
+        self.acquisitionSource = acquisitionSource
         self.contextItem = contextItem
         self.proCount = proCount
         self.now = now
@@ -144,8 +148,10 @@ final class PaywallViewModel: ObservableObject {
         do {
             switch try await store.purchase(product) {
             case .success:
+                var context = journeyMetrics.snapshotForPurchase(signedIn: signedIn())
+                context.acquisitionSource = acquisitionSource()
                 analytics.log(.purchaseCompleted(productID: product.id, source: source,
-                                                 context: journeyMetrics.snapshotForPurchase(signedIn: signedIn())))
+                                                 context: context))
                 didComplete = true
             case .pending:
                 analytics.log(.purchaseCancelled(productID: product.id, source: source, reason: "pending"))

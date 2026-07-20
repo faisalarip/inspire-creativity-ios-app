@@ -14,6 +14,7 @@ struct SearchView: View {
     @EnvironmentObject private var router: AppRouter
     @StateObject private var viewModel: SearchViewModel
     @FocusState private var focused: Bool
+    @State private var resultLimit = 24
 
     private let gridColumns = [
         GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14),
@@ -51,6 +52,7 @@ struct SearchView: View {
         }
         .background(Theme.Palette.background)
         .ignoresSafeArea(edges: .bottom)
+        .onChange(of: viewModel.query) { _, _ in resultLimit = 24 }
     }
 
     // MARK: - Input
@@ -222,13 +224,33 @@ struct SearchView: View {
             .padding(.bottom, 12)
 
         LazyVGrid(columns: gridColumns, spacing: 14) {
-            ForEach(items.prefix(24)) { item in
+            ForEach(items.prefix(resultLimit)) { item in
                 AnimationCard(item) {
                     router.push(.detail(animationId: item.id))
                 }
             }
         }
         .padding(.horizontal, Theme.Spacing.xl)
+
+        if items.count > resultLimit {
+            Button {
+                resultLimit += 24
+            } label: {
+                Text("Show more · \(items.count - resultLimit) left")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 11)
+                    .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+                    )
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 20)
+        }
     }
 
     private func emptyState(query: String) -> some View {

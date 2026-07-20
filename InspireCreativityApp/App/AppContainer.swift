@@ -453,11 +453,8 @@ final class RemoteAnimationRepository: AnimationRepositoryProtocol {
     func search(_ query: String) -> [AnimationItem] {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else { return [] }
-        return cache.filter {
-            $0.name.lowercased().contains(q) ||
-            $0.category.rawValue.lowercased().contains(q) ||
-            $0.author.lowercased().contains(q)
-        }
+        return cache.filter { $0.matchesSearch(q) }
+            .sorted { $0.downloads > $1.downloads }
     }
 
     func featured() -> AnimationItem {

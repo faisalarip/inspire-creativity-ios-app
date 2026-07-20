@@ -33,6 +33,22 @@ protocol AnimationRepositoryProtocol {
     func refresh() async -> Bool
 }
 
+extension AnimationItem {
+    /// Search haystack shared by every repository: name, category, author,
+    /// aurora theme, and exact "free"/"pro" — so the Search tab's suggestion
+    /// chips ("cosmic", "free", "mesh") return meaningful result sets instead
+    /// of a near-empty grid.
+    func matchesSearch(_ lowercasedQuery: String) -> Bool {
+        if name.lowercased().contains(lowercasedQuery) { return true }
+        if category.rawValue.lowercased().contains(lowercasedQuery) { return true }
+        if author.lowercased().contains(lowercasedQuery) { return true }
+        if let theme = AuroraDescriptors.byId[id]?.theme.lowercased(),
+           theme.contains(lowercasedQuery) { return true }
+        if priceLabel.lowercased() == lowercasedQuery { return true }
+        return false
+    }
+}
+
 extension AnimationRepositoryProtocol {
     /// Seeded in-memory catalogs have nothing to re-fetch.
     @discardableResult
@@ -88,11 +104,8 @@ final class InMemoryAnimationRepository: AnimationRepositoryProtocol {
     func search(_ query: String) -> [AnimationItem] {
         let q = query.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else { return [] }
-        return seed.filter {
-            $0.name.lowercased().contains(q) ||
-            $0.category.rawValue.lowercased().contains(q) ||
-            $0.author.lowercased().contains(q)
-        }
+        return seed.filter { $0.matchesSearch(q) }
+            .sorted { $0.downloads > $1.downloads }
     }
 
     func featured() -> AnimationItem {

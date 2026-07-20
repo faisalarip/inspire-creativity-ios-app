@@ -30,13 +30,15 @@ A PLAIN App Store link still yields aggregate web-referrer data in ASC
 in Firebase. Either way, installers self-report "Medium" at onboarding,
 which closes the GA4 loop.
 
-**Smart hand-off page (best of both):** host `go.html` (next to this file) on
-the GitHub Pages site, then link Medium posts to:
+**Smart hand-off page (best of both) — LIVE since 2026-07-20:**
 ```
 https://faisalarip.github.io/inspirecreativity-legal/go.html?src=medium&c=<post-slug>
 ```
-It tries the app scheme first (installed → measured attribution) and falls
-back to the App Store with the campaign token after ~1.2s.
+Deployed to the inspirecreativity-legal Pages repo (go.html at root; a copy
+lives next to this file). It tries the app scheme first (installed →
+measured GA4 attribution) and falls back to the App Store after ~1.2s.
+TODO inside the page: paste the ASC provider token (pt=) to add per-post
+download/sales attribution on the store fallback.
 
 ## Reading the results in GA4
 - Revenue by source: Reports → Monetization (or any Exploration) →

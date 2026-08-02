@@ -43,6 +43,24 @@ final class SearchViewModelTests: XCTestCase {
         XCTAssertTrue(store.all().isEmpty)
     }
 
+    func testSearchLogsOncePerSettledQuery() async {
+        let suite = Fixtures.freshDefaults("searchlog")
+        let spy = SpyAnalyticsTracker()
+        let vm = SearchViewModel(repository: InMemoryAnimationRepository(),
+                                 recentSearches: RecentSearchesStore(defaults: suite),
+                                 analytics: spy,
+                                 journeyMetrics: JourneyMetrics(defaults: suite),
+                                 searchLogSettle: 0.15)
+        vm.query = "a"
+        vm.query = "au"
+        vm.query = "aur"
+        vm.query = "aurora"
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(spy.loggedNames.filter { $0 == "search" }.count, 1,
+                       "keystroke states must not log; only the settled query")
+        XCTAssertEqual(spy.events.last, .search(termLength: 6))
+    }
+
     func testDebouncedSearchProducesResultsAndEmptyStates() async {
         let (vm, _) = makeVM()
         vm.query = "aurora"

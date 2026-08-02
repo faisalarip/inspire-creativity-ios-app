@@ -46,6 +46,12 @@ enum AnalyticsEvent: Equatable {
     /// GA4's manual campaign attribution event — source/medium/campaign
     /// exactly as GA4 expects, so acquisition reports pick them up.
     case campaignDetails(source: String, medium: String, campaign: String)
+    /// GA4's standard revenue event, logged alongside `purchase_completed`.
+    /// Revenue/LTV reports only sum `value`+`currency` on the reserved
+    /// `purchase` event, and Firebase can't auto-log StoreKit 2 transactions —
+    /// without this, purchases count but revenue reads $0.
+    case purchase(productID: String, value: Double, currency: String,
+                  transactionID: String, source: String)
 
     var name: String {
         switch self {
@@ -71,6 +77,7 @@ enum AnalyticsEvent: Equatable {
         case .meterExhausted:     return "meter_exhausted"
         case .onboardingCompleted: return "onboarding_completed"
         case .campaignDetails:     return "campaign_details"
+        case .purchase:            return "purchase"
         }
     }
 
@@ -132,6 +139,9 @@ enum AnalyticsEvent: Equatable {
             return ["categories_count": categoriesCount]
         case let .campaignDetails(source, medium, campaign):
             return ["source": source, "medium": medium, "campaign": campaign]
+        case let .purchase(productID, value, currency, transactionID, source):
+            return ["product_id": productID, "value": value, "currency": currency,
+                    "transaction_id": transactionID, "source": source]
         }
     }
 }

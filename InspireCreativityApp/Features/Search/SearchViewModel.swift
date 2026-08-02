@@ -39,17 +39,19 @@ final class SearchViewModel: ObservableObject {
     private let recentSearches: RecentSearchesStore
     private let analytics: AnalyticsTracking
     private let journeyMetrics: JourneyMetrics
+    private let searchLogSettle: TimeInterval
     private var cancellables: Set<AnyCancellable> = []
-    private var lastLoggedQueryLen = -1
 
     init(repository: AnimationRepositoryProtocol,
          recentSearches: RecentSearchesStore = RecentSearchesStore(),
          analytics: AnalyticsTracking = NoOpAnalyticsTracker(),
-         journeyMetrics: JourneyMetrics = JourneyMetrics()) {
+         journeyMetrics: JourneyMetrics = JourneyMetrics(),
+         searchLogSettle: TimeInterval = 1.0) {
         self.repository = repository
         self.recentSearches = recentSearches
         self.analytics = analytics
         self.journeyMetrics = journeyMetrics
+        self.searchLogSettle = searchLogSettle
         self.popular = ["aurora-mesh", "liquid-chrome", "liquid-tabs", "hologram-card"]
             .compactMap { repository.find(id: $0) }
         bind()
@@ -67,6 +69,18 @@ final class SearchViewModel: ObservableObject {
                 self?.runSearch(query: query)
             }
             .store(in: &cancellables)
+
+        // Analytics settle: one `search` event per query the user stopped
+        // typing at. The 180ms UI debounce is shorter than a typing pause, so
+        // logging there fired on nearly every keystroke (~17 events per
+        // searching user in GA).
+        $query
+            .debounce(for: .seconds(searchLogSettle), scheduler: DispatchQueue.main)
+            .removeDuplicates()
+            .sink { [weak self] query in
+                self?.logSettledSearch(query)
+            }
+            .store(in: &cancellables)
     }
 
     private func runSearch(query: String) {
@@ -77,12 +91,13 @@ final class SearchViewModel: ObservableObject {
         }
         let results = repository.search(trimmed)
         state = results.isEmpty ? .empty(query: trimmed) : .results(results)
+    }
 
-        if trimmed.count != lastLoggedQueryLen {
-            lastLoggedQueryLen = trimmed.count
-            analytics.log(.search(termLength: trimmed.count))
-            journeyMetrics.recordSearch()
-        }
+    private func logSettledSearch(_ query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        analytics.log(.search(termLength: trimmed.count))
+        journeyMetrics.recordSearch()
     }
 
     /// Commits a query (suggestion / trending / recent tap, or return key):

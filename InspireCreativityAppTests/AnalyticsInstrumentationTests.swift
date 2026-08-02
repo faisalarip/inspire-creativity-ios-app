@@ -121,7 +121,8 @@ final class AnalyticsInstrumentationTests: XCTestCase {
         let vm = SearchViewModel(repository: InMemoryAnimationRepository(),
                                  recentSearches: RecentSearchesStore(defaults: d),
                                  analytics: SpyAnalyticsTracker(),
-                                 journeyMetrics: metrics)
+                                 journeyMetrics: metrics,
+                                 searchLogSettle: 0.1)
         vm.query = "spinner"
         let settled = expectation(description: "debounce settled")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { settled.fulfill() }

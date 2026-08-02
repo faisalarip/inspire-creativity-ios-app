@@ -71,6 +71,18 @@ final class AnalyticsEventTests: XCTestCase {
         XCTAssertEqual(params["signed_in"] as? Bool, false)
     }
 
+    func testStandardPurchaseCarriesRevenueParams() {
+        let event = AnalyticsEvent.purchase(productID: "pro.lifetime", value: 9.99, currency: "USD",
+                                            transactionID: "2000000123456789", source: "detail")
+        XCTAssertEqual(event.name, "purchase")
+        let params = event.parameters
+        XCTAssertEqual(params["value"] as? Double, 9.99)
+        XCTAssertEqual(params["currency"] as? String, "USD")
+        XCTAssertEqual(params["transaction_id"] as? String, "2000000123456789")
+        XCTAssertEqual(params["product_id"] as? String, "pro.lifetime")
+        XCTAssertEqual(params["source"] as? String, "detail")
+    }
+
     func testEventEquatable() {
         XCTAssertEqual(AnalyticsEvent.favoriteToggled(id: "a", on: true),
                        AnalyticsEvent.favoriteToggled(id: "a", on: true))

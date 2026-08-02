@@ -147,11 +147,16 @@ final class PaywallViewModel: ObservableObject {
         defer { isPurchasing = false }
         do {
             switch try await store.purchase(product) {
-            case .success:
+            case .success(let transactionID):
                 var context = journeyMetrics.snapshotForPurchase(signedIn: signedIn())
                 context.acquisitionSource = acquisitionSource()
                 analytics.log(.purchaseCompleted(productID: product.id, source: source,
                                                  context: context))
+                analytics.log(.purchase(productID: product.id,
+                                        value: NSDecimalNumber(decimal: product.price).doubleValue,
+                                        currency: product.priceFormatStyle.currencyCode,
+                                        transactionID: transactionID,
+                                        source: source))
                 didComplete = true
             case .pending:
                 analytics.log(.purchaseCancelled(productID: product.id, source: source, reason: "pending"))

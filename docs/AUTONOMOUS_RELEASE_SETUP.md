@@ -63,16 +63,22 @@ Claude (Claude Code / Chrome)
 
 ## Xcode Cloud
 
-One workflow, named **`Release`** — full click-path in
+One workflow, named **`Release`** — created 2026-06-28, config verified live
+2026-08-02. Full click-path in
 [`docs/ci/xcode-cloud-setup.md`](ci/xcode-cloud-setup.md):
 
-- **Trigger:** branch changes on `release` only.
-- **Actions:** Build → Test (iOS Simulator — the gate) → Archive (iOS; macOS
-  archive optional for Universal Purchase).
-- **Post-actions:** TestFlight internal group (App Store distribution
-  optional later). A failed action stops the run — nothing continues past a
-  red step, nothing uploads without green tests.
+- **Trigger:** branch changes on `release` only, with auto-cancel of
+  superseded runs. (Note: pushing to `release` while a run is in flight
+  cancels and replaces that run.)
+- **Actions:** `Test - iOS` (**Required to Pass** — the gate; set 2026-08-02,
+  it previously didn't block), `Archive - iOS` and `Archive - macOS`
+  (Universal Purchase), both with **Distribution Preparation: App Store
+  Connect** — builds upload to TestFlight and are App Store-eligible.
+- **Post-actions:** Notify (email on success/failure). A failed required
+  action stops the run — nothing uploads without green tests.
 - **Signing:** managed by Xcode Cloud (Automatic, team `5VHRN5SF2P`).
+- **Environment variables:** none — `BUILD_NUMBER_OFFSET` falls back to the
+  committed default of 100.
 - `ci_scripts/` are auto-detected from the pushed tree; keep them executable
   (`git ls-files -s ci_scripts/` → mode `100755`).
 

@@ -100,16 +100,18 @@ def latest_builds(token: str, app_id: str, limit: int = 10) -> list[dict]:
         "filter[app]": app_id, "sort": "-uploadedDate", "limit": limit,
         "include": "preReleaseVersion",
     })
-    trains = {i["id"]: (i.get("attributes") or {}).get("version")
+    trains = {i["id"]: (i.get("attributes") or {})
               for i in payload.get("included", []) if i.get("type") == "preReleaseVersions"}
     out = []
     for b in payload.get("data", []):
         attrs = b.get("attributes") or {}
         train_ref = ((b.get("relationships") or {}).get("preReleaseVersion") or {}).get("data") or {}
+        train = trains.get(train_ref.get("id"), {})
         out.append({
             "id": b["id"],
             "buildNumber": attrs.get("version"),
-            "train": trains.get(train_ref.get("id")),
+            "train": train.get("version"),
+            "platform": train.get("platform"),
             "processingState": attrs.get("processingState"),
             "uploaded": attrs.get("uploadedDate"),
             "expired": attrs.get("expired"),
@@ -164,7 +166,8 @@ def cmd_status(token: str, app_id: str, _args) -> int:
         print("  (none uploaded)")
     for b in builds:
         flag = "" if b["usesNonExemptEncryption"] is not None else "  ⚠ export compliance missing"
-        print(f"  {b['train'] or '?':>8}  build {b['buildNumber']:>5}  {b['processingState']:<10}"
+        print(f"  {b['platform'] or '?':>5}  {b['train'] or '?':>8}  build {b['buildNumber']:>5}"
+              f"  {b['processingState']:<10}"
               f"  uploaded {b['uploaded']}{'  (expired)' if b['expired'] else ''}{flag}")
     print("\nApp Store versions:")
     for v in app_store_versions(token, app_id):
@@ -243,6 +246,7 @@ def cmd_attach_build(token: str, app_id: str, args) -> int:
         return EXIT_FAIL
     candidates = [b for b in latest_builds(token, app_id, 50)
                   if b["processingState"] == "VALID" and not b["expired"]
+                  and b["platform"] == PLATFORM
                   and (b["train"] == args.version or args.any_train)]
     if not candidates:
         print(f"❌ no VALID, unexpired build found for train {args.version} "
@@ -301,13 +305,17 @@ def _submission_authorized(args) -> bool:
 
 
 def cmd_submit(token: str, app_id: str, args) -> int:
-    # Idempotency first: never create a second in-flight submission.
-    existing = open_review_submissions(token, app_id)
-    if existing:
-        s = existing[0]
-        print(f"An open review submission already exists ({s['id']}, state {s['state']}). "
-              "Not creating another.")
-        return EXIT_OK
+    # Idempotency: a submission that is already WITH Apple is never duplicated;
+    # a leftover DRAFT (READY_FOR_REVIEW, i.e. created but not yet submitted)
+    # is completed and reused instead of abandoned.
+    draft = None
+    for s in open_review_submissions(token, app_id):
+        if s["state"] == "READY_FOR_REVIEW":
+            draft = s
+        else:
+            print(f"A review submission is already with Apple ({s['id']}, state {s['state']}). "
+                  "Not creating another.")
+            return EXIT_OK
 
     code = cmd_validate(token, app_id, args)
     if code != EXIT_OK:
@@ -321,18 +329,24 @@ def cmd_submit(token: str, app_id: str, args) -> int:
         return EXIT_BLOCKED
 
     version = find_version(token, app_id, args.version)
-    sub = asc_write("POST", "/v1/reviewSubmissions", token, {"data": {
-        "type": "reviewSubmissions",
-        "attributes": {"platform": PLATFORM},
-        "relationships": {"app": {"data": {"type": "apps", "id": app_id}}},
-    }})["data"]
-    asc_write("POST", "/v1/reviewSubmissionItems", token, {"data": {
-        "type": "reviewSubmissionItems",
-        "relationships": {
-            "reviewSubmission": {"data": {"type": "reviewSubmissions", "id": sub["id"]}},
-            "appStoreVersionForReview": {"data": {"type": "appStoreVersions", "id": version["id"]}},
-        },
-    }})
+    if draft:
+        sub = {"id": draft["id"]}
+        print(f"Reusing draft review submission {sub['id']}.")
+    else:
+        sub = asc_write("POST", "/v1/reviewSubmissions", token, {"data": {
+            "type": "reviewSubmissions",
+            "attributes": {"platform": PLATFORM},
+            "relationships": {"app": {"data": {"type": "apps", "id": app_id}}},
+        }})["data"]
+    items = asc_get(f"/v1/reviewSubmissions/{sub['id']}/items", token, {"limit": 10}).get("data", [])
+    if not items:
+        asc_write("POST", "/v1/reviewSubmissionItems", token, {"data": {
+            "type": "reviewSubmissionItems",
+            "relationships": {
+                "reviewSubmission": {"data": {"type": "reviewSubmissions", "id": sub["id"]}},
+                "appStoreVersion": {"data": {"type": "appStoreVersions", "id": version["id"]}},
+            },
+        }})
     asc_write("PATCH", f"/v1/reviewSubmissions/{sub['id']}", token, {"data": {
         "type": "reviewSubmissions", "id": sub["id"],
         "attributes": {"submitted": True},

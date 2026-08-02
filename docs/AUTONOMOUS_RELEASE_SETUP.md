@@ -31,7 +31,7 @@ Claude (Claude Code / Chrome)
 | Bundle id | `com.inspirecreativity` · team `5VHRN5SF2P` · signing Automatic |
 | Trigger branch | `release` (everyday work on `main`/feature branches never builds) |
 | Marketing version | `MARKETING_VERSION` in the pbxproj — bumped by `Tools/bump_version.sh` |
-| Build number | `CI_BUILD_NUMBER + BUILD_NUMBER_OFFSET (default 100)`, stamped by `ci_scripts/ci_pre_xcodebuild.sh` — never hand-set |
+| Build number | Managed natively by Xcode Cloud (its run counter overrides CFBundleVersion at archive time) — never hand-set, never scripted |
 | Release tags | `v<version>-ios` / `v<version>-macos` after a version ships |
 
 ## Prerequisites
@@ -56,10 +56,14 @@ Claude (Claude Code / Chrome)
 - **Marketing version** (human-facing, e.g. `2.2.0`): owned by
   `Tools/bump_version.sh` (`--major | --minor | --patch | <explicit>`). Bump
   once per App Store release, not per bug-fix commit within a release cycle.
-- **Build number**: owned by Xcode Cloud. `ci_pre_xcodebuild.sh` stamps
-  `CI_BUILD_NUMBER + 100` via agvtool. The +100 offset clears the manually
-  uploaded builds (which used low numbers) so a cloud build can never collide
-  with or fall below a previously uploaded build. Monotonic by construction.
+- **Build number**: owned by Xcode Cloud's **native automatic numbering** —
+  at archive time it overrides CFBundleVersion with its run counter (verified
+  in run #21: an agvtool stamp of 121 in the checkout still shipped as 21).
+  Unique and monotonically increasing by construction; every TestFlight build
+  since run 15 carries its run number. `ci_pre_xcodebuild.sh` is a documented
+  no-op — do not reintroduce scripted stamping (the Test action re-runs the
+  hook in its test-execution phase, where an agvtool stamp exits 1 and would
+  fail the now-gating Test action).
 
 ## Xcode Cloud
 

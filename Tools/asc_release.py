@@ -51,6 +51,8 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from xcode_cloud_status import ASC_BASE, AscError, asc_get, token_from_env  # noqa: E402
 
+# Default app; override per-call with --bundle-id — the ASC team key sees the
+# whole portfolio (e.g. com.faisalarip.hydrate, com.faisalnurarif.tapescan).
 BUNDLE_ID = "com.inspirecreativity"
 PLATFORM = "IOS"
 RELEASE_ENV = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts", "release.env")
@@ -357,11 +359,15 @@ def cmd_submit(token: str, app_id: str, args) -> int:
 
 
 def main(argv=None) -> int:
+    global BUNDLE_ID
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--bundle-id", default=BUNDLE_ID,
+                        help="target app bundle id (default: %(default)s; the team key covers the whole portfolio)")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("status")
+    sub.add_parser("status", parents=[common])
     for name in ("validate", "create-version", "attach-build", "set-notes", "submit"):
-        p = sub.add_parser(name)
+        p = sub.add_parser(name, parents=[common])
         p.add_argument("--version", required=True, help="marketing version, e.g. 2.2.0")
         if name == "attach-build":
             p.add_argument("--any-train", action="store_true",
@@ -373,6 +379,7 @@ def main(argv=None) -> int:
             p.add_argument("--authorize", action="store_true",
                            help="explicit one-shot authorization (overrides AUTO_SUBMIT=false)")
     args = parser.parse_args(argv)
+    BUNDLE_ID = args.bundle_id
 
     try:
         token = token_from_env()

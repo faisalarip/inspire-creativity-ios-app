@@ -32,6 +32,15 @@ fi
 
 : "${CI_PRIMARY_REPOSITORY_PATH:?ci_pre_xcodebuild: CI_PRIMARY_REPOSITORY_PATH is unset}"
 cd "$CI_PRIMARY_REPOSITORY_PATH"
-echo "ci_pre_xcodebuild: setting build number to $CI_BUILD_NUMBER via agvtool."
-agvtool new-version -all "$CI_BUILD_NUMBER"
-echo "ci_pre_xcodebuild: build number is now $CI_BUILD_NUMBER."
+
+# Offset guard: builds uploaded manually before Xcode Cloud used CFBundleVersion=1
+# per version train, and Xcode Cloud's counter starts at 1 — without an offset the
+# first cloud build of an already-uploaded train would collide and be rejected by
+# App Store Connect. CI_BUILD_NUMBER is monotonic, so offset + counter can never
+# decrease or repeat. Override per-workflow with a BUILD_NUMBER_OFFSET custom
+# environment variable in App Store Connect if ever needed.
+BUILD_NUMBER="$((CI_BUILD_NUMBER + ${BUILD_NUMBER_OFFSET:-100}))"
+
+echo "ci_pre_xcodebuild: setting build number to $BUILD_NUMBER (CI_BUILD_NUMBER=$CI_BUILD_NUMBER + offset ${BUILD_NUMBER_OFFSET:-100}) via agvtool."
+agvtool new-version -all "$BUILD_NUMBER"
+echo "ci_pre_xcodebuild: build number is now $BUILD_NUMBER."

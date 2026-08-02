@@ -17,3 +17,22 @@ echo "ci_post_xcodebuild: build actions complete. Distribution handled by workfl
 if [ -n "$CI_XCODEBUILD_ACTION" ]; then
   echo "ci_post_xcodebuild: xcodebuild action was '$CI_XCODEBUILD_ACTION'."
 fi
+
+# TestFlight "What to Test": when this run produced an App Store-signed archive,
+# generate TestFlight/WhatToTest.en-US.txt next to ci_scripts (Apple's documented
+# location) from recent user-facing commits. Xcode Cloud attaches it to the
+# TestFlight build it uploads. Best-effort — never fails the build.
+if [ -n "$CI_APP_STORE_SIGNED_APP_PATH" ] && [ -d "$CI_APP_STORE_SIGNED_APP_PATH" ]; then
+  TESTFLIGHT_DIR="$CI_PRIMARY_REPOSITORY_PATH/TestFlight"
+  mkdir -p "$TESTFLIGHT_DIR"
+  cd "$CI_PRIMARY_REPOSITORY_PATH"
+  git fetch --deepen 50 2>/dev/null || true
+  if [ -x scripts/generate_release_notes.sh ] && scripts/generate_release_notes.sh > "$TESTFLIGHT_DIR/WhatToTest.en-US.txt" 2>/dev/null \
+      && [ -s "$TESTFLIGHT_DIR/WhatToTest.en-US.txt" ]; then
+    echo "ci_post_xcodebuild: WhatToTest.en-US.txt generated from release notes script."
+  else
+    git log -5 --no-merges --pretty='format:- %s' -- . > "$TESTFLIGHT_DIR/WhatToTest.en-US.txt" 2>/dev/null \
+      || echo "- Internal build for testing." > "$TESTFLIGHT_DIR/WhatToTest.en-US.txt"
+    echo "ci_post_xcodebuild: WhatToTest.en-US.txt generated from recent commits (fallback)."
+  fi
+fi

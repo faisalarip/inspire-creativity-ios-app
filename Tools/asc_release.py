@@ -25,6 +25,11 @@ Subcommands (all idempotent — safe to re-run):
     create-version --version 2.2.0      create the ASC version record if absent
     attach-build  --version 2.2.0       attach newest VALID build of that train
     set-notes     --version 2.2.0 --file notes.txt    set en-US "What's New"
+    set-metadata  --version 2.2.0 [--name N] [--subtitle S] [--keywords K]
+                                        set store metadata: name/subtitle live on
+                                        the editable (PREPARE_FOR_SUBMISSION)
+                                        appInfo's localization; keywords live on
+                                        the version's localization
     submit        --version 2.2.0       submit for App Review — GATED, see below
 
 The submission gate: `submit` refuses to act unless authorized by ONE of
@@ -146,6 +151,19 @@ def app_store_versions(token: str, app_id: str, limit: int = 5) -> list[dict]:
 def find_version(token: str, app_id: str, version_string: str) -> dict | None:
     return next((v for v in app_store_versions(token, app_id, limit=20)
                  if v["versionString"] == version_string), None)
+
+
+def editable_app_info_id(token: str, app_id: str) -> str:
+    """The appInfo whose state is PREPARE_FOR_SUBMISSION — the only one whose
+    name/subtitle may be edited. The READY_FOR_DISTRIBUTION one is the live
+    store listing and must never be touched."""
+    infos = asc_get(f"/v1/apps/{app_id}/appInfos", token, {"limit": 10}).get("data", [])
+    for info in infos:
+        attrs = info.get("attributes") or {}
+        if (attrs.get("state") or attrs.get("appStoreState")) == "PREPARE_FOR_SUBMISSION":
+            return info["id"]
+    raise SystemExit("no appInfo in PREPARE_FOR_SUBMISSION state — create the new "
+                     "App Store version first (create-version), then retry")
 
 
 def open_review_submissions(token: str, app_id: str) -> list[dict]:
@@ -288,6 +306,54 @@ def cmd_set_notes(token: str, app_id: str, args) -> int:
     return EXIT_OK
 
 
+def cmd_set_metadata(token: str, app_id: str, args) -> int:
+    if not (args.name or args.subtitle or args.keywords):
+        print("❌ nothing to set — pass at least one of --name / --subtitle / --keywords.")
+        return EXIT_FAIL
+
+    if args.name or args.subtitle:
+        info_id = editable_app_info_id(token, app_id)
+        locs = asc_get(f"/v1/appInfos/{info_id}/appInfoLocalizations", token,
+                       {"filter[locale]": args.locale}).get("data", [])
+        if not locs:
+            print(f"❌ no {args.locale} appInfoLocalization on the editable appInfo.")
+            return EXIT_FAIL
+        attrs = {}
+        if args.name:
+            attrs["name"] = args.name
+        if args.subtitle:
+            attrs["subtitle"] = args.subtitle
+        asc_write("PATCH", f"/v1/appInfoLocalizations/{locs[0]['id']}", token, {"data": {
+            "type": "appInfoLocalizations", "id": locs[0]["id"], "attributes": attrs,
+        }})
+        saved = (asc_get(f"/v1/appInfoLocalizations/{locs[0]['id']}", token)
+                 .get("data", {}).get("attributes") or {})
+        for field in ("name", "subtitle"):
+            value = saved.get(field) or ""
+            print(f"✅ {field} ({args.locale}): {value!r}  ({len(value)} chars)")
+
+    if args.keywords:
+        version = find_version(token, app_id, args.version)
+        if version is None:
+            print(f"❌ version {args.version} does not exist (create-version first).")
+            return EXIT_FAIL
+        locs = asc_get(f"/v1/appStoreVersions/{version['id']}/appStoreVersionLocalizations",
+                       token, {"limit": 10}).get("data", [])
+        target = next((l for l in locs if (l.get("attributes") or {}).get("locale") == args.locale), None)
+        if target is None:
+            print(f"❌ no {args.locale} localization on version {args.version}.")
+            return EXIT_FAIL
+        asc_write("PATCH", f"/v1/appStoreVersionLocalizations/{target['id']}", token, {"data": {
+            "type": "appStoreVersionLocalizations", "id": target["id"],
+            "attributes": {"keywords": args.keywords},
+        }})
+        saved = (asc_get(f"/v1/appStoreVersionLocalizations/{target['id']}", token)
+                 .get("data", {}).get("attributes") or {})
+        value = saved.get("keywords") or ""
+        print(f"✅ keywords ({args.locale}) on {args.version}: {value!r}  ({len(value)} chars)")
+    return EXIT_OK
+
+
 def _submission_authorized(args) -> bool:
     if args.authorize:
         return True
@@ -366,7 +432,7 @@ def main(argv=None) -> int:
                         help="target app bundle id (default: %(default)s; the team key covers the whole portfolio)")
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("status", parents=[common])
-    for name in ("validate", "create-version", "attach-build", "set-notes", "submit"):
+    for name in ("validate", "create-version", "attach-build", "set-notes", "set-metadata", "submit"):
         p = sub.add_parser(name, parents=[common])
         p.add_argument("--version", required=True, help="marketing version, e.g. 2.2.0")
         if name == "attach-build":
@@ -374,6 +440,11 @@ def main(argv=None) -> int:
                            help="allow attaching the newest VALID build even from another train")
         if name == "set-notes":
             p.add_argument("--file", required=True, help="path to the What's New text")
+            p.add_argument("--locale", default="en-US")
+        if name == "set-metadata":
+            p.add_argument("--name", help="app display name (editable appInfo localization)")
+            p.add_argument("--subtitle", help="app subtitle (editable appInfo localization)")
+            p.add_argument("--keywords", help="keyword string, ≤100 chars (version localization)")
             p.add_argument("--locale", default="en-US")
         if name == "submit":
             p.add_argument("--authorize", action="store_true",
@@ -387,7 +458,8 @@ def main(argv=None) -> int:
         handler = {
             "status": cmd_status, "validate": cmd_validate,
             "create-version": cmd_create_version, "attach-build": cmd_attach_build,
-            "set-notes": cmd_set_notes, "submit": cmd_submit,
+            "set-notes": cmd_set_notes, "set-metadata": cmd_set_metadata,
+            "submit": cmd_submit,
         }[args.cmd]
         return handler(token, app_id, args)
     except AscError as exc:

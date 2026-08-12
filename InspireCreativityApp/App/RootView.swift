@@ -1073,7 +1073,14 @@ private struct SocialAuthSection: View {
             } onCompletion: { result in
                 handleAppleCompletion(result)
             }
-            .signInWithAppleButtonStyle(.black)
+            // White, not black: the canvas behind this is #0A0A0C, so a black
+            // button is *darker* than its own background and the only thing
+            // outlining it was a 6%-white hairline — it read as floating text,
+            // not a control. Apple rejected 2.2.0 (build 25) on Guideline 4
+            // Design for exactly this ("Sign in with Apple buttons should be
+            // clearly identifiable to users as buttons"). The HIG's rule is to
+            // use the white or white-outline button on dark backgrounds.
+            .signInWithAppleButtonStyle(.white)
             #if os(macOS)
             .controlSize(.large)
             .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44)
@@ -1081,10 +1088,6 @@ private struct SocialAuthSection: View {
             .frame(maxWidth: .infinity, minHeight: 50, maxHeight: 50)
             #endif
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(Theme.Palette.hairline, lineWidth: 0.5)
-            )
             .disabled(authStore.isLoading)
             .accessibilityLabel("Sign in with Apple")
 

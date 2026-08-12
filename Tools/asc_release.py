@@ -66,8 +66,18 @@ EXIT_OK, EXIT_FAIL, EXIT_BLOCKED = 0, 1, 2
 
 # appStoreVersions.appVersionState values from which a submission can proceed.
 SUBMITTABLE_STATES = {"PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED"}
-# reviewSubmissions.state values that mean "a submission is already in flight".
+# reviewSubmissions.state values that are not finished — reported by `status`.
 OPEN_SUBMISSION_STATES = {"READY_FOR_REVIEW", "WAITING_FOR_REVIEW", "IN_REVIEW", "UNRESOLVED_ISSUES"}
+# ...of which only these mean "genuinely with Apple; never create a second one".
+IN_FLIGHT_STATES = {"WAITING_FOR_REVIEW", "IN_REVIEW"}
+# A rejected submission stays UNRESOLVED_ISSUES forever and blocks new ones;
+# it must be canceled before resubmitting the corrected version.
+STALE_SUBMISSION_STATES = {"UNRESOLVED_ISSUES"}
+# appInfos.state values whose name/subtitle may be edited. Mirrors
+# SUBMITTABLE_STATES: after a rejection the editable appInfo flips
+# PREPARE_FOR_SUBMISSION → REJECTED but stays writable. The live
+# READY_FOR_DISTRIBUTION record is never in this set — it is the store listing.
+EDITABLE_APP_INFO_STATES = SUBMITTABLE_STATES
 
 
 def asc_write(method: str, path: str, token: str, body: dict) -> dict:
@@ -154,16 +164,19 @@ def find_version(token: str, app_id: str, version_string: str) -> dict | None:
 
 
 def editable_app_info_id(token: str, app_id: str) -> str:
-    """The appInfo whose state is PREPARE_FOR_SUBMISSION — the only one whose
-    name/subtitle may be edited. The READY_FOR_DISTRIBUTION one is the live
-    store listing and must never be touched."""
+    """The appInfo in an editable state — the only one whose name/subtitle may
+    be edited. The READY_FOR_DISTRIBUTION one is the live store listing and must
+    never be touched."""
     infos = asc_get(f"/v1/apps/{app_id}/appInfos", token, {"limit": 10}).get("data", [])
+    seen = []
     for info in infos:
         attrs = info.get("attributes") or {}
-        if (attrs.get("state") or attrs.get("appStoreState")) == "PREPARE_FOR_SUBMISSION":
+        state = attrs.get("state") or attrs.get("appStoreState")
+        seen.append(state)
+        if state in EDITABLE_APP_INFO_STATES:
             return info["id"]
-    raise SystemExit("no appInfo in PREPARE_FOR_SUBMISSION state — create the new "
-                     "App Store version first (create-version), then retry")
+    raise SystemExit(f"no editable appInfo (states seen: {', '.join(map(str, seen))}) — "
+                     "create the new App Store version first (create-version), then retry")
 
 
 def open_review_submissions(token: str, app_id: str) -> list[dict]:
@@ -414,12 +427,15 @@ def _submission_authorized(args) -> bool:
 def cmd_submit(token: str, app_id: str, args) -> int:
     # Idempotency: a submission that is already WITH Apple is never duplicated;
     # a leftover DRAFT (READY_FOR_REVIEW, i.e. created but not yet submitted)
-    # is completed and reused instead of abandoned.
-    draft = None
+    # is completed and reused instead of abandoned; a rejected one
+    # (UNRESOLVED_ISSUES) is cleared out of the way so the fix can be resubmitted.
+    draft, stale = None, []
     for s in open_review_submissions(token, app_id):
         if s["state"] == "READY_FOR_REVIEW":
             draft = s
-        else:
+        elif s["state"] in STALE_SUBMISSION_STATES:
+            stale.append(s)
+        elif s["state"] in IN_FLIGHT_STATES:
             print(f"A review submission is already with Apple ({s['id']}, state {s['state']}). "
                   "Not creating another.")
             return EXIT_OK
@@ -434,6 +450,14 @@ def cmd_submit(token: str, app_id: str, args) -> int:
         print("   Authorize with ONE of: --authorize | AUTO_SUBMIT=true env | "
               "AUTO_SUBMIT=true in scripts/release.env")
         return EXIT_BLOCKED
+
+    # Only now — past validation and past the gate — may we mutate ASC state.
+    for s in stale:
+        asc_write("PATCH", f"/v1/reviewSubmissions/{s['id']}", token, {"data": {
+            "type": "reviewSubmissions", "id": s["id"],
+            "attributes": {"canceled": True},
+        }})
+        print(f"Canceled rejected submission {s['id']} (was {s['state']}).")
 
     version = find_version(token, app_id, args.version)
     if draft:

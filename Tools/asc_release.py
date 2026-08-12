@@ -227,14 +227,53 @@ def cmd_validate(token: str, app_id: str, args) -> int:
                 problems.append(f"attached build {build['buildNumber']} is expired")
     locs = asc_get(f"/v1/appStoreVersions/{version['id']}/appStoreVersionLocalizations",
                    token, {"limit": 10}).get("data", [])
+    media_lines = []
     for loc in locs:
         attrs = loc.get("attributes") or {}
+        locale = attrs.get("locale") or loc["id"]
         if not (attrs.get("whatsNew") or "").strip():
-            warnings.append(f"locale {attrs.get('locale')}: 'What's New' is empty — "
+            warnings.append(f"locale {locale}: 'What's New' is empty — "
                             f"set it with: Tools/asc_release.py set-notes --version {args.version} --file <notes>")
+        # Media gate (TapeScan 2.1.0 shipped with zero previews; nothing in ASC
+        # blocks that). Screenshot sets usually inherit from the previous
+        # version, but inheritance is ASYNCHRONOUS and can lag the record by
+        # days — so zero sets here may mean "not yet", and re-running later can
+        # pass. It is still a hard stop NOW: never submit on a promise.
+        sets_payload = asc_get(f"/v1/appStoreVersionLocalizations/{loc['id']}/appScreenshotSets",
+                               token, {"include": "appScreenshots",
+                                       "fields[appScreenshots]": "fileName,assetDeliveryState"})
+        shots = {i["id"]: (i.get("attributes") or {})
+                 for i in sets_payload.get("included", []) if i.get("type") == "appScreenshots"}
+        sets = sets_payload.get("data", [])
+        if not sets:
+            problems.append(f"locale {locale}: ZERO screenshot sets — the listing would go live with "
+                            "no previews. Attach media in ASC, or re-run if inheritance is pending.")
+        display_types = set()
+        for s in sets:
+            dtype = (s.get("attributes") or {}).get("screenshotDisplayType")
+            display_types.add(dtype or "?")
+            refs = ((s.get("relationships") or {}).get("appScreenshots") or {}).get("data") or []
+            media_lines.append(f"  media {locale}: {dtype} — {len(refs)} screenshot(s)")
+            if not refs:
+                problems.append(f"locale {locale}: screenshot set {dtype} exists but is EMPTY")
+            for ref in refs:
+                shot = shots.get(ref["id"], {})
+                state = (shot.get("assetDeliveryState") or {}).get("state")
+                if state == "FAILED":
+                    problems.append(f"locale {locale}: {dtype} screenshot "
+                                    f"'{shot.get('fileName')}' asset delivery FAILED")
+                elif state != "COMPLETE":
+                    warnings.append(f"locale {locale}: {dtype} screenshot "
+                                    f"'{shot.get('fileName')}' is {state} — still processing?")
+        if (any(d.startswith("APP_IPHONE") for d in display_types)
+                and not any(d.startswith("APP_IPAD") for d in display_types)):
+            warnings.append(f"locale {locale}: iPhone screenshots only — an iPad-capable binary "
+                            "(UIDeviceFamily [1,2]) must also carry an iPad set")
 
     print(f"Version {args.version}  state={version['state']}  "
           f"build={version['buildNumber'] or '—'}")
+    for line in media_lines:
+        print(line)
     for w in warnings:
         print(f"  ⚠ {w}")
     for p in problems:

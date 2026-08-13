@@ -30,12 +30,25 @@ mkdir -p "$SHOTS"
 # captured into a string first, so the grep|sed pipeline can't SIGPIPE a live
 # process and trip pipefail (which silently aborted `set -e`).
 udid() {
-  local list; list="$(xcrun simctl list devices available 2>/dev/null)"
+  local list esc; list="$(xcrun simctl list devices available 2>/dev/null)"
+  # $DEVICE is interpolated into an ERE, so its regex metacharacters must be
+  # escaped first. Every modern sim name carries parentheses — 'iPad Air
+  # 11-inch (M3)', 'iPad mini (A17 Pro)' — and unescaped they parse as a
+  # capture group, so the pattern looks for 'iPad Air 11-inch M3 (' and never
+  # matches. That returned an empty UDID and, under `set -e`, killed the script
+  # inside the assignment below before a single line of output was printed.
+  esc="$(printf '%s' "$DEVICE" | sed -E 's/[][(){}.*+?^$|\\]/\\&/g')"
   printf '%s\n' "$list" \
-    | grep -m1 -E "(^|[[:space:]])${DEVICE} \(" \
+    | grep -m1 -E "(^|[[:space:]])${esc} \(" \
     | sed -E 's/.*\(([0-9A-Fa-f-]{36})\).*/\1/'
 }
-UDID="${UDID:-$(udid)}"
+UDID="${UDID:-$(udid || true)}"
+if [ -z "$UDID" ]; then
+  printf '\033[31m[driver]\033[0m no available simulator matches DEVICE=%q\n' "$DEVICE" >&2
+  printf '  pick one from: xcrun simctl list devices available\n' >&2
+  printf '  or bypass the lookup entirely: UDID=<udid> %s <command>\n' "$(basename "$0")" >&2
+  exit 1
+fi
 
 log() { printf '\033[36m[driver]\033[0m %s\n' "$*"; }
 

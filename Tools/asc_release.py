@@ -51,6 +51,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -458,6 +459,19 @@ def cmd_submit(token: str, app_id: str, args) -> int:
             "attributes": {"canceled": True},
         }})
         print(f"Canceled rejected submission {s['id']} (was {s['state']}).")
+    if stale:
+        # The cancel is not synchronous: the version stays bound to the old
+        # submission for a moment, and POSTing the item too early 409s with
+        # STATE_ERROR.ITEM_PART_OF_ANOTHER_SUBMISSION. Wait for the release
+        # rather than making the caller re-run.
+        for attempt in range(20):
+            if all(s["state"] not in OPEN_SUBMISSION_STATES
+                   for s in open_review_submissions(token, app_id)
+                   if s["id"] in {x["id"] for x in stale}):
+                break
+            time.sleep(3)
+        else:
+            print("Warning: canceled submission still shows open; continuing anyway.")
 
     version = find_version(token, app_id, args.version)
     if draft:

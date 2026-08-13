@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<!-- Smart hand-off: app scheme first, App Store fallback with campaign token.
+     Host on the GitHub Pages site; link as go.html?src=medium&c=post-slug -->
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inspire Creativity</title>
+<style>body{background:#0a0a0c;color:#fff;font-family:-apple-system,system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}p{opacity:.6;font-size:14px}</style>
+</head><body><p>Opening Inspire Creativity…</p>
+<script>
+  var q = new URLSearchParams(location.search);
+  var src = (q.get("src") || "web").replace(/[^a-z0-9_-]/gi, "");
+  var c = (q.get("c") || "none").replace(/[^a-z0-9_-]/gi, "");
+  var appURL = "inspirecreativity://open?utm_source=" + src +
+               "&utm_medium=referral&utm_campaign=" + c;
+  // NOTE: replace <provider> with the ASC provider token (pt=) — the ct=
+  // campaign token only registers alongside it. Until then the fallback
+  // still works as a plain store link.
+  var storeURL = "https://apps.apple.com/app/apple-store/id6778075297?pt=<provider>&ct=" +
+                 encodeURIComponent(src + "_" + c) + "&mt=8";
+  var t = setTimeout(function () { location.href = storeURL; }, 1200);
+  window.addEventListener("pagehide", function () { clearTimeout(t); });
+  location.href = appURL;
+</script></body></html>

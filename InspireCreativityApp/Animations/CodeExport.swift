@@ -62,6 +62,24 @@ extension SwiftSnippet: Transferable {
 }
 
 // MARK: ─────────────────────────────────────────────────────────────
+// MARK: AnimationCodeResolver — item → exportable source
+// MARK: ─────────────────────────────────────────────────────────────
+
+/// Resolves an item's Swift source for egress. Aurora catalog items ship with
+/// an empty `swiftCode` (generation is deferred off the launch path), so this
+/// regenerates from the descriptor when needed.
+enum AnimationCodeResolver {
+    static func code(for item: AnimationItem) -> String {
+        if !item.swiftCode.isEmpty { return item.swiftCode }
+        if let descriptor = AuroraDescriptors.byId[item.id]
+            ?? AnimationPreviewRegistry.runtimeDescriptors[item.id] {
+            return AuroraCodeGen.swiftCode(for: descriptor)
+        }
+        return item.swiftCode
+    }
+}
+
+// MARK: ─────────────────────────────────────────────────────────────
 // MARK: SwiftSource — pre-egress text transforms
 // MARK: ─────────────────────────────────────────────────────────────
 

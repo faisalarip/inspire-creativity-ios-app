@@ -6,22 +6,20 @@
 import Foundation
 import Combine
 
-/// Three-way access decision for the code sheet. Pure logic so the gate is
+/// Two-way access decision for the code sheet. Pure logic so the gate is
 /// unit-testable. Purchasing never requires an account: a Pro entitlement
 /// unlocks code in ANY auth state (a signed-out buyer or Restore must never
-/// stay locked out), Pro items route to the paywall, and free items ask
-/// signed-out users for the (free) sign-in.
+/// stay locked out), Pro items route to the paywall — and FREE code is open
+/// to everyone. Copying free code is the activation moment (the analytics
+/// showed a sign-in wall here cut ~77% of users off before first value).
 enum CodeAccess: Equatable {
     case granted
-    case needsSignIn
     case needsPro
 
     static func evaluate(itemIsPro: Bool,
-                         hasProEntitlement: Bool,
-                         isAuthenticated: Bool) -> CodeAccess {
+                         hasProEntitlement: Bool) -> CodeAccess {
         if hasProEntitlement { return .granted }
-        if itemIsPro { return .needsPro }
-        return isAuthenticated ? .granted : .needsSignIn
+        return itemIsPro ? .needsPro : .granted
     }
 }
 
@@ -51,14 +49,32 @@ final class DetailViewModel: ObservableObject {
     private let favorites: FavoritesRepositoryProtocol
     private let purchases: PurchaseRepositoryProtocol
     private let analytics: AnalyticsTracking
+    private let journeyMetrics: JourneyMetrics
+    /// Optional engagement hooks (nil in previews/tests that don't care).
+    private let recents: RecentItemsRepositoryProtocol?
+    private let copyActivity: CopyActivityStore?
+    /// v2.1 metering: a few free Pro copies per drop week (nil = no metering,
+    /// e.g. the Mac shell until it adopts the meter UI).
+    private let meter: ProCopyMeter?
+    /// Collection-progress tracking (NEW badges on the Unlocked page).
+    private let seen: SeenItemsRepositoryProtocol?
     private var cancellables: Set<AnyCancellable> = []
+    /// Guards `markViewed()` so the view event fires once per real
+    /// presentation, not once per view-model instance that happens to be
+    /// constructed. See `markViewed()` for why this can't live in `init`.
+    private var hasLoggedView = false
 
     init(
         animationId: String,
         repository: AnimationRepositoryProtocol,
         favorites: FavoritesRepositoryProtocol,
         purchases: PurchaseRepositoryProtocol,
-        analytics: AnalyticsTracking = NoOpAnalyticsTracker()
+        analytics: AnalyticsTracking = NoOpAnalyticsTracker(),
+        journeyMetrics: JourneyMetrics = JourneyMetrics(),
+        recents: RecentItemsRepositoryProtocol? = nil,
+        copyActivity: CopyActivityStore? = nil,
+        meter: ProCopyMeter? = nil,
+        seen: SeenItemsRepositoryProtocol? = nil
     ) {
         // Resolve the item once (fall back to featured for unknown ids), assign
         // stored props, then wire bindings unconditionally so the detail screen
@@ -68,13 +84,15 @@ final class DetailViewModel: ObservableObject {
         self.favorites = favorites
         self.purchases = purchases
         self.analytics = analytics
+        self.journeyMetrics = journeyMetrics
+        self.recents = recents
+        self.copyActivity = copyActivity
+        self.meter = meter
+        self.seen = seen
         self.isFavorited = favorites.isFavorite(resolved.id)
         self.isOwned = purchases.isOwned(resolved.id, freeOverride: resolved.isFree)
         self.hasPro = purchases.isPro
         bind()
-        analytics.log(.animationView(id: resolved.id,
-                                     category: resolved.category.rawValue,
-                                     isPro: resolved.isPro))
     }
 
     private func bind() {
@@ -94,6 +112,49 @@ final class DetailViewModel: ObservableObject {
         purchases.isProPublisher
             .receive(on: DispatchQueue.main)
             .assign(to: &$hasPro)
+
+        refreshMeter()
+    }
+
+    // MARK: Pro-copy meter
+
+    /// Pro copies left this drop week (0 when metering is off or irrelevant).
+    @Published private(set) var meterRemaining = 0
+    /// True when THIS Pro item was unlocked with a metered copy this week.
+    @Published private(set) var meterUnlocked = false
+
+    private func refreshMeter() {
+        guard let meter, item.isPro else { return }
+        meterRemaining = meter.remaining()
+        meterUnlocked = meter.isRedeemed(item.id)
+    }
+
+    /// Unlocks this Pro item with one metered copy. Returns false when the
+    /// meter is spent — the caller routes to the paywall (source "meter",
+    /// the highest-intent moment in the funnel).
+    @discardableResult
+    func redeemMeterCopy() -> Bool {
+        guard let meter, item.isPro, !hasPro else { return false }
+        if meter.redeem(item.id) {
+            analytics.log(.meterCopyUsed(animationId: item.id, remaining: meter.remaining()))
+            refreshMeter()
+            return true
+        }
+        analytics.log(.meterExhausted(animationId: item.id))
+        return false
+    }
+
+    /// Logs the animation view + records it for journey metrics, exactly once per
+    /// view-model instance. Called from the view's .onAppear rather than init so it
+    /// fires once per real presentation — not on every parent re-render that eagerly
+    /// reconstructs a throwaway view model (see MacAppView).
+    func markViewed() {
+        guard !hasLoggedView else { return }
+        hasLoggedView = true
+        analytics.log(.animationView(id: item.id, category: item.category.rawValue, isPro: item.isPro))
+        journeyMetrics.recordAnimationView()
+        recents?.record(item.id)
+        seen?.markSeen(item.id)
     }
 
     func toggleFavorite() {
@@ -102,11 +163,28 @@ final class DetailViewModel: ObservableObject {
         // truth. `isFavorited` is updated asynchronously via `idsPublisher`, so
         // it still holds the stale pre-toggle value at this point.
         analytics.log(.favoriteToggled(id: item.id, on: favorites.isFavorite(item.id)))
+        if favorites.isFavorite(item.id) { journeyMetrics.recordFavorite() }
     }
 
     /// Logs a code-copy from the leaf `CodeSheet` via an injected closure, so
     /// the view itself never holds the analytics dependency or the item id.
     func logCodeCopied() {
         analytics.log(.codeCopied(id: item.id))
+        copyActivity?.recordCopy()
+    }
+
+    /// Logs the code-unlock intent from the leaf view's CTA. Granted access
+    /// never reaches the lock CTA, so it is intentionally a no-op.
+    func logCodeUnlockAttempt(_ access: CodeAccess) {
+        let result: String
+        switch access {
+        case .needsPro: result = "needs_pro"
+        case .granted:  return
+        }
+        analytics.log(.codeUnlockAttempt(result: result,
+                                         animationID: item.id,
+                                         category: item.category.rawValue,
+                                         isPro: item.isPro))
+        journeyMetrics.recordCodeUnlockAttempt(result: access)
     }
 }

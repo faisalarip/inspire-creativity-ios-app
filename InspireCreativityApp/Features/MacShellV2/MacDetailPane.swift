@@ -19,7 +19,6 @@ struct MacDetailPane: View {
     // MARK: Dependencies & state
 
     @EnvironmentObject private var container: AppContainer
-    @EnvironmentObject private var authStore: AuthStore
     @StateObject private var viewModel: DetailViewModel
 
     let onClose: () -> Void
@@ -27,7 +26,6 @@ struct MacDetailPane: View {
     @State private var tab: DetailTab = .code
     @State private var replay: Int = 0
     @State private var showExporter = false
-    @State private var showAuth = false
     @State private var showPaywall = false
     @State private var showInteractHint = false
 
@@ -41,12 +39,11 @@ struct MacDetailPane: View {
     private var access: CodeAccess {
         CodeAccess.evaluate(
             itemIsPro: viewModel.item.isPro,
-            hasProEntitlement: viewModel.hasPro,
-            isAuthenticated: authStore.isAuthenticated
+            hasProEntitlement: viewModel.hasPro
         )
     }
 
-    private var canViewCode: Bool { access == .granted }
+    private var canViewCode: Bool { access == .granted || viewModel.meterUnlocked }
 
     // MARK: - Body
 
@@ -60,27 +57,33 @@ struct MacDetailPane: View {
         .frame(width: 460)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(Color(hex: "#111115"))
+        .onAppear {
+            // The Mac 3-pane shell shows this pane directly (no `AppRouter`
+            // push), so — unlike iOS, where `AppRouter.push(.detail)` tracks
+            // the screen — the view has to self-report here for GA4 parity.
+            container.analytics.track(screen: .detail)
+            // Fires the animation_view log + journey metrics exactly once per
+            // real presentation (guarded inside the VM), not on every eager
+            // reconstruction of the view model in MacAppView.body — see
+            // DetailViewModel.markViewed().
+            viewModel.markViewed()
+        }
         .fileExporter(
             isPresented: $showExporter,
             document: SwiftFileDocument(text: viewModel.code),
             contentType: .swiftSource,
             defaultFilename: SwiftSnippet.fileName(for: viewModel.item.name)
         ) { _ in }
-        .sheet(isPresented: $showAuth) {
-            AuthGateView()
-                .environmentObject(container)
-                .environmentObject(authStore)
-                .environmentObject(container.store)
-                .frame(minWidth: 480, minHeight: 620)
-        }
         .sheet(isPresented: $showPaywall) {
-            PaywallView(viewModel: container.makePaywallViewModel(source: "detail"))
+            PaywallView(viewModel: container.makePaywallViewModel(source: "detail",
+                                                                   animationId: viewModel.item.id))
                 .environmentObject(container)
                 .environmentObject(container.store)
                 .frame(minWidth: 520, minHeight: 640)
-        }
-        .onChange(of: authStore.isAuthenticated) { _, isAuth in
-            if isAuth { showAuth = false }
+                // Same rationale as the detail `.onAppear` above: this sheet
+                // bypasses `AppRouter`, so it never gets the `.paywall`
+                // screen_view that `AppRouter.push(.paywall)` gives iOS.
+                .onAppear { container.analytics.track(screen: .paywall) }
         }
     }
 
@@ -182,9 +185,13 @@ struct MacDetailPane: View {
                 }
             }
         } else {
-            LockedCodePanel(access: access) {
-                if access == .needsSignIn { showAuth = true }
-                else { showPaywall = true }
+            LockedCodePanel(meterRemaining: viewModel.meterRemaining) {
+                viewModel.logCodeUnlockAttempt(access)
+                // Meter parity with iOS: unlock in place while copies remain,
+                // paywall only at exhaustion.
+                if !viewModel.redeemMeterCopy() {
+                    showPaywall = true
+                }
             }
         }
     }
@@ -427,7 +434,7 @@ private struct ActionBarButton: View {
 // ── Locked code panel ─────────────────────────────────────────────────────────
 
 private struct LockedCodePanel: View {
-    let access: CodeAccess
+    let meterRemaining: Int
     let onCTA: () -> Void
 
     var body: some View {
@@ -435,8 +442,13 @@ private struct LockedCodePanel: View {
             Image(systemName: "lock.fill")
                 .font(.system(size: 40))
                 .foregroundStyle(.secondary)
+            if meterRemaining > 0 {
+                Text("You have \(meterRemaining) free Pro \(meterRemaining == 1 ? "copy" : "copies") this week")
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+            }
             Button(action: onCTA) {
-                Text(access == .needsPro ? "Unlock with Pro" : "Sign in to view the code")
+                Text(meterRemaining > 0 ? "Use 1 free Pro copy" : "Unlock with Pro")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)

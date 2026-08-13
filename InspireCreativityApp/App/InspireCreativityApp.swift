@@ -43,6 +43,9 @@ struct InspireCreativityApp: App {
                 .environmentObject(container.store)
                 .tint(Theme.Palette.accent)
                 .preferredColorScheme(.dark)
+                // Measured acquisition: utm-tagged links that open the app
+                // (scheme or universal link) attribute the user in GA4.
+                .onOpenURL { container.acquisition.handle(url: $0) }
             #endif
         }
         #if os(macOS)

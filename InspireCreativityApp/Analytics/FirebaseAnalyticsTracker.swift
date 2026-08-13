@@ -21,12 +21,22 @@ struct FirebaseAnalyticsTracker: AnalyticsTracking {
     func track(screen: AnalyticsScreen) {
         Analytics.logEvent(
             AnalyticsEventScreenView,
-            parameters: [AnalyticsParameterScreenName: screen.rawValue]
+            parameters: [
+                AnalyticsParameterScreenName: screen.rawValue,
+                // Without an explicit class GA4 falls back to the SwiftUI
+                // hosting controller's mangled name, making the screens
+                // report unreadable (_TtGC7SwiftUI19UIHostingController…).
+                AnalyticsParameterScreenClass: screen.rawValue,
+            ]
         )
     }
 
     func setCollectionEnabled(_ on: Bool) {
         Analytics.setAnalyticsCollectionEnabled(on)
+    }
+
+    func set(_ property: AnalyticsUserProperty) {
+        Analytics.setUserProperty(property.value, forName: property.name)
     }
 }
 #endif

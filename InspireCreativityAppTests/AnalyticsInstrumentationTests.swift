@@ -11,7 +11,9 @@ final class AnalyticsInstrumentationTests: XCTestCase {
                                  favorites: FavoritesRepository(),
                                  purchases: StoreManager(),
                                  analytics: spy)
-        _ = vm
+        // animation_view now logs from the view's .onAppear (via markViewed())
+        // rather than init, so a real presentation is simulated before asserting.
+        vm.markViewed()
         XCTAssertTrue(spy.events.contains { if case .animationView = $0 { return true } else { return false } },
                       "opening Detail must log animation_view")
     }
@@ -52,7 +54,7 @@ final class AnalyticsInstrumentationTests: XCTestCase {
         let spy = SpyAnalyticsTracker()
         let router = AppRouter()
         router.analytics = spy
-        router.push(.paywall(source: "settings"))
+        router.push(.paywall(source: "settings", animationId: nil))
         XCTAssertEqual(spy.screens, [.paywall],
                        "pushing .paywall must track the paywall screen")
     }
@@ -67,31 +69,91 @@ final class AnalyticsInstrumentationTests: XCTestCase {
     }
 
     /// Bug 2 regression: constructing a BrowseViewModel must NOT log
-    /// `category_selected` on launch. CombineLatest3 emits its initial
-    /// `(nil, .featured, "")` on subscription; the dedup baseline is seeded to
-    /// the initial category so that synthetic emission is treated as
-    /// already-seen. The first genuine user category change must still log.
+    /// `category_selected` on launch — only a genuine scope change may, and
+    /// exactly once (re-assigning the same scope is a no-op).
     func testBrowseDoesNotLogCategorySelectedOnLaunch() {
         let spy = SpyAnalyticsTracker()
         let vm = BrowseViewModel(repository: InMemoryAnimationRepository(),
                                  analytics: spy)
 
-        // Let the 120ms debounce (DispatchQueue.main) settle without any user action.
-        let settled = expectation(description: "debounce settled")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { settled.fulfill() }
-        wait(for: [settled], timeout: 1.0)
-
         XCTAssertTrue(categoryEvents(in: spy).isEmpty,
-                      "no category_selected event may fire before the user changes the category")
+                      "no category_selected event may fire before the user drills in")
 
-        // A genuine user category change must log exactly once.
-        vm.selectedCategory = .loaders
-        let logged = expectation(description: "category change logged")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { logged.fulfill() }
-        wait(for: [logged], timeout: 1.0)
+        vm.scope = .category(.loaders)
+        XCTAssertEqual(categoryEvents(in: spy), [.categorySelected(AnimationCategory.loaders.rawValue)],
+                       "the first genuine drill-in must log category_selected exactly once")
 
-        XCTAssertEqual(categoryEvents(in: spy), [.categorySelected(Category.loaders.rawValue)],
-                       "the first genuine category change must log category_selected exactly once")
+        vm.scope = .category(.loaders)
+        XCTAssertEqual(categoryEvents(in: spy).count, 1,
+                       "re-assigning the same scope must not re-log")
+    }
+
+    func testCodeUnlockAttemptLogsNeedsPro() {
+        let spy = SpyAnalyticsTracker()
+        // Pick a Pro item so the gate is needs_pro when signed out & not Pro.
+        let proItem = AnimationCatalogSeed.items.first { $0.isPro }!
+        let vm = DetailViewModel(animationId: proItem.id,
+                                 repository: InMemoryAnimationRepository(),
+                                 favorites: FavoritesRepository(),
+                                 purchases: StoreManager(),
+                                 analytics: spy)
+        vm.logCodeUnlockAttempt(.needsPro)
+        XCTAssertTrue(spy.events.contains {
+            if case let .codeUnlockAttempt(result, _, _, _) = $0 { return result == "needs_pro" } else { return false }
+        }, "unlock attempt on a Pro item must log code_unlock_attempt result=needs_pro")
+    }
+
+    func testCodeUnlockAttemptGrantedLogsNothing() {
+        let spy = SpyAnalyticsTracker()
+        let vm = DetailViewModel(animationId: AnimationCatalogSeed.items[0].id,
+                                 repository: InMemoryAnimationRepository(),
+                                 favorites: FavoritesRepository(),
+                                 purchases: StoreManager(),
+                                 analytics: spy)
+        let before = spy.events.count
+        vm.logCodeUnlockAttempt(.granted)
+        XCTAssertEqual(spy.events.count, before, "granted access must not log an unlock attempt")
+    }
+
+    func testSearchRecordsJourneySearch() {
+        let d = UserDefaults(suiteName: "SearchTab.\(UUID().uuidString)")!
+        let metrics = JourneyMetrics(defaults: d)
+        let vm = SearchViewModel(repository: InMemoryAnimationRepository(),
+                                 recentSearches: RecentSearchesStore(defaults: d),
+                                 analytics: SpyAnalyticsTracker(),
+                                 journeyMetrics: metrics,
+                                 searchLogSettle: 0.1)
+        vm.query = "spinner"
+        let settled = expectation(description: "debounce settled")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { settled.fulfill() }
+        wait(for: [settled], timeout: 1.0)
+        XCTAssertGreaterThanOrEqual(d.integer(forKey: "journey.searchesCount"), 1,
+                                    "a debounced search must record a journey search")
+    }
+
+    func testPaywallDismissWithoutPurchaseLogsDismissed() {
+        let spy = SpyAnalyticsTracker()
+        var t = Date(timeIntervalSince1970: 0)
+        let vm = PaywallViewModel(store: StoreManager(), analytics: spy, source: "detail",
+                                  journeyMetrics: JourneyMetrics(defaults: UserDefaults(suiteName: "pw.\(UUID().uuidString)")!),
+                                  signedIn: { false }, now: { t })
+        vm.markAppeared()
+        t = Date(timeIntervalSince1970: 8)          // 8s dwell
+        vm.logDismissedIfNeeded()
+        XCTAssertEqual(spy.events.last, .paywallDismissed(source: "detail", secondsBucket: "5_15s"),
+                       "closing the paywall without buying must log paywall_dismissed with a dwell bucket")
+    }
+
+    func testPaywallDismissAfterCompletionLogsNothing() {
+        let spy = SpyAnalyticsTracker()
+        let vm = PaywallViewModel(store: StoreManager(), analytics: spy, source: "detail",
+                                  journeyMetrics: JourneyMetrics(defaults: UserDefaults(suiteName: "pw.\(UUID().uuidString)")!),
+                                  signedIn: { false }, now: { Date() })
+        vm.markAppeared()
+        vm.markCompletedForTesting()                // simulates a successful purchase
+        vm.logDismissedIfNeeded()
+        XCTAssertFalse(spy.events.contains { if case .paywallDismissed = $0 { return true } else { return false } },
+                       "a completed purchase must not also log paywall_dismissed")
     }
 
     /// Filters a spy's events down to `category_selected` only (search events

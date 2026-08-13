@@ -10,6 +10,7 @@ struct DiscoverView: View {
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var container: AppContainer
     @StateObject private var viewModel: DiscoverViewModel
+    @State private var showPriming = false
 
     init(viewModel: DiscoverViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -18,90 +19,57 @@ struct DiscoverView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                // Compact title — no large-title block, no bell action.
-                Text("Discover")
-                    .font(.system(size: 28, weight: .heavy))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, Theme.Spacing.xxl)
-                    .padding(.top, 8)
-                    .padding(.bottom, 8)
+                header
 
-                Text("\(viewModel.totalCount) hand-crafted SwiftUI animations. Tap any one to preview and copy.")
-                    .font(.system(size: 15))
-                    .foregroundStyle(.white.opacity(0.55))
-                    .padding(.horizontal, Theme.Spacing.xxl)
-                    .padding(.bottom, Theme.Spacing.xl)
-                    .lineLimit(2)
-
-                SectionHeader("Trending this week", trailing: "See all") {
-                    router.selectedTab = .browse
-                }
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 12) {
-                        ForEach(viewModel.trending) { item in
-                            AnimationCard(item, size: .small) {
-                                router.push(.detail(animationId: item.id))
+                if let pick = viewModel.dailyPick {
+                    DailyPickCard(
+                        item: pick,
+                        resetLabel: viewModel.dailyResetLabel,
+                        copied: viewModel.dailyCopied,
+                        onOpen: { router.push(.detail(animationId: pick.id)) },
+                        onCopy: {
+                            if viewModel.copyDailyPick() == .needsDetail {
+                                router.push(.detail(animationId: pick.id))
                             }
                         }
-                    }
+                    )
                     .padding(.horizontal, Theme.Spacing.xl)
+                    .padding(.top, 18)
                 }
 
-                // Pro upsell — only for users who haven't unlocked Pro yet.
-                if !viewModel.isPro {
-                    AuroraPackPromoCard {
-                        container.analytics.log(.auroraPromoTap)
-                        router.push(.paywall(source: "promo"))
-                    }
-                    .padding(.horizontal, Theme.Spacing.xl)
-                    .padding(.top, Theme.Spacing.xxxl)
-                }
-
-                SectionHeader("Aurora in the wild", trailing: "See all") {
-                    router.selectedTab = .browse
-                }
-                Text("Each animation, shown inside a sample app layout.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .padding(.horizontal, Theme.Spacing.xxl)
-                    .padding(.top, -8)
-                    .padding(.bottom, 12)
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    // Lazy: 30 mockups, each embedding a live aurora preview —
-                    // an eager HStack instantiates (and animates) all of them.
-                    LazyHStack(spacing: 14) {
-                        ForEach(container.usageMockups) { m in
-                            UsageMockupCard(mockup: m) {
-                                router.push(.detail(animationId: m.animationId))
-                            }
-                        }
-                    }
-                    .padding(.horizontal, Theme.Spacing.xl)
-                }
-
-                SectionHeader("Browse by category")
-                CategoryGrid(categories: viewModel.categories) { category in
-                    // Carry the tapped category into a filtered Browse tab.
-                    router.pendingBrowseCategory = category
-                    router.selectedTab = .browse
-                }
-
-                SectionHeader("New & noteworthy", trailing: "See all") {
-                    router.selectedTab = .browse
-                }
-                LazyVGrid(
-                    columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
-                    spacing: 12
-                ) {
-                    ForEach(viewModel.newlyAdded) { item in
-                        AnimationCard(item) {
-                            router.push(.detail(animationId: item.id))
-                        }
-                    }
-                }
+                RemindMeStrip(
+                    coordinator: container.notificationCoordinator,
+                    countdownLabel: viewModel.dropCountdownLabel,
+                    streak: { viewModel.streak },
+                    onPrime: { showPriming = true }
+                )
                 .padding(.horizontal, Theme.Spacing.xl)
+                .padding(.top, 12)
+
+                WeeklyChallengeCard(
+                    daysLeftLabel: viewModel.challengeDaysLeft,
+                    joined: viewModel.challengeJoined,
+                    onJoin: {
+                        viewModel.joinChallenge()
+                        router.pendingBrowseCategory = .loaders
+                        router.selectedTab = .browse
+                    }
+                )
+                .padding(.horizontal, Theme.Spacing.xl)
+                .padding(.top, 20)
+
+                miniRow(
+                    title: "New in this drop", caption: "fresh Tue & Fri",
+                    items: viewModel.dropPicks
+                )
+                miniRow(
+                    title: "Free this week", caption: "rotates Friday",
+                    items: viewModel.freeThisWeek
+                )
+                miniRow(
+                    title: "Trending now", caption: nil, seeAll: true,
+                    items: viewModel.trending
+                )
 
                 Spacer().frame(height: 120)
             }
@@ -110,8 +78,141 @@ struct DiscoverView: View {
             await viewModel.reload()
             await container.refreshUsageMockups()
         }
+        .onAppear {
+            viewModel.refreshDerived()
+            #if DEBUG
+            // Headless-QA hook: `defaults write <bundle> icapp-priming 1`
+            // before launch opens the priming cover (one-shot).
+            if UserDefaults.standard.bool(forKey: "icapp-priming") {
+                UserDefaults.standard.removeObject(forKey: "icapp-priming")
+                showPriming = true
+            }
+            #endif
+        }
         .background(Theme.Palette.background)
         .ignoresSafeArea(edges: .bottom)
+        #if os(iOS)
+        .fullScreenCover(isPresented: $showPriming) { NotificationPrimingView() }
+        #else
+        .sheet(isPresented: $showPriming) { NotificationPrimingView() }
+        #endif
+    }
+
+    // MARK: - Header (date · title · streak · bell)
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(viewModel.dateLabel)
+                    .font(.system(size: 13.5, weight: .medium))
+                    .foregroundStyle(Theme.Palette.textSecondary)
+                Text("Discover")
+                    .font(.system(size: 32, weight: .heavy))
+                    .tracking(-1)
+                    .foregroundStyle(Theme.Palette.textPrimary)
+            }
+            Spacer()
+
+            if viewModel.streak > 0 {
+                StreakChip(count: viewModel.streak)
+            }
+
+            IconButton("bell") { router.push(.activity) }
+                .overlay(alignment: .topTrailing) {
+                    if viewModel.unreadCount > 0 {
+                        Text("\(viewModel.unreadCount)")
+                            .font(.system(size: 10, weight: .heavy))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 3)
+                            .frame(minWidth: 17, minHeight: 17)
+                            .background(Color(hex: "#FF3B30"), in: Capsule())
+                            .overlay(
+                                Capsule().strokeBorder(Theme.Palette.background, lineWidth: 2)
+                            )
+                            .offset(x: 4, y: -4)
+                    }
+                }
+        }
+        .padding(.horizontal, Theme.Spacing.xxl)
+        .padding(.top, 8)
+    }
+
+    // MARK: - Horizontal mini-card rows
+
+    @ViewBuilder
+    private func miniRow(
+        title: String, caption: String?, seeAll: Bool = false,
+        items: [AnimationItem]
+    ) -> some View {
+        HStack(alignment: .lastTextBaseline) {
+            Text(title)
+                .font(.system(size: 18, weight: .bold))
+                .tracking(-0.4)
+                .foregroundStyle(Theme.Palette.textPrimary)
+            Spacer()
+            if let caption {
+                Text(caption)
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Theme.Palette.textTertiary)
+            } else if seeAll {
+                Button("See all") { router.selectedTab = .browse }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.accent)
+                    .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.xxl)
+        .padding(.top, 24)
+        .padding(.bottom, 12)
+
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(spacing: 12) {
+                ForEach(items) { item in
+                    EngagementMiniCard(item: item) {
+                        router.push(.detail(animationId: item.id))
+                    }
+                }
+            }
+            .padding(.horizontal, Theme.Spacing.xl)
+        }
+    }
+}
+
+/// The drop strip needs to observe the NotificationCoordinator (for the
+/// "Reminder set ✓" state), which the plain DiscoverView can't do through the
+/// container. Wrapping it keeps the observation scoped to this row.
+private struct RemindMeStrip: View {
+
+    @ObservedObject var coordinator: NotificationCoordinator
+    let countdownLabel: String
+    let streak: () -> Int
+    let onPrime: () -> Void
+
+    var body: some View {
+        DropCountdownStrip(
+            countdownLabel: countdownLabel,
+            isReminderActive: coordinator.isRemindMeActive,
+            onRemind: handleRemind
+        )
+        .task { await coordinator.refreshAuthorization() }
+    }
+
+    private func handleRemind() {
+        switch coordinator.authorization {
+        case .notDetermined:
+            onPrime()
+        case .denied:
+            #if os(iOS)
+            if let url = URL(string: UIApplication.openNotificationSettingsURLString) {
+                UIApplication.shared.open(url)
+            }
+            #endif
+        case .authorized:
+            var prefs = coordinator.preferences
+            prefs.isEnabled = true
+            prefs.fridayDrops.toggle()
+            coordinator.update(prefs, streak: streak())
+        }
     }
 }
 
@@ -498,138 +599,355 @@ private struct MockBubble: View {
 }
 
 // MARK: ─────────────────────────────────────────────────────────────
-// MARK: SamplesView — horizontal carousel of iPhone-frame mockup cards
+// MARK: SamplesView — v2.0 recipes tab (artboard 07)
 // MARK: ─────────────────────────────────────────────────────────────
 
+/// Real-app recipes: featured card, filter groups, a 2-col grid of scaled
+/// live mockups, and a code sheet with the copyable SwiftUI snippet.
 struct SamplesView: View {
+
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var container: AppContainer
-    @State private var liked: Set<String> = []
+
+    @State private var group = "All"
+    @State private var limit = 8
+    @State private var openMockup: UsageMockup?
+
+    /// Filter groups from the design — regex over title+app+why.
+    private static let groups: [(name: String, pattern: String?)] = [
+        ("All", nil),
+        ("AI & Voice", "AI|voice|audio|assistant|chat|LLM"),
+        ("Wellness", "mindful|yoga|sleep|meditat|calm|empty|breath"),
+        ("Fitness", "workout|fitness|run|cycle|timer"),
+        ("Money", "finance|crypto|bank|trading|subscription|loyalty|paywall|premium|wallet"),
+        ("Celebration", "success|unlock|achiev|recap|milestone|wrapped|confirm|tier"),
+    ]
+
+    private func matches(_ mockup: UsageMockup, pattern: String?) -> Bool {
+        guard let pattern else { return true }
+        let haystack = "\(mockup.title) \(mockup.appName) \(mockup.why)"
+        return haystack.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    private var filtered: [UsageMockup] {
+        let pattern = Self.groups.first { $0.name == group }?.pattern
+        return container.usageMockups.filter { matches($0, pattern: pattern) }
+    }
 
     var body: some View {
-        GeometryReader { proxy in
-            // Reserve space for the floating tab bar (~140pt incl. bottom safe
-            // area + caption block under the iPhone-frame card) and the
-            // header (~80pt). Cards size dynamically to fit the remaining
-            // vertical space, matching the 390×780 viewport from the design.
-            let headerHeight: CGFloat = 80
-            let bottomReserved: CGFloat = 180
-            let available = proxy.size.height - headerHeight - bottomReserved
-            let cardHeight = max(420, min(available, 640))
-            let cardWidth  = min(340, proxy.size.width - 56, cardHeight / 1.92)
-
+        ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                header
-                    .padding(.horizontal, 24)
-                    .padding(.top, 0)
-                    .padding(.bottom, 14)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Samples")
+                        .font(.system(size: 32, weight: .heavy))
+                        .tracking(-1)
+                        .foregroundStyle(Theme.Palette.textPrimary)
+                    Text("\(container.usageMockups.count) real-app recipes — see it in context, copy the exact code")
+                        .font(.system(size: 13.5))
+                        .foregroundStyle(Theme.Palette.textSecondary)
+                }
+                .padding(.horizontal, Theme.Spacing.xxl)
+                .padding(.top, 8)
 
+                if group == "All", let featured = container.usageMockups.first {
+                    featuredCard(featured)
+                        .padding(.horizontal, Theme.Spacing.xl)
+                        .padding(.top, 16)
+                }
+
+                // Filter chips
                 ScrollView(.horizontal, showsIndicators: false) {
-                    // Lazy for the same reason as Discover's mockup row: only
-                    // the on-screen cards should exist (each animates forever).
-                    LazyHStack(spacing: 18) {
-                        ForEach(container.usageMockups) { m in
-                            SampleCarouselCard(
-                                mockup: m,
-                                cardWidth: cardWidth,
-                                cardHeight: cardHeight,
-                                isLiked: liked.contains(m.id),
-                                onToggleLike: { toggle(m.id) },
-                                onOpenAnimation: {
-                                    router.push(.detail(animationId: m.animationId))
-                                }
-                            )
-                            .frame(maxWidth: cardWidth)
+                    HStack(spacing: 8) {
+                        ForEach(Self.groups, id: \.name) { entry in
+                            Chip(
+                                entry.name,
+                                count: container.usageMockups.filter { matches($0, pattern: entry.pattern) }.count,
+                                isActive: group == entry.name
+                            ) {
+                                group = entry.name
+                                limit = 8
+                            }
                         }
                     }
-                    .padding(.horizontal, (proxy.size.width - cardWidth) / 2)
-                    .scrollTargetLayout()
+                    .padding(.horizontal, Theme.Spacing.xl)
                 }
-                .scrollTargetBehavior(.viewAligned)
-                .frame(height: cardHeight + 70)
+                .padding(.top, 18)
 
-                Spacer(minLength: 0)
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)],
+                    spacing: 14
+                ) {
+                    ForEach(filtered.prefix(limit)) { mockup in
+                        SampleThumbCard(
+                            mockup: mockup,
+                            animationName: animationName(for: mockup)
+                        ) {
+                            openMockup = mockup
+                        }
+                    }
+                }
+                .padding(.horizontal, Theme.Spacing.xl)
+                .padding(.top, 14)
+
+                if limit < filtered.count {
+                    Button {
+                        limit += 8
+                    } label: {
+                        Text("Show more · \(filtered.count - limit) left")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 22)
+                            .padding(.vertical, 11)
+                            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.5)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 20)
+                }
+
+                Spacer().frame(height: 120)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background(Theme.Palette.background)
         }
-        // Hide the (otherwise-empty) navigation bar so the ~44pt reservation
-        // doesn't push the header way below the status bar.
-        .hiddenNavigationBar()
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Aurora in the Wild")
-                .font(.system(size: 28, weight: .heavy))
-                .foregroundStyle(.white)
-            Text("\(container.usageMockups.count) real iOS app contexts · Swipe to explore")
-                .font(.system(size: 13))
-                .foregroundStyle(.white.opacity(0.55))
+        .background(Theme.Palette.background)
+        .ignoresSafeArea(edges: .bottom)
+        .sheet(item: $openMockup) { mockup in
+            SampleCodeSheet(
+                mockup: mockup,
+                animationName: animationName(for: mockup),
+                code: resolvedCode(for: mockup),
+                onCopy: {
+                    container.copyActivity.recordCopy()
+                    container.analytics.log(.codeCopied(id: mockup.animationId))
+                }
+            )
         }
     }
 
-    private func toggle(_ id: String) {
-        if liked.contains(id) { liked.remove(id) } else { liked.insert(id) }
+    private func animationName(for mockup: UsageMockup) -> String {
+        container.animationRepository.find(id: mockup.animationId)?.name ?? mockup.animationId
+    }
+
+    /// Recipe code: server-supplied snippet, else generated from the linked
+    /// aurora descriptor, else the catalog item's own source.
+    private func resolvedCode(for mockup: UsageMockup) -> String {
+        if let code = mockup.swiftCode, !code.isEmpty { return code }
+        if let descriptor = AuroraDescriptors.byId[mockup.animationId]
+            ?? AnimationPreviewRegistry.runtimeDescriptors[mockup.animationId] {
+            return AuroraCodeGen.swiftCode(for: descriptor)
+        }
+        return container.animationRepository.find(id: mockup.animationId)?.swiftCode ?? ""
+    }
+
+    private func featuredCard(_ mockup: UsageMockup) -> some View {
+        Button {
+            openMockup = mockup
+        } label: {
+            ZStack(alignment: .bottom) {
+                SampleThumb(mockup: mockup, height: 250, radius: 20)
+
+                HStack(alignment: .bottom, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(mockup.title)
+                            .font(.system(size: 19, weight: .heavy))
+                            .tracking(-0.4)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text("\(mockup.appName) · uses \(animationName(for: mockup))")
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(.white.opacity(0.7))
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 8)
+                    Text("View code")
+                        .font(.system(size: 12.5, weight: .bold))
+                        .foregroundStyle(Color(hex: "#0a0a0c"))
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(Color.white, in: RoundedRectangle(cornerRadius: 10))
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 14)
+            }
+            .overlay(alignment: .topLeading) {
+                Text("FEATURED RECIPE")
+                    .font(.system(size: 10, weight: .heavy))
+                    .tracking(1.1)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.5), in: Capsule())
+                    .padding(12)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 20))
+        }
+        .buttonStyle(.plain)
     }
 }
 
-/// One slide of the horizontal Samples carousel. Renders the per-mockup
-/// SwiftUI screen inside an iPhone-frame card, with a 2-line caption
-/// (title + concept app name) underneath.
-private struct SampleCarouselCard: View {
+/// Scaled live thumbnail of a full-screen mockup (the design's SampleThumb):
+/// renders the mockup at phone size and scales it down into the card.
+private struct SampleThumb: View {
     let mockup: UsageMockup
-    let cardWidth: CGFloat
-    let cardHeight: CGFloat
-    let isLiked: Bool
-    let onToggleLike: () -> Void
-    let onOpenAnimation: () -> Void
+    var height: CGFloat = 220
+    var radius: CGFloat = 16
 
     var body: some View {
-        VStack(spacing: 14) {
-            Button(action: onOpenAnimation) {
-                iPhoneFrameCard
-            }
-            .buttonStyle(.plain)
-            caption
+        GeometryReader { proxy in
+            let scale = proxy.size.width / 390
+            MockupViewRegistry.view(for: mockup, cardWidth: 390, cardHeight: 844)
+                .frame(width: 390, height: 844)
+                .scaleEffect(scale, anchor: .topLeading)
+                .allowsHitTesting(false)
         }
-    }
-
-    /// Phone-shaped card. Dark `#0a0a0c` outer bg, 36pt continuous corners,
-    /// subtle 30pt drop shadow. The per-mockup view is clipped to match.
-    private var iPhoneFrameCard: some View {
-        ZStack {
-            Color(red: 0x0A / 255, green: 0x0A / 255, blue: 0x0C / 255)
-            MockupViewRegistry.view(
-                for: mockup,
-                cardWidth: cardWidth,
-                cardHeight: cardHeight
-            )
-        }
-        .frame(maxWidth: cardWidth, maxHeight: cardHeight)
-        .clipShape(RoundedRectangle(cornerRadius: 36, style: .continuous))
+        .frame(height: height)
+        .background(Color(hex: "#0e0d12"))
         .overlay(
-            RoundedRectangle(cornerRadius: 36, style: .continuous)
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0.45),
+                    .init(color: Theme.Palette.background.opacity(0.65), location: 0.75),
+                    .init(color: Theme.Palette.background.opacity(0.94), location: 1),
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: radius))
+        .overlay(
+            RoundedRectangle(cornerRadius: radius)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
         )
-        // Layered shadow: soft white ambient halo (visible against the dark
-        // bg) + a deeper black drop shadow that grounds the card.
-        .shadow(color: .white.opacity(0.08), radius: 26, y: 0)
-        .shadow(color: .black.opacity(0.75), radius: 22, y: 18)
-        .shadow(color: .black.opacity(0.45), radius: 40, y: 32)
     }
+}
 
-    private var caption: some View {
-        VStack(spacing: 3) {
-            Text(mockup.title)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
-            // Concept mockup — show only the illustrative app name. No
-            // fabricated rating (these are example contexts, not real apps).
-            Text(mockup.appName)
-                .font(Theme.Typo.mono(11))
-                .foregroundStyle(.white.opacity(0.5))
+/// One grid cell: thumb + title + context + aurora chip.
+private struct SampleThumbCard: View {
+    let mockup: UsageMockup
+    let animationName: String
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            VStack(alignment: .leading, spacing: 0) {
+                SampleThumb(mockup: mockup)
+
+                Text(mockup.title)
+                    .font(.system(size: 13.5, weight: .bold))
+                    .tracking(-0.2)
+                    .foregroundStyle(Theme.Palette.textPrimary)
+                    .lineLimit(1)
+                    .padding(.top, 8)
+                Text(mockup.appName)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.Palette.textSecondary)
+                    .lineLimit(1)
+                    .padding(.top, 2)
+
+                HStack(spacing: 4) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 8))
+                    Text(animationName)
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(Theme.Palette.accent)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Theme.Palette.accent.opacity(0.13), in: Capsule())
+                .padding(.top, 6)
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Bottom sheet with the recipe's SwiftUI source and a copy button.
+private struct SampleCodeSheet: View {
+    let mockup: UsageMockup
+    let animationName: String
+    let code: String
+    let onCopy: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var copied = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 0) {
+                Capsule()
+                    .fill(Color.white.opacity(0.18))
+                    .frame(width: 36, height: 4)
+                    .padding(.top, 10)
+                    .padding(.bottom, 10)
+
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(mockup.title)
+                            .font(.system(size: 15, weight: .bold))
+                            .tracking(-0.3)
+                            .foregroundStyle(Theme.Palette.textPrimary)
+                            .lineLimit(1)
+                        Text("\(mockup.appName) · \(animationName)")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(Theme.Palette.textSecondary)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+
+                    Button {
+                        Clipboard.copy(code)
+                        onCopy()
+                        copied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { copied = false }
+                    } label: {
+                        Text(copied ? "✓ Copied" : "Copy code")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(copied ? Theme.Palette.success : .white)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 7)
+                            .background(
+                                copied ? Theme.Palette.success.opacity(0.18) : Theme.Palette.accent,
+                                in: RoundedRectangle(cornerRadius: 9)
+                            )
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 28, height: 28)
+                            .background(Color.white.opacity(0.08), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 10)
+            }
+            .background(Color(hex: "#0d1117"))
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
+            }
+
+            ScrollView {
+                SwiftCodeView(source: code)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 12)
+                    .padding(.bottom, 30)
+            }
+        }
+        .background(Color(hex: "#0d1117"))
+        .preferredColorScheme(.dark)
+        #if os(iOS)
+        .presentationDetents([.large, .fraction(0.74)])
+        .presentationDragIndicator(.hidden)
+        #endif
     }
 }
 

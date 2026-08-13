@@ -49,6 +49,10 @@ struct RootView: View {
     @EnvironmentObject private var store: StoreManager
     @StateObject private var router = AppRouter()
     @Environment(\.scenePhase) private var scenePhase
+    @State private var showOnboarding = false
+    /// Measured once in onAppear (an event context) — reading window state
+    /// during body freezes the reading view's subtree. See FloatingTabBar.
+    @State private var bottomWindowInset: CGFloat = 0
 
     var body: some View {
         // Browsing the catalog never requires an account (Guideline 5.1.1).
@@ -83,9 +87,29 @@ struct RootView: View {
             // .discover is logged exactly once.
             router.analytics = container.analytics
             container.analytics.track(screen: .discover)
+            recordEngagementTick()
+            #if canImport(UIKit)
+            bottomWindowInset = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .flatMap(\.windows)
+                .first(where: \.isKeyWindow)?
+                .safeAreaInsets.bottom ?? 0
+            #endif
+            showOnboarding = !container.onboardingPreferences.isCompleted
+            #if DEBUG
+            applyScreenshotLaunchOverrides()
+            #endif
         }
+        #if os(iOS)
+        .fullScreenCover(isPresented: $showOnboarding) { OnboardingView() }
+        #else
+        .sheet(isPresented: $showOnboarding) { OnboardingView() }
+        #endif
         .onChange(of: router.selectedTab) { _, tab in
             container.analytics.track(screen: AnalyticsScreen(rawValue: tab.id) ?? .discover)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { recordEngagementTick() }
         }
     }
 
@@ -103,14 +127,21 @@ struct RootView: View {
                     .environment(\.previewsPaused, paused(unless: .browse))
                 tabContent(.samples).opacity(router.selectedTab == .samples ? 1 : 0)
                     .environment(\.previewsPaused, paused(unless: .samples))
+                tabContent(.search).opacity(router.selectedTab == .search ? 1 : 0)
+                    .environment(\.previewsPaused, paused(unless: .search))
                 tabContent(.library).opacity(router.selectedTab == .library ? 1 : 0)
                     .environment(\.previewsPaused, paused(unless: .library))
             }
             .animation(.easeOut(duration: 0.15), value: router.selectedTab)
 
             if !router.hidesTabBar {
-                FloatingTabBar(selected: $router.selectedTab)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                FloatingTabBar(selected: router.selectedTab,
+                               bottomInset: bottomWindowInset) { tab in
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                        router.selectedTab = tab
+                    }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
         .environmentObject(router)
@@ -124,6 +155,49 @@ struct RootView: View {
         router.selectedTab != tab || scenePhase != .active
     }
 
+    #if DEBUG
+    /// Headless-QA hook: `simctl spawn <udid> defaults write <bundle>
+    /// icapp-tab browse` (and/or `icapp-route activity`) before launch lands
+    /// on that tab/route directly. Keys are one-shot — consumed and cleared.
+    /// Debug builds only — no effect on release behavior.
+    private func applyScreenshotLaunchOverrides() {
+        let defaults = UserDefaults.standard
+        if defaults.bool(forKey: "icapp-onboarding") {
+            defaults.removeObject(forKey: "icapp-onboarding")
+            showOnboarding = true
+        }
+        if let raw = defaults.string(forKey: "icapp-tab") {
+            defaults.removeObject(forKey: "icapp-tab")
+            if let tab = AppTab(rawValue: raw) { router.selectedTab = tab }
+        }
+        if let route = defaults.string(forKey: "icapp-route") {
+            defaults.removeObject(forKey: "icapp-route")
+            switch route {
+            case "activity": router.push(.activity)
+            case "notifications": router.push(.notificationSettings)
+            case "settings": router.push(.settings)
+            case "paywall": router.push(.paywall(source: "qa", animationId: "aurora-mesh"))
+            case "unlocked": router.push(.unlocked)
+            case "detail": router.push(.detail(animationId: "spinner"))
+            case "detail-pro": router.push(.detail(animationId: "aurora-mesh"))
+            default: break
+            }
+        }
+    }
+    #endif
+
+    /// Engagement bookkeeping on every foreground: advance the streak, let
+    /// the Activity inbox seed/append its weekly drop entry, and reconcile
+    /// scheduled notifications with the current authorization + preferences.
+    private func recordEngagementTick() {
+        container.streakTracker.recordAppOpen()
+        container.activityRepository.refresh(now: Date())
+        Task {
+            await container.notificationCoordinator.refreshAuthorization()
+            container.notificationCoordinator.apply(streak: container.streakTracker.current)
+        }
+    }
+
     @ViewBuilder
     private func tabContent(_ tab: AppTab) -> some View {
         NavigationStack(path: router.path(for: tab)) {
@@ -133,12 +207,26 @@ struct RootView: View {
                     case .detail(let id):
                         DetailView(viewModel: container.makeDetailViewModel(animationId: id))
                             .hiddenNavigationBar()
-                    case .paywall(let source):
-                        PaywallView(viewModel: container.makePaywallViewModel(source: source))
+                    case .paywall(let source, let animationId):
+                        PaywallView(viewModel: container.makePaywallViewModel(
+                            source: source, animationId: animationId))
                             .hiddenNavigationBar()
                     case .settings:
                         SettingsView(store: container.store,
-                                     onGoPro: { router.push(.paywall(source: "settings")) })
+                                     onGoPro: { router.push(.paywall(source: "settings", animationId: nil)) },
+                                     onOpenNotifications: { router.push(.notificationSettings) })
+                            .hiddenNavigationBar()
+                    case .activity:
+                        ActivityView()
+                            .hiddenNavigationBar()
+                    case .notificationSettings:
+                        NotificationSettingsView()
+                            .hiddenNavigationBar()
+                    case .collection(let id):
+                        CollectionDetailView(collectionId: id)
+                            .hiddenNavigationBar()
+                    case .unlocked:
+                        UnlockedView()
                             .hiddenNavigationBar()
                     }
                 }
@@ -151,6 +239,7 @@ struct RootView: View {
         case .discover: DiscoverView(viewModel: container.makeDiscoverViewModel())
         case .browse:   BrowseView(viewModel: container.makeBrowseViewModel())
         case .samples:  SamplesView()
+        case .search:   SearchView(viewModel: container.makeSearchViewModel())
         case .library:  LibraryView(viewModel: container.makeLibraryViewModel())
         }
     }
@@ -984,7 +1073,14 @@ private struct SocialAuthSection: View {
             } onCompletion: { result in
                 handleAppleCompletion(result)
             }
-            .signInWithAppleButtonStyle(.black)
+            // White, not black: the canvas behind this is #0A0A0C, so a black
+            // button is *darker* than its own background and the only thing
+            // outlining it was a 6%-white hairline — it read as floating text,
+            // not a control. Apple rejected 2.2.0 (build 25) on Guideline 4
+            // Design for exactly this ("Sign in with Apple buttons should be
+            // clearly identifiable to users as buttons"). The HIG's rule is to
+            // use the white or white-outline button on dark backgrounds.
+            .signInWithAppleButtonStyle(.white)
             #if os(macOS)
             .controlSize(.large)
             .frame(maxWidth: .infinity, minHeight: 44, maxHeight: 44)
@@ -992,10 +1088,6 @@ private struct SocialAuthSection: View {
             .frame(maxWidth: .infinity, minHeight: 50, maxHeight: 50)
             #endif
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(Theme.Palette.hairline, lineWidth: 0.5)
-            )
             .disabled(authStore.isLoading)
             .accessibilityLabel("Sign in with Apple")
 

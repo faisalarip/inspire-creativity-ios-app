@@ -43,42 +43,33 @@ final class RemoteCatalogFailClosedTests: XCTestCase {
     }
 }
 
-/// Three-way gate for the code sheet. Purchasing never requires an account,
-/// and a Pro entitlement unlocks code in ANY auth state — a signed-out buyer
-/// (purchase or Restore) must never stay locked out (Guideline 5.1.1 risk).
+/// Two-way gate for the code sheet. Purchasing never requires an account,
+/// a Pro entitlement unlocks code in ANY auth state — and free code is open
+/// to everyone: copying free code is the activation moment, never gate it
+/// behind sign-in (analytics showed the wall cut ~77% of users off).
 final class CodeAccessTests: XCTestCase {
 
-    func testProEntitlementGrantsRegardlessOfAuthOrTier() {
+    func testProEntitlementGrantsRegardlessOfTier() {
         for itemIsPro in [true, false] {
-            for signedIn in [true, false] {
-                XCTAssertEqual(
-                    CodeAccess.evaluate(itemIsPro: itemIsPro,
-                                        hasProEntitlement: true,
-                                        isAuthenticated: signedIn),
-                    .granted,
-                    "Pro entitlement must unlock code (itemIsPro=\(itemIsPro), signedIn=\(signedIn))")
-            }
-        }
-    }
-
-    func testProItemWithoutEntitlementNeedsProInAnyAuthState() {
-        for signedIn in [true, false] {
             XCTAssertEqual(
-                CodeAccess.evaluate(itemIsPro: true,
-                                    hasProEntitlement: false,
-                                    isAuthenticated: signedIn),
-                .needsPro,
-                "Pro item without entitlement routes to the paywall, never to sign-in (signedIn=\(signedIn))")
+                CodeAccess.evaluate(itemIsPro: itemIsPro, hasProEntitlement: true),
+                .granted,
+                "Pro entitlement must unlock code (itemIsPro=\(itemIsPro))")
         }
     }
 
-    func testFreeItemNeedsSignInOnlyWhenSignedOut() {
+    func testProItemWithoutEntitlementNeedsPro() {
         XCTAssertEqual(
-            CodeAccess.evaluate(itemIsPro: false, hasProEntitlement: false, isAuthenticated: true),
-            .granted)
+            CodeAccess.evaluate(itemIsPro: true, hasProEntitlement: false),
+            .needsPro,
+            "Pro item without entitlement routes to the paywall, never to sign-in")
+    }
+
+    func testFreeItemGrantedWithoutEntitlement() {
         XCTAssertEqual(
-            CodeAccess.evaluate(itemIsPro: false, hasProEntitlement: false, isAuthenticated: false),
-            .needsSignIn)
+            CodeAccess.evaluate(itemIsPro: false, hasProEntitlement: false),
+            .granted,
+            "free code must be copyable with no account and no purchase")
     }
 }
 

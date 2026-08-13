@@ -15,7 +15,6 @@ struct DetailView: View {
 
     @State private var sheet: SheetState = .peek
     @State private var dragOffset: CGFloat = 0
-    @State private var showAuthSheet = false
     /// True while a finger is on the interactive preview, so the enclosing
     /// ScrollView stops scrolling and the preview's own gesture wins.
     @State private var previewInteracting = false
@@ -28,15 +27,14 @@ struct DetailView: View {
         AnimationPreviewRegistry.isInteractive(viewModel.item.id)
     }
 
-    /// Three-way gate (see `CodeAccess`): the Pro entitlement unlocks code in
-    /// any auth state, Pro items route to the paywall, and free items ask
-    /// signed-out users for the (free) sign-in.
+    /// Two-way gate (see `CodeAccess`): the Pro entitlement unlocks code in
+    /// any auth state, Pro items route to the paywall, free code is open.
     private var access: CodeAccess {
         CodeAccess.evaluate(itemIsPro: viewModel.item.isPro,
-                            hasProEntitlement: viewModel.hasPro,
-                            isAuthenticated: authStore.isAuthenticated)
+                            hasProEntitlement: viewModel.hasPro)
     }
-    private var canViewCode: Bool { access == .granted }
+    /// Granted access, or a Pro item unlocked with a metered copy this week.
+    private var canViewCode: Bool { access == .granted || viewModel.meterUnlocked }
 
     init(viewModel: DetailViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel)
@@ -128,17 +126,21 @@ struct DetailView: View {
                         fileName: filename + ".swift",
                         source: viewModel.code,
                         locked: !canViewCode,
-                        lockTitle: access == .needsSignIn
-                            ? "Sign in to view the full code"
+                        lockTitle: viewModel.meterRemaining > 0
+                            ? "You have \(viewModel.meterRemaining) free Pro \(viewModel.meterRemaining == 1 ? "copy" : "copies") this week"
                             : "Preview is limited",
-                        lockCTA: access == .needsSignIn
-                            ? "Sign in"
+                        lockCTA: viewModel.meterRemaining > 0
+                            ? "Use 1 free Pro copy"
                             : "Unlock to view full code",
                         onUnlock: {
-                            switch access {
-                            case .needsPro: router.push(.paywall(source: "detail"))
-                            case .needsSignIn: showAuthSheet = true
-                            case .granted: break
+                            viewModel.logCodeUnlockAttempt(access)
+                            guard access == .needsPro else { return }
+                            // Meter first: unlock in place while copies remain;
+                            // the paywall fires only at exhaustion (source
+                            // "meter" — the highest-intent trigger we have).
+                            if !viewModel.redeemMeterCopy() {
+                                router.push(.paywall(source: "meter",
+                                                     animationId: viewModel.item.id))
                             }
                         },
                         onCopy: { viewModel.logCodeCopied() }
@@ -169,22 +171,26 @@ struct DetailView: View {
             .padding(.top, 4)
         }
         .hiddenNavigationBar()
-        .sheet(isPresented: $showAuthSheet) {
-            AuthGateView()
-                .environmentObject(authStore)
-        }
-        .onChange(of: authStore.isAuthenticated) { _, isAuth in
-            if isAuth { showAuthSheet = false }
+        .onAppear {
+            // Fires the animation_view log + journey metrics exactly once per
+            // real presentation of this screen (guarded inside the VM), rather
+            // than on init — see DetailViewModel.markViewed().
+            viewModel.markViewed()
         }
     }
 
-    /// Share payload. Only includes the source when the signed-in user can
-    /// view it, so sharing can't bypass the sign-in gate or the Pro paywall.
+    /// Share payload. Only includes the source when the user can view it, so
+    /// sharing can't bypass the Pro paywall.
     private var shareText: String {
         if canViewCode {
-            return "\(viewModel.item.name) — a SwiftUI animation from InspireCreativity\n\n\(viewModel.code)"
+            return """
+            \(viewModel.item.name) — a SwiftUI animation from Inspire Creativity
+            \(AppLinks.appStoreURL.absoluteString)
+
+            \(viewModel.code)
+            """
         } else {
-            return "Check out \"\(viewModel.item.name)\" — a hand-crafted SwiftUI animation in InspireCreativity."
+            return "Check out “\(viewModel.item.name)” — a hand-crafted SwiftUI animation in Inspire Creativity. \(AppLinks.appStoreURL.absoluteString)"
         }
     }
 
@@ -261,7 +267,19 @@ struct DetailView: View {
 
     @ViewBuilder
     private var ctaButton: some View {
-        if viewModel.isOwned {
+        if viewModel.meterUnlocked, !viewModel.isOwned {
+            // Unlocked with a metered copy — same payoff hint as owned items.
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Theme.Palette.success)
+                Text("Unlocked with a free Pro copy — drag up for the code")
+            }
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.85))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
+        } else if viewModel.isOwned {
             // No dead button — the code lives in the sheet below. Just a hint.
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
@@ -276,24 +294,35 @@ struct DetailView: View {
             .padding(.vertical, 14)
             .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 14))
         } else {
-            Button { router.push(.paywall(source: "detail")) } label: {
-                HStack(spacing: 8) {
-                    Image(systemName: "lock.fill")
-                    Text("Unlock everything with Pro")
+            VStack(spacing: 8) {
+                Button {
+                    router.push(.paywall(source: "detail", animationId: viewModel.item.id))
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "lock.fill")
+                        Text("Unlock everything with Pro")
+                    }
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Color(red: 0x1A / 255, green: 0x0E / 255, blue: 0))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(
+                        LinearGradient(
+                            colors: [Theme.Palette.proGoldStart, Theme.Palette.proGoldEnd],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        ),
+                        in: RoundedRectangle(cornerRadius: 14)
+                    )
                 }
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(Color(red: 0x1A / 255, green: 0x0E / 255, blue: 0))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(
-                    LinearGradient(
-                        colors: [Theme.Palette.proGoldStart, Theme.Palette.proGoldEnd],
-                        startPoint: .topLeading, endPoint: .bottomTrailing
-                    ),
-                    in: RoundedRectangle(cornerRadius: 14)
-                )
+                .buttonStyle(.plain)
+
+                if viewModel.meterRemaining > 0 {
+                    Text("or drag up and use 1 of your \(viewModel.meterRemaining) free Pro \(viewModel.meterRemaining == 1 ? "copy" : "copies") this week")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .frame(maxWidth: .infinity)
+                }
             }
-            .buttonStyle(.plain)
         }
     }
 }

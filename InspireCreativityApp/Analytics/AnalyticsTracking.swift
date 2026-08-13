@@ -12,4 +12,5 @@ protocol AnalyticsTracking {
     func log(_ event: AnalyticsEvent)
     func track(screen: AnalyticsScreen)
     func setCollectionEnabled(_ on: Bool)
+    func set(_ property: AnalyticsUserProperty)
 }

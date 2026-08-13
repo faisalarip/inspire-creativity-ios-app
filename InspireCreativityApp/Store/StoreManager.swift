@@ -26,9 +26,9 @@ final class StoreManager: ObservableObject, PurchaseRepositoryProtocol {
         static let all: [String] = [lifetime]
     }
 
-    enum PurchaseOutcome { case success, pending, cancelled }
+    enum PurchaseOutcome { case success(transactionID: String), pending, cancelled }
 
-    enum StoreError: LocalizedError {
+    enum StoreError: LocalizedError, Equatable {
         case failedVerification
         case productsUnavailable
         var errorDescription: String? {
@@ -102,7 +102,7 @@ final class StoreManager: ObservableObject, PurchaseRepositoryProtocol {
             await transaction.finish()
             await refreshEntitlements()
             justPurchased = true
-            return .success
+            return .success(transactionID: String(transaction.id))
         case .pending:
             return .pending
         case .userCancelled:

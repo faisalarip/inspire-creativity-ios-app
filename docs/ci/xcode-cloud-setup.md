@@ -16,7 +16,7 @@ Project facts the steps below rely on:
 | Test target | `InspireCreativityAppTests` |
 | Team | `5VHRN5SF2P` · signing **Automatic** (→ Xcode Cloud managed signing) |
 | Trigger branch | `release` |
-| Versioning | Apple Generic Versioning is **enabled** (`VERSIONING_SYSTEM = apple-generic`); build number set by `ci_scripts/ci_pre_xcodebuild.sh` from `$CI_BUILD_NUMBER` |
+| Versioning | Build number is managed **natively by Xcode Cloud** (its run counter overrides CFBundleVersion at archive time — verified run #21); `ci_scripts/ci_pre_xcodebuild.sh` is a documented no-op |
 
 ---
 
